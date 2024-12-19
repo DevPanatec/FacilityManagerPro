@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { ImportExportService } from '@/lib/importExport'
+// import { ImportExportService } from '@/lib/importExport'
 
 export async function GET(request) {
   try {
@@ -20,21 +20,9 @@ export async function GET(request) {
     if (error) throw error
 
     // Exportar según formato
-    if (format === 'excel') {
-      await ImportExportService.exportToExcel(data, 'organizations.xlsx')
-    } else if (format === 'csv') {
-      ImportExportService.exportToCSV(data, 'organizations.csv')
-    } else {
-      return NextResponse.json(
-        { error: 'Invalid export format' },
-        { status: 400 }
-      )
-    }
-
     return NextResponse.json({
-      message: 'Export successful',
-      format
-    })
+      message: 'Funcionalidad no implementada'
+    });
 
   } catch (error) {
     console.error('Export error:', error)

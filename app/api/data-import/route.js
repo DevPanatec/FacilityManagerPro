@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { ImportExportService } from '@/lib/importExport'
+// import { ImportExportService } from '@/lib/importExport'
 
 export async function POST(request) {
   try {
@@ -14,29 +14,9 @@ export async function POST(request) {
       )
     }
 
-    let data
-    if (type === 'excel') {
-      data = await ImportExportService.readExcelFile(file)
-    } else if (type === 'csv') {
-      data = await ImportExportService.readCSVFile(file)
-    } else {
-      return NextResponse.json(
-        { error: 'Invalid file type' },
-        { status: 400 }
-      )
-    }
-
-    // Almacenar archivo temporal
-    const tempFile = await ImportExportService.storeTemporaryFile(file)
-
-    // Validar y procesar datos
-    const importedData = await ImportExportService.importData(data)
-
     return NextResponse.json({
-      message: 'Import successful',
-      data: importedData,
-      tempFile
-    })
+      message: 'Funcionalidad no implementada'
+    });
 
   } catch (error) {
     console.error('Import error:', error)

@@ -25,65 +25,7 @@ export default function Login() {
       }
 
       if (username === "SuperAdmin") {
-        try {
-          // Intentar autenticación
-          const userCredential = await signInWithEmailAndPassword(
-            auth,
-            "admin@hombresdeblanco.com",
-            password
-          );
-
-          // Verificar datos del usuario
-          const userSnapshot = await getDoc(doc(db, "users", userCredential.user.uid));
-          
-          if (!userSnapshot.exists()) {
-            throw new Error("Usuario no encontrado");
-          }
-
-          const userData = userSnapshot.data();
-
-          if (userData.role !== "super_admin") {
-            throw new Error("Acceso no autorizado");
-          }
-
-          // Obtener token
-          const idToken = await userCredential.user.getIdToken();
-
-          // Crear sesión
-          const sessionResponse = await fetch('/api/auth/session', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              idToken,
-              role: "super_admin",
-              permissions: userData.permissions
-            }),
-            credentials: 'include'
-          });
-
-          if (!sessionResponse.ok) {
-            throw new Error("Error al crear la sesión");
-          }
-
-          // Guardar permisos
-          localStorage.setItem('userPermissions', JSON.stringify(userData.permissions));
-          
-          // Notificar y redirigir
-          toast.success('Bienvenido Super Administrador');
-          router.push('/admin');
-
-        } catch (authError) {
-          console.error("Error de autenticación:", authError);
-          if (authError.code === 'auth/wrong-password') {
-            toast.error("Contraseña incorrecta");
-          } else if (authError.code === 'auth/too-many-requests') {
-            toast.error("Demasiados intentos. Intente más tarde");
-          } else {
-            toast.error(authError.message || "Error de autenticación");
-          }
-        }
+        toast.error("Usuario no autorizado");
       } else {
         toast.error("Usuario no autorizado");
       }

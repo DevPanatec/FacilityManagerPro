@@ -3,7 +3,7 @@ import "./globals.css"
 import Script from 'next/script'
 import 'leaflet/dist/leaflet.css'
 import { Toaster } from 'react-hot-toast'
-import RouteGuard from './components/RouteGuard'
+import RouteGuard from './components/routeguard'
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -28,15 +28,14 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </head>
+    <html lang="es" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
-        <div className="min-h-screen bg-gray-50">
-          {children}
-        </div>
+        <Toaster position="top-center" />
+        <RouteGuard>
+          <div className="min-h-screen bg-gray-50">
+            {children}
+          </div>
+        </RouteGuard>
       </body>
     </html>
   )

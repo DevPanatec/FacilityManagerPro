@@ -1,60 +1,40 @@
 'use client';
-import { useEffect } from 'react';
+
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-const ALLOWED_ROUTES = {
-  usuario: [
-    '/user', 
-    '/user/usuario',
-    '/user/currentTask',
-    '/user/taskHistory',
-    '/user/reports'
-  ],
-  admin: [
-    '/admin',
-    '/admin/dashboard',
-    '/admin/assignments',
-    '/shared/rrhh',
-    '/shared/contingencyReport',
-    '/shared/inventory',
-    '/shared/schedule'
-  ],
-  enterprise: [
-    '/enterprise',
-    '/enterprise/dashboard',
-    '/shared/rrhh',
-    '/shared/inventory',
-    '/shared/schedule'
-  ]
-};
+interface RouteGuardProps {
+  children: React.ReactNode;
+}
 
-const INITIAL_ROUTES = {
-  usuario: '/user/usuario',
-  admin: '/admin/dashboard',
-  enterprise: '/enterprise/dashboard'
-};
-
-export default function RouteGuard({ children }: { children: React.ReactNode }) {
+export default function RouteGuard({ children }: RouteGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
-    if (pathname === '/auth/login') {
-      return;
-    }
+    // Función para verificar la autorización
+    const authCheck = () => {
+      // Obtener el rol del usuario del localStorage
+      if (typeof window !== 'undefined') {
+        const userRole = localStorage.getItem('userRole');
+        
+        // Lista de rutas públicas que no requieren autenticación
+        const publicPaths = ['/login'];
+        const isPublicPath = publicPaths.includes(pathname);
 
-    const userRole = localStorage.getItem('userRole');
-    
-    if (!userRole) {
-      router.push('/auth/login');
-      return;
-    }
+        if (!userRole && !isPublicPath) {
+          setAuthorized(false);
+          router.push('/login');
+        } else {
+          setAuthorized(true);
+        }
+      }
+    };
 
-    const allowedRoutes = ALLOWED_ROUTES[userRole as keyof typeof ALLOWED_ROUTES];
-    if (!allowedRoutes?.some(route => pathname.startsWith(route))) {
-      router.push(INITIAL_ROUTES[userRole as keyof typeof INITIAL_ROUTES]);
-    }
+    // Verificar cuando la ruta cambia
+    authCheck();
   }, [pathname, router]);
 
-  return <>{children}</>;
-}
+  return authorized ? <>{children}</> : null;
+} 
