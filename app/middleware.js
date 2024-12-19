@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@/firebase/admin';
+// import { auth } from '@/firebase/admin';
 import { isSuperAdmin } from './admin/superadmin/createSuperAdmin';
 
 export async function middleware(request) {

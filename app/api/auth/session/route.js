@@ -1,4 +1,4 @@
-import { auth } from '@/firebase/admin';
+// import { auth } from '@/firebase/admin';
 import { cookies } from 'next/headers';
 
 export async function POST(request) {
