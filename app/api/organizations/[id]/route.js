@@ -109,20 +109,35 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const { id } = params
+    const { id } = params;
     
-    // Eliminar la organización (las tablas relacionadas se eliminarán por CASCADE)
+    if (!id) {
+      return NextResponse.json(
+        { error: 'ID no proporcionado' },
+        { status: 400 }
+      );
+    }
+
+    // Eliminar la organización
     const { error } = await supabase
       .from('organizations')
       .delete()
-      .eq('id', id)
-    
-    if (error) throw error
-    
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error Supabase:', error);
+      throw error;
+    }
+
     return NextResponse.json({ 
-      message: 'Organization and related data deleted successfully' 
-    })
+      success: true,
+      message: 'Organización eliminada correctamente'
+    });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Error al eliminar:', error);
+    return NextResponse.json(
+      { error: 'Error al eliminar la organización' },
+      { status: 500 }
+    );
   }
 } 
