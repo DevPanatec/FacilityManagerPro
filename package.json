@@ -10,7 +10,10 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.1.5",
+<<<<<<< HEAD
     "@supabase/auth-helpers-nextjs": "^0.10.0",
+=======
+>>>>>>> a1c71e08c330eb5e49a3784378ff9f173e1f1e39
     "@supabase/supabase-js": "^2.47.6",
     "axios": "^1.7.7",
     "daisyui": "^4.12.14",

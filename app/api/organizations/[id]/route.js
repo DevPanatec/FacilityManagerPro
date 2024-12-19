@@ -109,6 +109,7 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
+<<<<<<< HEAD
     const { id } = params;
     
     if (!id) {
@@ -139,5 +140,22 @@ export async function DELETE(request, { params }) {
       { error: 'Error al eliminar la organización' },
       { status: 500 }
     );
+=======
+    const { id } = params
+    
+    // Eliminar la organización (las tablas relacionadas se eliminarán por CASCADE)
+    const { error } = await supabase
+      .from('organizations')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw error
+    
+    return NextResponse.json({ 
+      message: 'Organization and related data deleted successfully' 
+    })
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+>>>>>>> a1c71e08c330eb5e49a3784378ff9f173e1f1e39
   }
 } 
