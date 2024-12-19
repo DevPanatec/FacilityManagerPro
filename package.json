@@ -15,7 +15,6 @@
     "daisyui": "^4.12.14",
     "date-fns": "^4.1.0",
     "file-saver": "^2.0.5",
-    "firebase": "^11.1.0",
     "jspdf": "^2.5.2",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
