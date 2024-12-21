@@ -4,7 +4,7 @@ import { isSuperAdmin } from './admin/superadmin/createSuperAdmin';
 
 export async function middleware(request) {
   // Si ya está en login, permitir
-  if (request.nextUrl.pathname === '/login') {
+  if (request.nextUrl.pathname === '/auth/login') {
     return NextResponse.next();
   }
 
@@ -12,7 +12,7 @@ export async function middleware(request) {
     const session = request.cookies.get('session')?.value;
     
     if (!session) {
-      return NextResponse.redirect(new URL('/login', request.url));
+      return NextResponse.redirect(new URL('/auth/login', request.url));
     }
 
     const decodedToken = await auth.verifySessionCookie(session);
@@ -23,7 +23,7 @@ export async function middleware(request) {
     // Si es SuperAdmin
     if (isSuperAdminUser) {
       // Si intenta acceder a login, redirigir a admin
-      if (request.nextUrl.pathname === '/login') {
+      if (request.nextUrl.pathname === '/auth/login') {
         return NextResponse.redirect(new URL('/admin', request.url));
       }
       // Permitir acceso a rutas admin
@@ -40,11 +40,11 @@ export async function middleware(request) {
     }
 
     // Si no es SuperAdmin e intenta acceder a /admin
-    return NextResponse.redirect(new URL('/login', request.url));
+    return NextResponse.redirect(new URL('/auth/login', request.url));
 
   } catch (error) {
     console.error('Middleware error:', error);
-    return NextResponse.redirect(new URL('/login', request.url));
+    return NextResponse.redirect(new URL('/auth/login', request.url));
   }
 }
 
