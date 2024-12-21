@@ -75,23 +75,13 @@ const isSuggestionsView = (state: ChatState): boolean => {
 };
 
 // Primero, agregar una función para subir la imagen
-const uploadImage = async (file: File): Promise<string> => {
+const handleImageUpload = async (file: File): Promise<string> => {
   try {
-    // Aquí deberías implementar la lógica para subir la imagen a tu servidor/storage
-    // Por ejemplo, usando FormData y fetch:
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData
-    });
-
-    const data = await response.json();
-    return data.url; // La URL de la imagen subida
+    // Usar la función importada
+    return await uploadImage(file);
   } catch (error) {
     console.error('Error uploading image:', error);
-    throw new Error('Failed to upload image');
+    throw error;
   }
 };
 
@@ -267,7 +257,7 @@ export default function ChatWidget({
       // Si hay un archivo adjunto, súbelo a Supabase
       let attachmentUrl = undefined;
       if (attachment) {
-        attachmentUrl = await uploadImage(attachment);
+        attachmentUrl = await handleImageUpload(attachment);
       }
 
       // Crear un nuevo mensaje de respuesta
