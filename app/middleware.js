@@ -1,6 +1,4 @@
 import { NextResponse } from 'next/server';
-// import { auth } from '@/firebase/admin';
-import { isSuperAdmin } from './admin/superadmin/createSuperAdmin';
 
 export async function middleware(request) {
   // Si ya está en login, permitir
@@ -9,37 +7,45 @@ export async function middleware(request) {
   }
 
   try {
-    const session = request.cookies.get('session')?.value;
+    // Verificar si el usuario está autenticado usando cookies
+    const userRole = request.cookies.get('userRole')?.value;
+    const isAuthenticated = request.cookies.get('isAuthenticated')?.value;
+    const isSuperAdmin = request.cookies.get('isSuperAdmin')?.value;
     
-    if (!session) {
+    if (!isAuthenticated) {
       return NextResponse.redirect(new URL('/auth/login', request.url));
     }
 
-    const decodedToken = await auth.verifySessionCookie(session);
-    
-    // Verificar si es SuperAdmin
-    const isSuperAdminUser = await isSuperAdmin(decodedToken.uid);
-
     // Si es SuperAdmin
-    if (isSuperAdminUser) {
+    if (isSuperAdmin === 'true') {
       // Si intenta acceder a login, redirigir a admin
       if (request.nextUrl.pathname === '/auth/login') {
-        return NextResponse.redirect(new URL('/admin', request.url));
+        return NextResponse.redirect(new URL('/admin/dashboard', request.url));
       }
       // Permitir acceso a rutas admin
       if (request.nextUrl.pathname.startsWith('/admin')) {
         return NextResponse.next();
       }
       // Redirigir a admin si intenta acceder a otras rutas
-      return NextResponse.redirect(new URL('/admin', request.url));
+      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
 
-    // Para usuarios no SuperAdmin
-    if (!request.nextUrl.pathname.startsWith('/admin')) {
+    // Para usuarios normales
+    if (userRole === 'usuario' && request.nextUrl.pathname.startsWith('/user')) {
       return NextResponse.next();
     }
 
-    // Si no es SuperAdmin e intenta acceder a /admin
+    // Para usuarios enterprise
+    if (userRole === 'enterprise' && request.nextUrl.pathname.startsWith('/enterprise')) {
+      return NextResponse.next();
+    }
+
+    // Para administradores normales
+    if (userRole === 'admin' && request.nextUrl.pathname.startsWith('/admin')) {
+      return NextResponse.next();
+    }
+
+    // Si no tiene los permisos adecuados, redirigir al login
     return NextResponse.redirect(new URL('/auth/login', request.url));
 
   } catch (error) {
