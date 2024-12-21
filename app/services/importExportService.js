@@ -1,28 +1,65 @@
-import { supabase } from '../lib/supabase'
-import { saveAs } from 'file-saver'
-import * as XLSX from 'xlsx'
+import { supabase } from '@/lib/supabase';
+import * as XLSX from 'xlsx';
 
 export const importExportService = {
-  async exportToJson(organizationId) {
-    const { data, error } = await supabase
-      .rpc('export_organization_data', { org_id: organizationId })
-    
-    if (error) throw error
-    
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    saveAs(blob, `organization_${organizationId}.json`)
+  async importFromExcel(file) {
+    try {
+      console.log('Leyendo archivo Excel...');
+      const data = await this.readExcelFile(file);
+      console.log('Datos leídos del Excel:', data);
+      
+      // Validar que los datos tengan la estructura correcta
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new Error('El archivo no contiene datos válidos');
+      }
+
+      // Verificar que los datos tengan los campos necesarios
+      const requiredFields = ['nombre', 'type', 'personal', 'areas', 'servicios'];
+      const missingFields = requiredFields.filter(field => !data[0].hasOwnProperty(field));
+      
+      if (missingFields.length > 0) {
+        throw new Error(`Faltan campos requeridos: ${missingFields.join(', ')}`);
+      }
+
+      // Enviar datos a Supabase
+      console.log('Enviando datos a Supabase...');
+      const { data: result, error } = await supabase
+        .rpc('import_excel_data', { data });
+
+      if (error) {
+        console.error('Error de Supabase:', error);
+        throw error;
+      }
+
+      console.log('Respuesta de Supabase:', result);
+      return result;
+    } catch (error) {
+      console.error('Error en importFromExcel:', error);
+      throw error;
+    }
   },
 
-  async exportToExcel(organizationId) {
-    const { data, error } = await supabase
-      .rpc('export_organization_data', { org_id: organizationId })
-    
-    if (error) throw error
-    
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.json_to_sheet([data.organization])
-    XLSX.utils.book_append_sheet(wb, ws, 'Organization')
-    
-    XLSX.writeFile(wb, `organization_${organizationId}.xlsx`)
+  async readExcelFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          console.log('Archivo leído, procesando...');
+          const workbook = XLSX.read(e.target.result, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const data = XLSX.utils.sheet_to_json(firstSheet);
+          console.log('Datos procesados:', data);
+          resolve(data);
+        } catch (error) {
+          console.error('Error al leer Excel:', error);
+          reject(error);
+        }
+      };
+      reader.onerror = (error) => {
+        console.error('Error del FileReader:', error);
+        reject(error);
+      };
+      reader.readAsArrayBuffer(file);
+    });
   }
-} 
+}; 
