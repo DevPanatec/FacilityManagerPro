@@ -3,7 +3,7 @@ import "./globals.css"
 import Script from 'next/script'
 import 'leaflet/dist/leaflet.css'
 import { Toaster } from 'react-hot-toast'
-import RouteGuard from './components/routeguard'
+import RouteGuard from './auth/components/RouteGuard'
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
