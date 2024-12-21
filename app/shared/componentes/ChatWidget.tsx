@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { AttachmentButton } from './AttachmentButton'
-import { uploadImage } from '@/lib/supabase'
+import dynamic from 'next/dynamic'
 
 interface ChatMessage {
   id: string
@@ -76,8 +76,8 @@ const isSuggestionsView = (state: ChatState): boolean => {
 
 // Primero, agregar una función para subir la imagen
 const handleImageUpload = async (file: File): Promise<string> => {
+  const { uploadImage } = await import('@/lib/supabase')
   try {
-    // Usar la función importada
     return await uploadImage(file);
   } catch (error) {
     console.error('Error uploading image:', error);

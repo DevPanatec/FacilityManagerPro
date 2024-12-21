@@ -31,6 +31,12 @@ const LoginPage = () => {
         isLoading: false
     })
 
+    const [isClient, setIsClient] = useState(false)
+
+    useEffect(() => {
+        setIsClient(true)
+    }, [])
+
     const workArea = {
         lat: 9.0000000,
         lng: -79.5000000,
@@ -38,53 +44,50 @@ const LoginPage = () => {
     }
 
     const simulateGPSPosition = useCallback(() => {
-        // Simular una posición muy cercana al centro del área de trabajo
         return {
             coords: {
-                latitude: workArea.lat + 0.0001,  // Muy cerca del punto central
-                longitude: workArea.lng + 0.0001   // Muy cerca del punto central
+                latitude: workArea.lat + 0.0001,
+                longitude: workArea.lng + 0.0001
             }
         }
     }, [workArea])
 
     useEffect(() => {
         return () => {
-            gpsSimulatorRef.current = null
+            if (isClient) {
+                gpsSimulatorRef.current = null
+            }
         }
-    }, [])
+    }, [isClient])
 
     useEffect(() => {
-        // Limpiar la sesión al cargar la página de login
-        localStorage.removeItem('userRole')
-    }, [])
+        if (isClient) {
+            localStorage.removeItem('userRole')
+        }
+    }, [isClient])
 
     const [isLoading, setIsLoading] = useState(false)
 
     const handleSubmit = useCallback(async (e) => {
         e.preventDefault()
+        if (!isClient) return
+        
         setIsLoading(true)
 
         try {
-            // Primero verificamos si es admin principal (superadmin)
             if (formState.username === 'admin_principal' && formState.password === 'admin123') {
-                try {
-                    localStorage.setItem('adminPrincipal', 'true');
-                    localStorage.setItem('userRole', 'admin');
-                    localStorage.setItem('adminId', '1');
-                    localStorage.setItem('isSuperAdmin', 'true');
-                    document.cookie = `userRole=admin; path=/; max-age=86400; secure; samesite=strict`;
-                    document.cookie = `adminPrincipal=true; path=/; max-age=86400; secure; samesite=strict`;
-                    document.cookie = `isSuperAdmin=true; path=/; max-age=86400; secure; samesite=strict`;
-                    toast.success('Bienvenido Administrador Principal');
-                    await router.push('/admin/dashboard');
-                    return;
-                } catch (error) {
-                    console.error('Error en redirección:', error);
-                    throw new Error('Error al iniciar sesión como admin principal');
-                }
+                localStorage.setItem('adminPrincipal', 'true')
+                localStorage.setItem('userRole', 'admin')
+                localStorage.setItem('adminId', '1')
+                localStorage.setItem('isSuperAdmin', 'true')
+                document.cookie = `userRole=admin; path=/; max-age=86400; secure; samesite=strict`
+                document.cookie = `adminPrincipal=true; path=/; max-age=86400; secure; samesite=strict`
+                document.cookie = `isSuperAdmin=true; path=/; max-age=86400; secure; samesite=strict`
+                toast.success('Bienvenido Administrador Principal')
+                await router.push('/admin/dashboard')
+                return
             }
 
-            // Verificación para usuario normal con mapa
             if (formState.username === 'usuario' && formState.password === '123456') {
                 const position = await new Promise((resolve) => {
                     resolve(simulateGPSPosition())
@@ -110,30 +113,34 @@ const LoginPage = () => {
                         showConfirmation: true,
                         isLoading: false
                     }))
-                    localStorage.setItem('userRole', 'usuario')
-                    document.cookie = `userRole=usuario; path=/; max-age=86400; secure; samesite=strict`;
+                    if (typeof window !== 'undefined') {
+                        localStorage.setItem('userRole', 'usuario')
+                        document.cookie = `userRole=usuario; path=/; max-age=86400; secure; samesite=strict`;
+                    }
                 } else {
                     throw new Error('Debes estar dentro del área de trabajo para iniciar sesión')
                 }
             } 
-            // Verificación para admin normal
             else if (formState.username === 'admin' && formState.password === '123456') {
-                localStorage.setItem('userRole', 'admin')
-                localStorage.setItem('isAuthenticated', 'true')
-                localStorage.setItem('adminId', '3')
-                localStorage.setItem('isSuperAdmin', 'false')
-                document.cookie = `userRole=admin; path=/; max-age=86400; secure; samesite=strict`;
-                document.cookie = `isAuthenticated=true; path=/; max-age=86400; secure; samesite=strict`;
-                document.cookie = `isSuperAdmin=false; path=/; max-age=86400; secure; samesite=strict`;
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem('userRole', 'admin')
+                    localStorage.setItem('isAuthenticated', 'true')
+                    localStorage.setItem('adminId', '3')
+                    localStorage.setItem('isSuperAdmin', 'false')
+                    document.cookie = `userRole=admin; path=/; max-age=86400; secure; samesite=strict`;
+                    document.cookie = `isAuthenticated=true; path=/; max-age=86400; secure; samesite=strict`;
+                    document.cookie = `isSuperAdmin=false; path=/; max-age=86400; secure; samesite=strict`;
+                }
                 await router.push('/admin/dashboard')
                 toast.success('Bienvenido Administrador')
             } 
-            // Verificación para enterprise
             else if (formState.username === 'enterprise' && formState.password === '123456') {
-                localStorage.setItem('userRole', 'enterprise')
-                localStorage.setItem('isAuthenticated', 'true')
-                document.cookie = `userRole=enterprise; path=/; max-age=86400; secure; samesite=strict`;
-                document.cookie = `isAuthenticated=true; path=/; max-age=86400; secure; samesite=strict`;
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem('userRole', 'enterprise')
+                    localStorage.setItem('isAuthenticated', 'true')
+                    document.cookie = `userRole=enterprise; path=/; max-age=86400; secure; samesite=strict`;
+                    document.cookie = `isAuthenticated=true; path=/; max-age=86400; secure; samesite=strict`;
+                }
                 await router.push('/enterprise/dashboard')
                 toast.success('Bienvenido Enterprise')
             } else {
@@ -170,7 +177,7 @@ const LoginPage = () => {
         } finally {
             setIsLoading(false)
         }
-    }, [formState, router, simulateGPSPosition])
+    }, [formState, router, simulateGPSPosition, isClient])
 
     const handleMapConfirmation = useCallback(() => {
         if (locationState.showConfirmation) {
@@ -178,6 +185,10 @@ const LoginPage = () => {
             toast.success('Ubicación confirmada correctamente')
         }
     }, [locationState.showConfirmation, router])
+
+    if (!isClient) {
+        return <div>Cargando...</div>
+    }
 
     return (
         <div className="min-h-screen flex flex-col justify-between relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900">

@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-// import { ImportExportService } from '@/lib/importExport'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const format = searchParams.get('format')
     
-    // Obtener datos
+    // Get data
     const { data, error } = await supabase
       .from('organizations')
       .select(`
@@ -19,9 +20,9 @@ export async function GET(request) {
 
     if (error) throw error
 
-    // Exportar según formato
     return NextResponse.json({
-      message: 'Funcionalidad no implementada'
+      success: true,
+      data
     });
 
   } catch (error) {
