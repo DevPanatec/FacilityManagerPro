@@ -4,12 +4,11 @@ const nextConfig = {
     domains: ['jecxswfoepdstrghyouv.supabase.co'],
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: true
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: true
   },
-  output: 'standalone',
   experimental: {
     serverActions: true
   }
