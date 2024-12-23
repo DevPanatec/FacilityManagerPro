@@ -17,44 +17,44 @@ const Map = dynamic(() => import('./DynamicMap'), {
 // Funciones de almacenamiento seguras
 const storage = {
   set: (key, value) => {
-    try {
-      if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined') {
+      try {
         window.localStorage.setItem(key, value)
+      } catch (e) {
+        console.error('Error accessing localStorage:', e)
       }
-    } catch (e) {
-      console.error('Error accessing localStorage:', e)
     }
   },
   remove: (key) => {
-    try {
-      if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined') {
+      try {
         window.localStorage.removeItem(key)
+      } catch (e) {
+        console.error('Error accessing localStorage:', e)
       }
-    } catch (e) {
-      console.error('Error accessing localStorage:', e)
     }
   },
   get: (key) => {
-    try {
-      if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined') {
+      try {
         return window.localStorage.getItem(key)
+      } catch (e) {
+        console.error('Error accessing localStorage:', e)
+        return null
       }
-      return null
-    } catch (e) {
-      console.error('Error accessing localStorage:', e)
-      return null
     }
+    return null
   }
 }
 
 // Función segura para establecer cookies
 const setCookie = (name, value) => {
-  try {
-    if (typeof document !== 'undefined') {
+  if (typeof document !== 'undefined') {
+    try {
       document.cookie = `${name}=${value}; path=/; max-age=86400; secure; samesite=strict`
+    } catch (e) {
+      console.error('Error setting cookie:', e)
     }
-  } catch (e) {
-    console.error('Error setting cookie:', e)
   }
 }
 
