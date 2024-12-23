@@ -114,5 +114,86 @@ export const importExportService = {
 
       reader.readAsArrayBuffer(file);
     });
+  },
+
+  async importFromCSV(file) {
+    try {
+      const text = await this.readFileAsText(file);
+      const rows = text.split('\n');
+      const headers = rows[0].split(',').map(h => h.trim());
+      
+      const data = rows.slice(1).map(row => {
+        const values = row.split(',');
+        return headers.reduce((obj, header, index) => {
+          obj[header] = values[index]?.trim();
+          return obj;
+        }, {});
+      });
+
+      return this.processImportData(data);
+    } catch (error) {
+      console.error('Error importando CSV:', error);
+      throw error;
+    }
+  },
+
+  async importFromJSON(file) {
+    try {
+      const text = await this.readFileAsText(file);
+      const data = JSON.parse(text);
+      
+      if (!Array.isArray(data)) {
+        throw new Error('El archivo JSON debe contener un array de organizaciones');
+      }
+
+      return this.processImportData(data);
+    } catch (error) {
+      console.error('Error importando JSON:', error);
+      throw error;
+    }
+  },
+
+  async readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = (e) => reject(e);
+      reader.readAsText(file);
+    });
+  },
+
+  async processImportData(data) {
+    const transformedData = data.map(item => ({
+      name: item.name || item.nombre || item.NOMBRE || '',
+      nombre: item.name || item.nombre || item.NOMBRE || '',
+      type: item.type || item.tipo || 'empresa',
+      personal: parseInt(item.personal || item.empleados || 0),
+      areas: parseInt(item.areas || item.departamentos || 0),
+      servicios: parseInt(item.servicios || item.actividades || 0),
+      status: 'active',
+      active: true,
+      config: '{}',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }));
+
+    const validData = transformedData.filter(item => item.name.trim() !== '');
+
+    if (validData.length === 0) {
+      throw new Error('No se encontraron datos válidos para importar');
+    }
+
+    const { data: result, error } = await supabase
+      .from('organizations')
+      .insert(validData)
+      .select();
+
+    if (error) throw error;
+
+    return {
+      success: true,
+      data: result,
+      message: `Se importaron ${result.length} registros correctamente`
+    };
   }
 }; 
