@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(request) {
   try {
@@ -22,11 +23,12 @@ export async function GET(request) {
 
     return NextResponse.json({
       success: true,
-      data
+      data: data || [],
+      format
     });
 
   } catch (error) {
-    console.error('Export error:', error)
+    console.error('Error en la exportación:', error)
     return NextResponse.json(
       { error: error.message },
       { status: 500 }
