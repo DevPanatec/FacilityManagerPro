@@ -6,7 +6,8 @@ export const dataHubService = {
       console.log('1. Iniciando getDataHubSummary...');
       const { data: organizations, error } = await supabase
         .from('organizations')
-        .select('*');
+        .select('*')
+        .order('created_at', { ascending: false });
 
       console.log('2. Datos recibidos de Supabase:', organizations);
 
@@ -15,8 +16,8 @@ export const dataHubService = {
       // Mapear los datos al formato esperado
       const formattedOrganizations = organizations.map(org => ({
         id: org.id,
-        name: org.name || '',  // Usar el campo name de la base de datos
-        type: org.type || '',
+        name: org.name,
+        type: org.type,
         logo: null,
         personal: {
           total: org.personal || 0
@@ -27,7 +28,9 @@ export const dataHubService = {
         actividad: {
           total: org.servicios || 0,
           label: 'servicios'
-        }
+        },
+        status: org.status,
+        active: org.active
       }));
 
       const summary = {
