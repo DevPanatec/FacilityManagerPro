@@ -17,6 +17,23 @@ const ImportDropdown = ({ onImport }) => {
     json: useRef(null)
   };
 
+  // Agregar useEffect para manejar clics fuera del dropdown
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+
+    // Agregar el event listener
+    document.addEventListener('mousedown', handleClickOutside);
+    
+    // Cleanup
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [dropdownRef]);
+
   const handleFileSelect = async (format, event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -38,6 +55,7 @@ const ImportDropdown = ({ onImport }) => {
       if (result.success) {
         toast.success(result.message);
         onImport();
+        setTimeout(() => setIsOpen(false), 500);
       } else {
         toast.error(result.error);
       }
@@ -48,7 +66,6 @@ const ImportDropdown = ({ onImport }) => {
     
     // Limpiar el input
     event.target.value = '';
-    setIsOpen(false);
   };
 
   // Inputs de archivo ocultos
@@ -79,40 +96,59 @@ const ImportDropdown = ({ onImport }) => {
   );
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div 
+      className="relative" 
+      ref={dropdownRef}
+    >
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center px-6 py-2 rounded-md shadow-sm text-sm font-medium text-white bg-[#2563EB] hover:bg-blue-600"
+        className="inline-flex items-center px-6 py-2.5 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-md hover:shadow-lg transition-all duration-200 ease-in-out"
       >
-        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+        <svg 
+          className="w-5 h-5 mr-2" 
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24"
+        >
+          <path 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            strokeWidth={2} 
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12"
+          />
         </svg>
-        ↑ Importar
-        <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        Importar Datos
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
+        <div className="absolute left-0 mt-2 w-56 rounded-lg shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
           <div className="py-1">
             <button
               onClick={() => fileInputRefs.excel.current?.click()}
-              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors duration-150 flex items-center"
             >
-              Importar Excel (.xlsx, .xls)
+              <svg className="w-5 h-5 mr-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
+              </svg>
+              Excel (.xlsx, .xls)
             </button>
             <button
               onClick={() => fileInputRefs.csv.current?.click()}
-              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors duration-150 flex items-center"
             >
-              Importar CSV (.csv)
+              <svg className="w-5 h-5 mr-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
+              </svg>
+              CSV (.csv)
             </button>
             <button
               onClick={() => fileInputRefs.json.current?.click()}
-              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors duration-150 flex items-center"
             >
-              Importar JSON (.json)
+              <svg className="w-5 h-5 mr-3 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
+              </svg>
+              JSON (.json)
             </button>
           </div>
         </div>
@@ -138,7 +174,9 @@ export default function DataHubPage() {
   const [filterStatus, setFilterStatus] = useState('Todas las empresas');
   const [sortBy, setSortBy] = useState('Ordenar por nombre');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
+  const itemsPerPage = 9;
+  const [showModal, setShowModal] = useState(false);
+  const [selectedOrg, setSelectedOrg] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -244,7 +282,76 @@ export default function DataHubPage() {
     return data.organizations.slice(startIndex, endIndex);
   };
 
-  const totalPages = Math.ceil(data.organizations.length / itemsPerPage);
+  const Pagination = () => {
+    const totalPages = Math.ceil(getFilteredOrganizations().length / itemsPerPage);
+
+    return (
+      <div className="flex justify-center items-center mt-8 space-x-2">
+        <button
+          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+          disabled={currentPage === 1}
+          className={`px-4 py-2 rounded-lg ${
+            currentPage === 1
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+          }`}
+        >
+          Anterior
+        </button>
+        
+        <span className="text-gray-600">
+          Página {currentPage} de {totalPages}
+        </span>
+        
+        <button
+          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+          disabled={currentPage === totalPages}
+          className={`px-4 py-2 rounded-lg ${
+            currentPage === totalPages
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+          }`}
+        >
+          Siguiente
+        </button>
+      </div>
+    );
+  };
+
+  const getFilteredOrganizations = () => {
+    return data.organizations.filter(org => {
+      // Convertir el término de búsqueda y el nombre a minúsculas para una búsqueda insensible a mayúsculas
+      const searchLower = searchTerm.toLowerCase();
+      const nameLower = (org.name || '').toLowerCase();
+      const typeLower = (org.type || '').toLowerCase();
+
+      // Buscar en nombre y tipo
+      return nameLower.includes(searchLower) || typeLower.includes(searchLower);
+    }).filter(org => {
+      // Filtrar por estado si es necesario
+      if (filterStatus === 'Activas') return org.active;
+      if (filterStatus === 'Inactivas') return !org.active;
+      return true; // 'Todas las empresas'
+    }).sort((a, b) => {
+      switch (sortBy) {
+        case 'nombre':
+          return (a.name || '').localeCompare(b.name || '');
+        case 'personal':
+          return (b.personal || 0) - (a.personal || 0);
+        case 'actividad':
+          return (b.servicios || 0) - (a.servicios || 0);
+        default:
+          return 0;
+      }
+    });
+  };
+
+  const getPaginatedOrganizations = () => {
+    const filtered = getFilteredOrganizations();
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filtered.slice(startIndex, endIndex);
+  };
 
   const handleDeleteOrganization = async (id) => {
     if (!id) {
@@ -316,32 +423,9 @@ export default function DataHubPage() {
     }
   };
 
-  const getFilteredOrganizations = () => {
-    return data.organizations.filter(org => {
-      // Convertir el término de búsqueda y el nombre a minúsculas para una búsqueda insensible a mayúsculas
-      const searchLower = searchTerm.toLowerCase();
-      const nameLower = (org.name || '').toLowerCase();
-      const typeLower = (org.type || '').toLowerCase();
-
-      // Buscar en nombre y tipo
-      return nameLower.includes(searchLower) || typeLower.includes(searchLower);
-    }).filter(org => {
-      // Filtrar por estado si es necesario
-      if (filterStatus === 'Activas') return org.active;
-      if (filterStatus === 'Inactivas') return !org.active;
-      return true; // 'Todas las empresas'
-    }).sort((a, b) => {
-      switch (sortBy) {
-        case 'nombre':
-          return (a.name || '').localeCompare(b.name || '');
-        case 'personal':
-          return (b.personal || 0) - (a.personal || 0);
-        case 'actividad':
-          return (b.servicios || 0) - (a.servicios || 0);
-        default:
-          return 0;
-      }
-    });
+  const handleShowDetails = (org) => {
+    setSelectedOrg(org);
+    setShowModal(true);
   };
 
   if (loading) return <div>Cargando...</div>;
@@ -506,8 +590,8 @@ export default function DataHubPage() {
 
       {/* Tarjetas de empresas */}
       <div className="grid grid-cols-3 gap-6">
-        {getFilteredOrganizations().map((org) => (
-          <div key={org.id} className="bg-white rounded-xl shadow-sm p-6">
+        {getPaginatedOrganizations().map((org) => (
+          <div key={org.id} className="bg-white rounded-xl shadow-sm p-6 flex flex-col">
             {/* Encabezado de la tarjeta */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center">
@@ -595,15 +679,123 @@ export default function DataHubPage() {
                 </div>
               </div>
             </div>
+
+            {/* Agregar el botón al final de la tarjeta */}
+            <button
+              onClick={() => handleShowDetails(org)}
+              className="mt-4 w-full py-2 px-4 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors duration-200"
+            >
+              Más información
+            </button>
           </div>
         ))}
       </div>
+
+      {getFilteredOrganizations().length > 0 && (
+        <Pagination />
+      )}
 
       {getFilteredOrganizations().length === 0 && (
         <div className="text-center py-8">
           <p className="text-gray-500">
             No se encontraron empresas que coincidan con tu búsqueda
           </p>
+        </div>
+      )}
+
+      {/* Agregar el modal después del grid de tarjetas */}
+      {showModal && selectedOrg && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-8 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            {/* Encabezado del modal */}
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">
+                Detalles de la Empresa
+              </h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Contenido del modal */}
+            <div className="space-y-6">
+              {/* Información básica */}
+              <div className="flex items-center space-x-4">
+                <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+                  {selectedOrg.logo ? (
+                    <img 
+                      src={selectedOrg.logo} 
+                      alt={selectedOrg.name || 'Logo'} 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-2xl font-bold text-gray-600">
+                      {(selectedOrg.name || 'E').charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800">
+                    {selectedOrg.name || 'Sin nombre'}
+                  </h3>
+                  <p className="text-gray-500">{selectedOrg.type || 'Tipo no especificado'}</p>
+                </div>
+              </div>
+
+              {/* Estadísticas detalladas */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-gray-500 mb-1">Personal</h4>
+                  <p className="text-lg font-semibold text-blue-600">
+                    {typeof selectedOrg.personal === 'object' ? selectedOrg.personal.total : selectedOrg.personal || 0} empleados
+                  </p>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-gray-500 mb-1">Áreas</h4>
+                  <p className="text-lg font-semibold text-green-600">
+                    {typeof selectedOrg.areas === 'object' ? selectedOrg.areas.total : selectedOrg.areas || 0} áreas
+                  </p>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-gray-500 mb-1">Servicios</h4>
+                  <p className="text-lg font-semibold text-purple-600">
+                    {typeof selectedOrg.servicios === 'object' ? selectedOrg.servicios.total : selectedOrg.servicios || 0} servicios
+                  </p>
+                </div>
+                <div className="bg-yellow-50 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-gray-500 mb-1">Estado</h4>
+                  <p className="text-lg font-semibold text-yellow-600">
+                    {selectedOrg.active ? 'Activa' : 'Inactiva'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Información adicional */}
+              <div className="border-t pt-4">
+                <h4 className="font-medium text-gray-700 mb-2">Información Adicional</h4>
+                <div className="space-y-2 text-gray-600">
+                  <p>Fecha de creación: {selectedOrg.created_at ? new Date(selectedOrg.created_at).toLocaleDateString() : 'No disponible'}</p>
+                  <p>Última actualización: {selectedOrg.updated_at ? new Date(selectedOrg.updated_at).toLocaleDateString() : 'No disponible'}</p>
+                  <p>ID: {selectedOrg.id || 'No disponible'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Botón de cerrar */}
+            <div className="mt-8 flex justify-end">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

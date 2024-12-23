@@ -12,23 +12,54 @@ export const importExportService = {
         throw new Error('El archivo no contiene datos válidos');
       }
 
-      const columns = Object.keys(data[0]);
-      console.log('3. Columnas encontradas:', columns);
-
-      // Transformar los datos
+      // Transformar los datos de manera más flexible
       const transformedData = data.map((item, index) => {
         console.log(`4. Procesando item ${index + 1}:`, item);
         
-        // Obtener el nombre de cualquier campo disponible
-        const nombreValue = item.name || item.nombre || item.NOMBRE || item.Name || item.COMPANY || item.company || '';
-        
+        // Buscar cualquier campo que pueda ser el nombre
+        const possibleNameFields = Object.keys(item).find(key => 
+          key.toLowerCase().includes('name') || 
+          key.toLowerCase().includes('nombre') || 
+          key.toLowerCase().includes('empresa') ||
+          key.toLowerCase().includes('company')
+        );
+
+        // Buscar cualquier campo que pueda ser el tipo
+        const possibleTypeFields = Object.keys(item).find(key => 
+          key.toLowerCase().includes('type') || 
+          key.toLowerCase().includes('tipo') || 
+          key.toLowerCase().includes('category') ||
+          key.toLowerCase().includes('categoria')
+        );
+
+        // Buscar campos numéricos
+        const numberFields = Object.entries(item).reduce((acc, [key, value]) => {
+          const numValue = parseInt(value);
+          if (!isNaN(numValue)) {
+            if (key.toLowerCase().includes('personal') || 
+                key.toLowerCase().includes('empleados') || 
+                key.toLowerCase().includes('workers')) {
+              acc.personal = numValue;
+            } else if (key.toLowerCase().includes('area') || 
+                      key.toLowerCase().includes('departamento') || 
+                      key.toLowerCase().includes('department')) {
+              acc.areas = numValue;
+            } else if (key.toLowerCase().includes('servicio') || 
+                      key.toLowerCase().includes('actividad') || 
+                      key.toLowerCase().includes('service')) {
+              acc.servicios = numValue;
+            }
+          }
+          return acc;
+        }, {});
+
         const transformedItem = {
-          name: nombreValue,      // Para el campo name
-          nombre: nombreValue,    // Para el campo nombre (requerido)
-          type: item.type || item.tipo || item.TYPE || item.TIPO || 'empresa',
-          personal: parseInt(item.personal || item.PERSONAL || item.empleados || 0),
-          areas: parseInt(item.areas || item.AREAS || item.departamentos || 0),
-          servicios: parseInt(item.servicios || item.SERVICIOS || item.services || 0),
+          name: item[possibleNameFields] || 'Empresa sin nombre',
+          nombre: item[possibleNameFields] || 'Empresa sin nombre',
+          type: item[possibleTypeFields] || 'empresa',
+          personal: numberFields.personal || 0,
+          areas: numberFields.areas || 0,
+          servicios: numberFields.servicios || 0,
           status: 'active',
           active: true,
           config: '{}',
@@ -40,47 +71,44 @@ export const importExportService = {
         return transformedItem;
       });
 
-      const validData = transformedData.filter(item => item.name.trim() !== '');
-      console.log('6. Datos válidos a insertar:', validData);
+      // Filtrar registros inválidos pero ser más permisivo
+      const validData = transformedData.filter(item => item.name && item.name.trim() !== '');
 
       if (validData.length === 0) {
         throw new Error('No se encontraron datos válidos para importar');
       }
 
-      // Insertar todos los datos de una vez
-      console.log('7. Insertando datos en Supabase:', validData);
-      const { data: result, error: insertError } = await supabase
-        .from('organizations')
-        .insert(validData)
-        .select();
+      // Insertar datos en lotes pequeños para evitar problemas
+      const batchSize = 5;
+      const results = [];
+      
+      for (let i = 0; i < validData.length; i += batchSize) {
+        const batch = validData.slice(i, i + batchSize);
+        console.log(`7. Insertando lote ${Math.floor(i/batchSize) + 1}:`, batch);
 
-      if (insertError) {
-        console.error('Error detallado de inserción:', {
-          message: insertError.message,
-          details: insertError.details,
-          hint: insertError.hint,
-          code: insertError.code
-        });
-        throw new Error(insertError.message || 'Error al insertar datos');
+        const { data: insertedData, error } = await supabase
+          .from('organizations')
+          .insert(batch)
+          .select();
+
+        if (error) {
+          console.error('Error en inserción:', error);
+          throw error;
+        }
+
+        if (insertedData) {
+          results.push(...insertedData);
+        }
       }
 
-      if (!result) {
-        throw new Error('No se recibió respuesta de la inserción');
-      }
-
-      console.log('8. Datos insertados correctamente:', result);
       return { 
         success: true, 
-        data: result,
-        message: `Se importaron ${result.length} registros correctamente`
+        data: results,
+        message: `Se importaron ${results.length} registros correctamente`
       };
 
     } catch (error) {
-      console.error('Error completo en importación:', {
-        message: error.message,
-        stack: error.stack,
-        error
-      });
+      console.error('Error completo en importación:', error);
       return { 
         success: false, 
         error: error.message || 'Error durante la importación',
