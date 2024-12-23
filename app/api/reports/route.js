@@ -1,9 +1,22 @@
 import { NextResponse } from 'next/server';
-import { createServerComponentClient } from '@/lib/supabase';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 export async function GET(request) {
   try {
-    const supabase = createServerComponentClient();
+    const cookieStore = cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
     const searchParams = new URL(request.url).searchParams;
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
@@ -41,7 +54,18 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const supabase = createServerComponentClient();
+    const cookieStore = cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
     const data = await request.json();
 
     const { error, data: newReport } = await supabase

@@ -1,10 +1,9 @@
 'use client'
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { toast } from 'react-hot-toast'
-import { calculateDistance } from './DynamicMap'
 import { FaUser, FaLock, FaSpinner } from 'react-icons/fa'
 import { BsBuilding } from 'react-icons/bs'
 
@@ -19,7 +18,7 @@ const storage = {
   set: (key, value) => {
     if (typeof window !== 'undefined') {
       try {
-        window.localStorage.setItem(key, value)
+        localStorage.setItem(key, value)
       } catch (e) {
         console.error('Error accessing localStorage:', e)
       }
@@ -28,7 +27,7 @@ const storage = {
   remove: (key) => {
     if (typeof window !== 'undefined') {
       try {
-        window.localStorage.removeItem(key)
+        localStorage.removeItem(key)
       } catch (e) {
         console.error('Error accessing localStorage:', e)
       }
@@ -37,7 +36,7 @@ const storage = {
   get: (key) => {
     if (typeof window !== 'undefined') {
       try {
-        return window.localStorage.getItem(key)
+        return localStorage.getItem(key)
       } catch (e) {
         console.error('Error accessing localStorage:', e)
         return null
@@ -60,7 +59,7 @@ const setCookie = (name, value) => {
 
 const LoginPage = () => {
     const router = useRouter()
-    const [isClient, setIsClient] = useState(false)
+    const [mounted, setMounted] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [formState, setFormState] = useState({
         username: '',
@@ -76,7 +75,7 @@ const LoginPage = () => {
     })
 
     useEffect(() => {
-        setIsClient(true)
+        setMounted(true)
         // Limpiar storage al montar
         storage.remove('userRole')
     }, [])
@@ -98,7 +97,7 @@ const LoginPage = () => {
 
     const handleSubmit = useCallback(async (e) => {
         e.preventDefault()
-        if (!isClient) return
+        if (!mounted) return
         
         setIsLoading(true)
 
@@ -197,7 +196,7 @@ const LoginPage = () => {
         } finally {
             setIsLoading(false)
         }
-    }, [formState, router, simulateGPSPosition, isClient])
+    }, [formState, router, simulateGPSPosition, mounted])
 
     const handleMapConfirmation = useCallback(() => {
         if (locationState.showConfirmation) {
@@ -206,8 +205,8 @@ const LoginPage = () => {
         }
     }, [locationState.showConfirmation, router])
 
-    if (!isClient) {
-        return <div>Cargando...</div>
+    if (!mounted) {
+        return null
     }
 
     return (
