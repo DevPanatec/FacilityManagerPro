@@ -1,19 +1,37 @@
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient, createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+export const createClient = () => {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
 
-export const supabase = createClient(supabaseUrl, supabaseKey)
+export const createServerComponentClient = () => {
+  const cookieStore = cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+      },
+    }
+  )
+}
 
-// Función auxiliar para subir imágenes
-export const uploadImage = async (file: File): Promise<string> => {
+// Helper function for image uploads
+export const uploadImage = async (file: File, supabase: any): Promise<string> => {
   try {
     const fileExt = file.name.split('.').pop()
     const fileName = `${Math.random()}.${fileExt}`
     const filePath = `chat-images/${fileName}`
 
     const { error: uploadError, data } = await supabase.storage
-      .from('images')  // Asegúrate de que este bucket existe en tu Supabase
+      .from('images')
       .upload(filePath, file)
 
     if (uploadError) {

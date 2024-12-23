@@ -147,18 +147,18 @@ export default function ReportsPage() {
 
     try {
       // Crear el nuevo reporte
-      const newReport = {
-        id: Date.now(), // Temporal, normalmente viene del backend
+      const newReport: Report = {
+        id: Date.now(),
         fecha: new Date().toISOString().split('T')[0],
         area: selectedArea,
         tipo: contingencyType,
         descripcion: description,
-        estado: 'Pendiente',
+        estado: 'Pendiente' as const,
         esContingencia: true,
         archivos: selectedFiles.map(file => ({
           nombre: file.name,
           url: URL.createObjectURL(file),
-          tipo: file.type.startsWith('image/') ? 'imagen' : 'documento'
+          tipo: file.type.startsWith('image/') ? 'imagen' as const : 'documento' as const
         }))
       };
 
