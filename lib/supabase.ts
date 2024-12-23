@@ -1,6 +1,7 @@
 import { createBrowserClient, createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
+// Browser client for client-side components
 export const createClient = () => {
   return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,7 @@ export const createClient = () => {
   )
 }
 
+// Server client for server components
 export const createServerComponentClient = () => {
   const cookieStore = cookies()
   return createServerClient(

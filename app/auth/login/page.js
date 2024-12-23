@@ -8,21 +8,65 @@ import { calculateDistance } from './DynamicMap'
 import { FaUser, FaLock, FaSpinner } from 'react-icons/fa'
 import { BsBuilding } from 'react-icons/bs'
 
+// Cargar el mapa dinámicamente solo en el cliente
 const Map = dynamic(() => import('./DynamicMap'), { 
   ssr: false, 
   loading: () => <div className="h-64 w-full bg-gray-100 rounded-lg flex items-center justify-center">Cargando mapa...</div>
 })
 
+// Funciones de almacenamiento seguras
+const storage = {
+  set: (key, value) => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(key, value)
+      }
+    } catch (e) {
+      console.error('Error accessing localStorage:', e)
+    }
+  },
+  remove: (key) => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(key)
+      }
+    } catch (e) {
+      console.error('Error accessing localStorage:', e)
+    }
+  },
+  get: (key) => {
+    try {
+      if (typeof window !== 'undefined') {
+        return window.localStorage.getItem(key)
+      }
+      return null
+    } catch (e) {
+      console.error('Error accessing localStorage:', e)
+      return null
+    }
+  }
+}
+
+// Función segura para establecer cookies
+const setCookie = (name, value) => {
+  try {
+    if (typeof document !== 'undefined') {
+      document.cookie = `${name}=${value}; path=/; max-age=86400; secure; samesite=strict`
+    }
+  } catch (e) {
+    console.error('Error setting cookie:', e)
+  }
+}
+
 const LoginPage = () => {
     const router = useRouter()
-    const gpsSimulatorRef = useRef(null)
-    
+    const [isClient, setIsClient] = useState(false)
+    const [isLoading, setIsLoading] = useState(false)
     const [formState, setFormState] = useState({
         username: '',
         password: '',
         showPassword: false
     })
-
     const [locationState, setLocationState] = useState({
         showMap: false,
         userLocation: null,
@@ -31,10 +75,10 @@ const LoginPage = () => {
         isLoading: false
     })
 
-    const [isClient, setIsClient] = useState(false)
-
     useEffect(() => {
         setIsClient(true)
+        // Limpiar storage al montar
+        storage.remove('userRole')
     }, [])
 
     const workArea = {
@@ -52,22 +96,6 @@ const LoginPage = () => {
         }
     }, [workArea])
 
-    useEffect(() => {
-        return () => {
-            if (isClient) {
-                gpsSimulatorRef.current = null
-            }
-        }
-    }, [isClient])
-
-    useEffect(() => {
-        if (isClient) {
-            localStorage.removeItem('userRole')
-        }
-    }, [isClient])
-
-    const [isLoading, setIsLoading] = useState(false)
-
     const handleSubmit = useCallback(async (e) => {
         e.preventDefault()
         if (!isClient) return
@@ -76,13 +104,13 @@ const LoginPage = () => {
 
         try {
             if (formState.username === 'admin_principal' && formState.password === 'admin123') {
-                localStorage.setItem('adminPrincipal', 'true')
-                localStorage.setItem('userRole', 'admin')
-                localStorage.setItem('adminId', '1')
-                localStorage.setItem('isSuperAdmin', 'true')
-                document.cookie = `userRole=admin; path=/; max-age=86400; secure; samesite=strict`
-                document.cookie = `adminPrincipal=true; path=/; max-age=86400; secure; samesite=strict`
-                document.cookie = `isSuperAdmin=true; path=/; max-age=86400; secure; samesite=strict`
+                storage.set('adminPrincipal', 'true')
+                storage.set('userRole', 'admin')
+                storage.set('adminId', '1')
+                storage.set('isSuperAdmin', 'true')
+                setCookie('userRole', 'admin')
+                setCookie('adminPrincipal', 'true')
+                setCookie('isSuperAdmin', 'true')
                 toast.success('Bienvenido Administrador Principal')
                 await router.push('/admin/dashboard')
                 return
@@ -113,38 +141,31 @@ const LoginPage = () => {
                         showConfirmation: true,
                         isLoading: false
                     }))
-                    if (typeof window !== 'undefined') {
-                        localStorage.setItem('userRole', 'usuario')
-                        document.cookie = `userRole=usuario; path=/; max-age=86400; secure; samesite=strict`;
-                    }
+                    storage.set('userRole', 'usuario')
+                    setCookie('userRole', 'usuario')
                 } else {
                     throw new Error('Debes estar dentro del área de trabajo para iniciar sesión')
                 }
             } 
             else if (formState.username === 'admin' && formState.password === '123456') {
-                if (typeof window !== 'undefined') {
-                    localStorage.setItem('userRole', 'admin')
-                    localStorage.setItem('isAuthenticated', 'true')
-                    localStorage.setItem('adminId', '3')
-                    localStorage.setItem('isSuperAdmin', 'false')
-                    document.cookie = `userRole=admin; path=/; max-age=86400; secure; samesite=strict`;
-                    document.cookie = `isAuthenticated=true; path=/; max-age=86400; secure; samesite=strict`;
-                    document.cookie = `isSuperAdmin=false; path=/; max-age=86400; secure; samesite=strict`;
-                }
+                storage.set('userRole', 'admin')
+                storage.set('isAuthenticated', 'true')
+                storage.set('adminId', '3')
+                storage.set('isSuperAdmin', 'false')
+                setCookie('userRole', 'admin')
+                setCookie('isAuthenticated', 'true')
+                setCookie('isSuperAdmin', 'false')
                 await router.push('/admin/dashboard')
                 toast.success('Bienvenido Administrador')
             } 
             else if (formState.username === 'enterprise' && formState.password === '123456') {
-                if (typeof window !== 'undefined') {
-                    localStorage.setItem('userRole', 'enterprise')
-                    localStorage.setItem('isAuthenticated', 'true')
-                    document.cookie = `userRole=enterprise; path=/; max-age=86400; secure; samesite=strict`;
-                    document.cookie = `isAuthenticated=true; path=/; max-age=86400; secure; samesite=strict`;
-                }
+                storage.set('userRole', 'enterprise')
+                storage.set('isAuthenticated', 'true')
+                setCookie('userRole', 'enterprise')
+                setCookie('isAuthenticated', 'true')
                 await router.push('/enterprise/dashboard')
                 toast.success('Bienvenido Enterprise')
             } else {
-                setIsLoading(false)
                 toast.error('Las credenciales ingresadas no son correctas', {
                     style: {
                         background: '#FEE2E2',
@@ -159,7 +180,6 @@ const LoginPage = () => {
                 })
             }
         } catch (error) {
-            setIsLoading(false)
             if (error.message.includes('dentro del área')) {
                 toast.error('Debes estar dentro del área de trabajo para iniciar sesión', {
                     style: {

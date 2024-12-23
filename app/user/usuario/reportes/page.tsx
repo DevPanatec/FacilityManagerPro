@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '../../../lib/supabase';
+import { createBrowserClient } from '@supabase/ssr';
 
 interface Report {
   id: number;
@@ -18,7 +18,10 @@ export default function ReportesPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [reports, setReports] = useState<Report[]>([]);
-  const supabase = createClient();
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
   useEffect(() => {
     fetchReports();
