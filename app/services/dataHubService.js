@@ -3,58 +3,44 @@ import { supabase } from '@/lib/supabase'
 export const dataHubService = {
   async getDataHubSummary() {
     try {
-      // Primero refrescamos la vista materializada
-      await supabase.rpc('refresh_datahub_summary');
-
-      // Obtenemos los datos de la vista
-      const { data: organizations, error: orgError } = await supabase
+      console.log('1. Iniciando getDataHubSummary...');
+      const { data: organizations, error } = await supabase
         .from('organizations')
-        .select(`
-          id,
-          name,
-          logo_url,
-          user_organizations (count),
-          areas (count),
-          tasks (count)
-        `);
+        .select('*');
 
-      if (orgError) throw orgError;
+      console.log('2. Datos recibidos de Supabase:', organizations);
 
-      // Calcular totales
-      const summary = {
-        totalEmpresas: organizations.length,
-        totalPersonal: organizations.reduce((acc, org) => acc + (org.user_organizations?.[0]?.count || 0), 0),
-        totalActividades: organizations.reduce((acc, org) => acc + (org.tasks?.[0]?.count || 0), 0),
-        totalIngresos: "$573.3K" // Por ahora hardcodeado
-      };
+      if (error) throw error;
 
-      // Formatear organizaciones
-      const formattedOrgs = organizations.map(org => ({
+      // Mapear los datos al formato esperado
+      const formattedOrganizations = organizations.map(org => ({
         id: org.id,
-        nombre: org.name,
-        logo: org.logo_url,
+        name: org.name || '',  // Usar el campo name de la base de datos
+        type: org.type || '',
+        logo: null,
         personal: {
-          total: org.user_organizations?.[0]?.count || 0,
-          label: "empleados"
+          total: org.personal || 0
         },
         areas: {
-          total: org.areas?.[0]?.count || 0,
-          label: "áreas"
+          total: org.areas || 0
         },
         actividad: {
-          total: org.tasks?.[0]?.count || 0,
-          label: "servicios"
+          total: org.servicios || 0,
+          label: 'servicios'
         }
       }));
 
-      return {
-        summary: {
-          ...summary,
-          promedioActividad: Math.round(summary.totalActividades / summary.totalEmpresas) || 0
-        },
-        organizations: formattedOrgs
+      const summary = {
+        totalEmpresas: organizations.length,
+        totalPersonal: organizations.reduce((sum, org) => sum + (org.personal || 0), 0),
+        promedioActividad: organizations.reduce((sum, org) => sum + (org.servicios || 0), 0),
+        totalIngresos: "$" + organizations.reduce((sum, org) => sum + ((org.servicios || 0) * 1000), 0).toLocaleString()
       };
 
+      return {
+        summary,
+        organizations: formattedOrganizations
+      };
     } catch (error) {
       console.error('Error en getDataHubSummary:', error);
       throw error;
@@ -63,24 +49,21 @@ export const dataHubService = {
 
   async deleteOrganization(id) {
     try {
-      // Eliminar registros relacionados primero
-      await Promise.all([
-        supabase.from('staff').delete().eq('organization_id', id),
-        supabase.from('areas').delete().eq('organization_id', id),
-        supabase.from('activities').delete().eq('organization_id', id),
-        supabase.from('revenue').delete().eq('organization_id', id)
-      ]);
+      console.log('Service: Intentando eliminar organización con ID:', id);
+      
+      // Eliminar directamente usando RPC (función personalizada en Supabase)
+      const { data, error } = await supabase.rpc('delete_organization', {
+        organization_id: id
+      });
 
-      // Luego eliminar la organización
-      const { error } = await supabase
-        .from('organizations')
-        .delete()
-        .eq('id', id);
+      if (error) {
+        console.error('Error al eliminar:', error);
+        throw new Error('No se pudo eliminar la organización');
+      }
 
-      if (error) throw error;
       return { success: true };
     } catch (error) {
-      console.error('Error al eliminar organización:', error);
+      console.error('Error en deleteOrganization:', error);
       throw error;
     }
   },

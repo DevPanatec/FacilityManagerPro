@@ -28,14 +28,17 @@ export const importExportService = {
 
       if (error) {
         console.error('Error de Supabase:', error);
-        throw error;
+        throw new Error(`Error de Supabase: ${JSON.stringify(error)}`);
       }
 
       console.log('Respuesta de Supabase:', result);
-      return result;
+      return { success: true, data: result };
     } catch (error) {
       console.error('Error en importFromExcel:', error);
-      throw error;
+      return { 
+        success: false, 
+        error: error.message || 'Error durante la importación' 
+      };
     }
   },
 

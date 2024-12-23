@@ -4,6 +4,8 @@ import { dataHubService } from '@/services/dataHubService';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { importExportService } from '@/services/importExportService';
+import { toast } from 'react-hot-toast';
+import { supabase } from '@/lib/supabase';
 
 export default function DataHubPage() {
   const [data, setData] = useState({
@@ -32,11 +34,17 @@ export default function DataHubPage() {
 
   async function loadData() {
     try {
+      console.log('A. Iniciando loadData...');
       setLoading(true);
+      setError(null);
       const result = await dataHubService.getDataHubSummary();
+      console.log('B. Datos obtenidos en loadData:', result);
       setData(result);
+      console.log('C. Estado actualizado con:', result);
     } catch (err) {
+      console.error('D. Error cargando datos:', err);
       setError(err.message);
+      toast.error('Error al cargar los datos');
     } finally {
       setLoading(false);
     }
@@ -152,14 +160,34 @@ export default function DataHubPage() {
   const totalPages = Math.ceil(data.organizations.length / itemsPerPage);
 
   const handleDeleteOrganization = async (id) => {
+    if (!id) {
+      console.error('ID no válido:', id);
+      toast.error('Error: ID de organización no válido');
+      return;
+    }
+
     if (window.confirm('¿Estás seguro de que deseas eliminar esta empresa?')) {
       try {
         setLoading(true);
-        await dataHubService.deleteOrganization(id);
-        await loadData(); // Recargar los datos
-      } catch (err) {
-        console.error('Error al eliminar:', err);
-        alert('Error al eliminar la empresa');
+        console.log('Intentando eliminar organización con ID:', id);
+
+        // Usar el servicio en lugar de llamar directamente a Supabase
+        const result = await dataHubService.deleteOrganization(id);
+        console.log('Resultado de eliminación:', result);
+
+        if (result.success) {
+          await loadData();
+          toast.success('Empresa eliminada correctamente');
+        } else {
+          throw new Error('No se pudo eliminar la empresa');
+        }
+      } catch (error) {
+        console.error('Error detallado:', {
+          message: error.message,
+          error: error,
+          stack: error.stack
+        });
+        toast.error(`Error al eliminar: ${error.message || 'Error desconocido'}`);
       } finally {
         setLoading(false);
       }
@@ -170,28 +198,29 @@ export default function DataHubPage() {
     try {
       const file = event.target.files[0];
       if (!file) {
-        alert('Por favor seleccione un archivo Excel');
+        toast.error('Por favor seleccione un archivo Excel');
         return;
       }
 
       setLoading(true);
-      console.log('Iniciando importación del archivo:', file.name);
+      console.log('1. Iniciando importación del archivo:', file.name);
 
-      // Usar el servicio de importación
       const result = await importExportService.importFromExcel(file);
-      console.log('Resultado de la importación:', result);
-
-      if (result.success) {
-        // Recargar los datos inmediatamente después de la importación
-        await loadData();
-        alert('Importación exitosa');
-      } else {
-        throw new Error(result.error || 'Error en la importación');
+      console.log('2. Resultado de la importación:', result);
+      
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
+      // Recargar los datos inmediatamente después de la importación
+      console.log('3. Recargando datos...');
+      await loadData();
+      console.log('4. Datos recargados');
+      
+      toast.success(`Importación exitosa: ${result.data?.message || 'Datos importados correctamente'}`);
     } catch (error) {
-      console.error('Error en la importación:', error);
-      alert('Error al importar: ' + error.message);
+      console.error('Error en importación:', error);
+      toast.error(`Error al importar: ${error.message}`);
     } finally {
       setLoading(false);
       if (fileInputRef.current) {
@@ -297,7 +326,7 @@ export default function DataHubPage() {
         {/* Contadores */}
         <div className="grid grid-cols-4 gap-6 mb-8">
           {/* Total Empresas */}
-          <div className="bg-white rounded-xl shadow-sm p-4 relative overflow-hidden">
+          <div className="bg-white rounded-xl shadow-sm p-4">
             <div className="border-l-[3px] border-blue-500 pl-4">
               <div className="flex items-center">
                 <div className="bg-blue-50 rounded-lg p-2">
@@ -307,14 +336,14 @@ export default function DataHubPage() {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm text-gray-500">Total Empresas</p>
-                  <p className="text-xl font-bold text-gray-700">3</p>
+                  <p className="text-xl font-bold text-gray-700">{data.summary.totalEmpresas}</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Total Personal */}
-          <div className="bg-white rounded-xl shadow-sm p-4 relative overflow-hidden">
+          <div className="bg-white rounded-xl shadow-sm p-4">
             <div className="border-l-[3px] border-green-500 pl-4">
               <div className="flex items-center">
                 <div className="bg-green-50 rounded-lg p-2">
@@ -324,14 +353,14 @@ export default function DataHubPage() {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm text-gray-500">Total Personal</p>
-                  <p className="text-xl font-bold text-gray-700">568</p>
+                  <p className="text-xl font-bold text-gray-700">{data.summary.totalPersonal}</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Promedio Actividad */}
-          <div className="bg-white rounded-xl shadow-sm p-4 relative overflow-hidden">
+          <div className="bg-white rounded-xl shadow-sm p-4">
             <div className="border-l-[3px] border-purple-500 pl-4">
               <div className="flex items-center">
                 <div className="bg-purple-50 rounded-lg p-2">
@@ -341,14 +370,14 @@ export default function DataHubPage() {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm text-gray-500">Promedio Actividad</p>
-                  <p className="text-xl font-bold text-gray-700">2,804</p>
+                  <p className="text-xl font-bold text-gray-700">{data.summary.promedioActividad}</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Total Ingresos */}
-          <div className="bg-white rounded-xl shadow-sm p-4 relative overflow-hidden">
+          <div className="bg-white rounded-xl shadow-sm p-4">
             <div className="border-l-[3px] border-yellow-500 pl-4">
               <div className="flex items-center">
                 <div className="bg-yellow-50 rounded-lg p-2">
@@ -358,7 +387,7 @@ export default function DataHubPage() {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm text-gray-500">Total Ingresos</p>
-                  <p className="text-xl font-bold text-yellow-500">$573.3K</p>
+                  <p className="text-xl font-bold text-yellow-500">{data.summary.totalIngresos}</p>
                 </div>
               </div>
             </div>
@@ -425,27 +454,40 @@ export default function DataHubPage() {
 
         {/* Tarjetas de empresas */}
         <div className="grid grid-cols-3 gap-6">
-          {getCurrentOrganizations().map((org) => (
+          {data.organizations.map((org) => (
             <div key={org.id} className="bg-white rounded-xl shadow-sm p-6">
               {/* Encabezado de la tarjeta */}
-              <div className="flex items-center mb-6">
-                <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden">
-                  {org.logo ? (
-                    <img 
-                      src={org.logo} 
-                      alt={org.nombre} 
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-200">
-                      <span className="text-gray-600 text-lg">{org.nombre.charAt(0)}</span>
-                    </div>
-                  )}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center">
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+                    {org.logo ? (
+                      <img 
+                        src={org.logo} 
+                        alt={org.name || 'Logo'} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-gray-600 text-lg font-bold">
+                        {(org.name || 'E').charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="font-semibold text-gray-800">{org.name || 'Sin nombre'}</h3>
+                    <p className="text-sm text-gray-500">{org.type || 'Sin tipo'}</p>
+                  </div>
                 </div>
-                <div className="ml-4">
-                  <h3 className="font-semibold text-gray-800">{org.nombre}</h3>
-                  <p className="text-sm text-gray-500">ID: {org.id}</p>
-                </div>
+                
+                {/* Botón de eliminar */}
+                <button
+                  onClick={() => handleDeleteOrganization(org.id)}
+                  className="text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-50"
+                  title="Eliminar empresa"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
               </div>
 
               {/* Estadísticas */}
@@ -461,7 +503,7 @@ export default function DataHubPage() {
                     <div className="ml-3">
                       <p className="text-sm text-gray-500">Personal</p>
                       <p className="text-blue-600 font-semibold">
-                        {org.personal.total} empleados
+                        {org.personal?.total || 0} empleados
                       </p>
                     </div>
                   </div>
@@ -478,13 +520,13 @@ export default function DataHubPage() {
                     <div className="ml-3">
                       <p className="text-sm text-gray-500">Áreas</p>
                       <p className="text-green-600 font-semibold">
-                        {org.areas.total} áreas
+                        {org.areas?.total || 0} áreas
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Actividad */}
+                {/* Servicios */}
                 <div className="bg-purple-50 rounded-lg p-4">
                   <div className="flex items-center">
                     <div className="text-purple-600">
@@ -493,9 +535,9 @@ export default function DataHubPage() {
                       </svg>
                     </div>
                     <div className="ml-3">
-                      <p className="text-sm text-gray-500">Actividad</p>
+                      <p className="text-sm text-gray-500">Servicios</p>
                       <p className="text-purple-600 font-semibold">
-                        {org.actividad.total} {org.actividad.label}
+                        {org.actividad?.total || 0} {org.actividad?.label || 'servicios'}
                       </p>
                     </div>
                   </div>
