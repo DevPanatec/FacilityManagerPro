@@ -247,5 +247,60 @@ export const dataHubService = {
       console.error('Error al exportar datos:', error);
       throw error;
     }
+  },
+
+  async getAdminStats() {
+    try {
+      // Obtener estadísticas de usuarios
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('count');
+
+      // Obtener estadísticas de organizaciones
+      const { data: orgs, error: orgsError } = await supabase
+        .from('organizations')
+        .select('*');
+
+      // Obtener importaciones recientes
+      const { data: imports, error: importsError } = await supabase
+        .from('imports')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (usersError || orgsError || importsError) throw error;
+
+      return {
+        totalUsers: users[0].count,
+        totalOrganizations: orgs.length,
+        activeOrganizations: orgs.filter(org => org.active).length,
+        recentImports: imports.map(imp => ({
+          date: imp.created_at,
+          user: imp.user_email,
+          type: imp.file_type,
+          records: imp.records_count,
+          status: imp.status
+        }))
+      };
+    } catch (error) {
+      console.error('Error en getAdminStats:', error);
+      throw error;
+    }
+  },
+
+  async getRecentActivities() {
+    try {
+      const { data, error } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error obteniendo actividades recientes:', error);
+      throw error;
+    }
   }
 }; 
