@@ -1,9 +1,10 @@
 import localFont from "next/font/local"
 import "./globals.css"
-import Script from 'next/script'
-import 'leaflet/dist/leaflet.css'
 import { Toaster } from 'react-hot-toast'
 import RouteGuard from './auth/components/RouteGuard'
+import dynamic from 'next/dynamic'
+import { Suspense } from 'react'
+import GoogleAnalytics from '@/components/GoogleAnalytics'
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -29,12 +30,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es" className={`${geistSans.variable} ${geistMono.variable}`}>
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+      </head>
       <body>
+        <GoogleAnalytics />
         <Toaster position="top-center" />
         <RouteGuard>
-          <div className="min-h-screen bg-gray-50">
-            {children}
-          </div>
+          <Suspense fallback={<div>Cargando...</div>}>
+            <div className="min-h-screen bg-gray-50">
+              {children}
+            </div>
+          </Suspense>
         </RouteGuard>
       </body>
     </html>

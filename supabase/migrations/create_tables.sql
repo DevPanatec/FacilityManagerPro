@@ -111,4 +111,34 @@ FROM empresas e
 LEFT JOIN personal p ON e.id = p.empresa_id
 LEFT JOIN areas a ON e.id = a.empresa_id
 LEFT JOIN actividades ac ON e.id = ac.empresa_id
-GROUP BY e.id, e.nombre, e.logo_url, e.estado, e.ultima_actualizacion; 
+GROUP BY e.id, e.nombre, e.logo_url, e.estado, e.ultima_actualizacion;
+
+-- Crear tabla de organizaciones
+CREATE TABLE organizations (
+  id BIGSERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  type VARCHAR(50),
+  status VARCHAR(50) DEFAULT 'active',
+  logo_url TEXT,
+  personal INTEGER DEFAULT 0,
+  areas INTEGER DEFAULT 0,
+  servicios INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
+);
+
+-- Habilitar RLS (Row Level Security)
+ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
+
+-- Crear políticas de seguridad
+CREATE POLICY "Enable read access for all users" ON organizations
+  FOR SELECT USING (true);
+
+CREATE POLICY "Enable insert for authenticated users" ON organizations
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Enable update for authenticated users" ON organizations
+  FOR UPDATE USING (true);
+
+CREATE POLICY "Enable delete for authenticated users" ON organizations
+  FOR DELETE USING (true); 

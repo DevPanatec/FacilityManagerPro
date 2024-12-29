@@ -14,11 +14,24 @@ export default function Navbar() {
             <div className="flex-shrink-0 flex items-center">
               <Link
                 href="/admin/assignments"
-                title=""
                 className="text-gray-800 hover:text-gray-600 px-3 py-2 rounded-md text-sm font-medium"
               >
-                Asignaciones
+                Panel de Administración
               </Link>
+              <Link href="/webhooks" className="text-gray-600 hover:text-gray-900">
+                Webhooks
+              </Link>
+              <Link href="/audit" className="text-gray-600 hover:text-gray-900">
+                Auditoría
+              </Link>
+              {session?.user.role === 'admin' && (
+                <Link 
+                  href="/security-dashboard" 
+                  className="text-gray-600 hover:text-gray-900"
+                >
+                  Panel de Seguridad
+                </Link>
+              )}
               {/* Agrega más enlaces según necesites */}
             </div>
           </div>

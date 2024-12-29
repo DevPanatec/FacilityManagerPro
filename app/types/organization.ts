@@ -1,8 +1,12 @@
 export interface Organization {
-  id: string
-  name: string
-  logo_url?: string
-  estado: string
-  ultima_actualizacion: string
-  total_areas: number
+  id: number;
+  name: string;
+  type?: string;
+  status?: string;
+  logo_url?: string;
+  personal: number;
+  areas: number;
+  servicios: number;
+  created_at?: string;
+  updated_at?: string;
 } 

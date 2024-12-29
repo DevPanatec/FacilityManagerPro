@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase'
+import { supabase } from '@/lib/supabase'
 import axios from 'axios'
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
@@ -20,74 +20,44 @@ const VALID_TYPES = {
 export const dataHubService = {
   async getDataHubSummary() {
     try {
-      // Obtener organizaciones
       const { data: organizations, error } = await supabase
         .from('organizations')
-        .select('*')  // Seleccionar todos los campos
-        .order('name');  // Ordenar por nombre
+        .select('*')
+        .order('name');
 
-      // Si hay error, mostrar en consola pero devolver datos vacíos
-      if (error) {
-        console.error('Error al obtener organizaciones:', error);
-        return {
-          summary: {
-            totalEmpresas: 0,
-            totalPersonal: 0,
-            promedioActividad: 0,
-            totalIngresos: "$0"
-          },
-          organizations: []
-        };
-      }
+      if (error) throw error;
 
-      // Asegurar que organizations sea un array
-      const orgs = organizations || [];
-
-      // Calcular totales
       const summary = {
-        totalEmpresas: orgs.length,
-        totalPersonal: orgs.reduce((sum, org) => sum + (Number(org.personal) || 0), 0),
-        promedioActividad: orgs.reduce((sum, org) => sum + (Number(org.servicios) || 0), 0),
+        totalEmpresas: organizations?.length || 0,
+        totalPersonal: organizations?.reduce((sum, org) => sum + (org.personal || 0), 0) || 0,
+        promedioActividad: organizations?.reduce((sum, org) => sum + (org.servicios || 0), 0) || 0,
         totalIngresos: "$0"
       };
 
-      // Mapear organizaciones
-      const mappedOrgs = orgs.map(org => ({
-        id: org.id,
-        nombre: org.name || '',
-        logo: org.logo_url || null,
-        estado: org.estado || 'Activo',
-        personal: {
-          total: Number(org.personal) || 0,
-          label: 'empleados'
-        },
-        areas: {
-          total: Number(org.areas) || 0,
-          label: 'áreas'
-        },
-        actividad: {
-          total: Number(org.servicios) || 0,
-          label: 'servicios'
-        }
-      }));
-
       return {
         summary,
-        organizations: mappedOrgs
+        organizations: organizations?.map(org => ({
+          id: org.id,
+          nombre: org.name,
+          logo: org.logo_url,
+          estado: org.status,
+          personal: {
+            total: org.personal,
+            label: 'empleados'
+          },
+          areas: {
+            total: org.areas,
+            label: 'áreas'
+          },
+          actividad: {
+            total: org.servicios,
+            label: 'servicios'
+          }
+        })) || []
       };
-
     } catch (error) {
       console.error('Error en getDataHubSummary:', error);
-      // Devolver estructura vacía en caso de error
-      return {
-        summary: {
-          totalEmpresas: 0,
-          totalPersonal: 0,
-          promedioActividad: 0,
-          totalIngresos: "$0"
-        },
-        organizations: []
-      };
+      throw error;
     }
   },
 
