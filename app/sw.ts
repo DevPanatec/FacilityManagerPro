@@ -15,17 +15,19 @@ const INITIAL_CACHED_RESOURCES = [
 ]
 
 // Instalar Service Worker
-self.addEventListener('install', (event) => {
+self.addEventListener('install', (event: any) => {
   event.waitUntil(
-    (async () => {
-      const cache = await caches.open(CACHE_NAME)
-      // Cachear recursos iniciales
-      await cache.addAll(INITIAL_CACHED_RESOURCES)
-      // Activar inmediatamente
-      await self.skipWaiting()
-    })()
-  )
-})
+    caches.open('v1').then((cache) => {
+      return cache.addAll([
+        '/',
+        '/index.html',
+        '/styles/main.css',
+        '/scripts/main.js',
+        '/images/logo.png'
+      ]);
+    })
+  );
+});
 
 // Activar Service Worker
 self.addEventListener('activate', (event) => {
@@ -47,36 +49,13 @@ self.addEventListener('activate', (event) => {
 })
 
 // Interceptar peticiones
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', (event: any) => {
   event.respondWith(
-    (async () => {
-      try {
-        // Intentar obtener recurso de la red
-        const response = await fetch(event.request)
-        
-        // Cachear respuesta exitosa
-        if (response.ok) {
-          const cache = await caches.open(CACHE_NAME)
-          cache.put(event.request, response.clone())
-        }
-        
-        return response
-      } catch (error) {
-        // Si falla la red, intentar obtener del cache
-        const cached = await caches.match(event.request)
-        if (cached) return cached
-
-        // Si no está en cache, mostrar página offline
-        if (event.request.mode === 'navigate') {
-          const cache = await caches.open(CACHE_NAME)
-          return cache.match(OFFLINE_URL)
-        }
-
-        throw error
-      }
-    })()
-  )
-})
+    caches.match(event.request).then((response) => {
+      return response || fetch(event.request);
+    })
+  );
+});
 
 // Sincronización en segundo plano
 self.addEventListener('sync', (event) => {
@@ -96,4 +75,16 @@ async function syncReports() {
       console.error('Error syncing report:', error)
     }
   }
-} 
+}
+
+self.addEventListener('push', (event: any) => {
+  const options = {
+    body: event.data.text(),
+    icon: '/images/icon.png',
+    badge: '/images/badge.png'
+  };
+
+  event.waitUntil(
+    self.registration.showNotification('Push Notification', options)
+  );
+}); 

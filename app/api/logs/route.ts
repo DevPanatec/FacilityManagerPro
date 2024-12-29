@@ -7,60 +7,22 @@ export async function GET(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
     const { searchParams } = new URL(request.url)
-    const type = searchParams.get('type') || 'activity' // activity o audit
-    const organizationId = searchParams.get('organizationId')
+    const type = searchParams.get('type') || 'activity'
     const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
     
-    // Obtener el usuario y su organización
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!profile) throw new Error('Perfil no encontrado')
-
-    // Seleccionar tabla según tipo
-    const table = type === 'audit' ? 'audit_logs' : 'activity_logs'
-    
-    // Construir query
-    let query = supabase
-      .from(table)
-      .select(`
-        *,
-        profiles!${table}_user_id_fkey (
-          first_name,
-          last_name
-        )
-      `)
+    const { data, error } = await supabase
+      .from(type === 'audit' ? 'audit_logs' : 'activity_logs')
+      .select('*')
       .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
-
-    // Filtrar por organización si se especifica
-    if (organizationId) {
-      query = query.eq('organization_id', organizationId)
-    }
-
-    const { data: logs, error, count } = await query
+      .limit(limit)
 
     if (error) throw error
 
-    return NextResponse.json({
-      logs,
-      pagination: {
-        total: count,
-        offset,
-        limit
-      }
-    })
-  } catch (error) {
+    return NextResponse.json(data)
+  } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Error al obtener logs' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: error.message },
+      { status: 500 }
     )
   }
 }
@@ -71,44 +33,18 @@ export async function POST(request: Request) {
     const supabase = createRouteHandlerClient({ cookies })
     const body = await request.json()
     
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!profile) throw new Error('Perfil no encontrado')
-
-    // Determinar tabla según tipo
-    const table = body.type === 'audit' ? 'audit_logs' : 'activity_logs'
-
-    // Registrar log
     const { data, error } = await supabase
-      .from(table)
-      .insert([
-        {
-          organization_id: profile.organization_id,
-          user_id: user.id,
-          action: body.action,
-          description: body.description,
-          metadata: body.metadata || {},
-          ip_address: body.ip_address,
-          user_agent: body.user_agent
-        }
-      ])
+      .from('activity_logs')
+      .insert([body])
       .select()
 
     if (error) throw error
 
     return NextResponse.json(data)
-  } catch (error) {
+  } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Error al registrar log' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: error.message },
+      { status: 500 }
     )
   }
 } 
