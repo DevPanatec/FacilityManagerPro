@@ -1,0 +1,20 @@
+{
+  "organizaciones": [
+    {
+      "nombre": "Organización 1",
+      "estado": "Activo",
+      "logo": "https://url-del-logo.com",
+      "areas": [
+        {
+          "nombre": "Área 1",
+          "personal": [
+            {
+              "nombre": "Empleado 1",
+              "cargo": "Cargo 1"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+} 
