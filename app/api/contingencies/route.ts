@@ -1,0 +1,1 @@
+// Manejo de tipos de contingencias 
