@@ -1,60 +1,89 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { AuthService } from '@/lib/auth/authService';
 
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json();
-    const authService = new AuthService();
-    const ip = request.headers.get('x-forwarded-for') || 'unknown';
-
-    // Verificar intentos de login
-    try {
-      await authService.handleLoginAttempt(email, ip);
-    } catch (error: any) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 429 }
-      );
-    }
-
     const supabase = createRouteHandlerClient({ cookies });
+    const body = await request.json();
     
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
+    // Login del usuario
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: body.email,
+      password: body.password,
     });
 
-    if (error) {
-      await authService.recordFailedAttempt(email, ip);
-      return NextResponse.json(
-        { error: error.message },
-        { status: 401 }
-      );
-    }
+    if (authError) throw authError;
 
-    // Verificar si requiere 2FA
-    const { data: userData } = await supabase
-      .from('user_2fa')
-      .select('is_enabled')
-      .eq('user_id', data.user.id)
+    // Obtener perfil del usuario con roles
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select(`
+        *,
+        user_roles (
+          roles (
+            id,
+            name,
+            permissions
+          )
+        )
+      `)
+      .eq('id', authData.user.id)
       .single();
 
-    if (userData?.is_enabled) {
-      return NextResponse.json({
-        requires2FA: true,
-        sessionId: data.session.id
-      });
-    }
+    if (userError) throw userError;
 
-    return NextResponse.json({ data });
+    // Crear sesión
+    const { error: sessionError } = await supabase
+      .from('user_sessions')
+      .insert([
+        {
+          user_id: authData.user.id,
+          ip_address: request.headers.get('x-forwarded-for'),
+          user_agent: request.headers.get('user-agent')
+        }
+      ]);
+
+    if (sessionError) throw sessionError;
+
+    // Registrar en logs
+    await supabase
+      .from('system_audit_logs')
+      .insert([
+        {
+          user_id: authData.user.id,
+          action: 'LOGIN',
+          details: 'User logged in successfully',
+          ip_address: request.headers.get('x-forwarded-for'),
+          user_agent: request.headers.get('user-agent')
+        }
+      ]);
+
+    return NextResponse.json({
+      user: authData.user,
+      profile: userData,
+      session: {
+        access_token: authData.session?.access_token,
+        expires_at: authData.session?.expires_at
+      }
+    });
 
   } catch (error: any) {
-    console.error('Login error:', error);
+    // Registrar intento fallido
+    await supabase
+      .from('security_logs')
+      .insert([
+        {
+          event_type: 'LOGIN_FAILED',
+          details: error.message,
+          ip_address: request.headers.get('x-forwarded-for'),
+          user_agent: request.headers.get('user-agent')
+        }
+      ]);
+
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { error: error.message },
+      { status: 400 }
     );
   }
 } 
