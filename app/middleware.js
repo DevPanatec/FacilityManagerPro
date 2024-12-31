@@ -1,7 +1,6 @@
-'use server';
 import { NextResponse } from 'next/server';
 
-export async function middleware(request) {
+export function middleware(request) {
   // Si ya está en login, permitir
   if (request.nextUrl.pathname === '/auth/login') {
     return NextResponse.next();
@@ -13,12 +12,9 @@ export async function middleware(request) {
     const isAuthenticated = request.cookies.get('isAuthenticated')?.value;
     const isSuperAdmin = request.cookies.get('isSuperAdmin')?.value;
     
-    const redirectToLogin = () => {
-      return NextResponse.redirect(new URL('/auth/login', request.url));
-    };
-
+    // Si no está autenticado, redirigir a login
     if (!isAuthenticated) {
-      return redirectToLogin();
+      return NextResponse.redirect(new URL('/auth/login', request.url));
     }
 
     // Si es SuperAdmin
@@ -51,7 +47,7 @@ export async function middleware(request) {
     }
 
     // Si no tiene los permisos adecuados, redirigir al login
-    return redirectToLogin();
+    return NextResponse.redirect(new URL('/auth/login', request.url));
 
   } catch (error) {
     console.error('Middleware error:', error);
@@ -61,6 +57,14 @@ export async function middleware(request) {
 
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|assets|logo.jpg|vercel.svg).*)',
-  ]
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public files (assets, images, etc)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico|assets|logo.jpg|vercel.svg|.*\\.png|.*\\.jpg|.*\\.gif|.*\\.svg).*)',
+  ],
 }; 
