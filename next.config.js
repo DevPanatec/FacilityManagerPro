@@ -2,7 +2,7 @@
 const nextConfig = {
   // Configuración de dominio
   basePath: '',
-  assetPrefix: process.env.NODE_ENV === 'production' ? 'https://facility-manager-6lfrku13b-panatecs-projects-2fe44854.vercel.app' : '',
+  assetPrefix: '',
   
   // Deshabilitando la generación estática para acelerar el build
   output: 'standalone',
@@ -28,6 +28,7 @@ const nextConfig = {
 
   // Configuración de imágenes y dominios permitidos
   images: {
+    unoptimized: true,
     domains: ['facility-manager-6lfrku13b-panatecs-projects-2fe44854.vercel.app', 'jecxswfoepdstrghyouv.supabase.co'],
     remotePatterns: [
       {
