@@ -2,6 +2,7 @@
 const nextConfig = {
   // Configuración básica
   output: 'standalone',
+  trailingSlash: false,
   
   // Reduciendo el análisis estático
   typescript: {
@@ -20,6 +21,18 @@ const nextConfig = {
         permanent: false,
       },
     ]
+  },
+
+  // Configuración de reescritura de rutas
+  async rewrites() {
+    return {
+      beforeFiles: [
+        {
+          source: '/',
+          destination: '/auth/login',
+        },
+      ],
+    }
   },
 
   // Configuración de imágenes
@@ -41,7 +54,13 @@ const nextConfig = {
         ]
       }
     ]
-  }
+  },
+
+  // Configuración experimental
+  experimental: {
+    appDir: true,
+    serverActions: true,
+  },
 }
 
 module.exports = nextConfig 
