@@ -2,6 +2,11 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  // No aplicar middleware a rutas públicas
+  if (request.nextUrl.pathname.startsWith('/auth')) {
+    return NextResponse.next()
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -37,21 +42,19 @@ export async function middleware(request: NextRequest) {
   try {
     const { data: { session } } = await supabase.auth.getSession()
 
-    if (!session && request.nextUrl.pathname.startsWith('/enterprise')) {
+    if (!session) {
       return NextResponse.redirect(new URL('/auth/login', request.url))
     }
 
     return response
   } catch (error) {
     console.error('Middleware error:', error)
-    return response
+    return NextResponse.redirect(new URL('/auth/login', request.url))
   }
 }
 
 export const config = {
   matcher: [
-    '/enterprise/:path*',
-    '/user/:path*',
-    '/shared/:path*'
+    '/((?!_next/static|_next/image|favicon.ico|auth).*)',
   ]
 }
