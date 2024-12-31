@@ -37,8 +37,13 @@ export async function middleware(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession()
 
   // Si no hay sesión y la ruta no es pública, redirigir a login
-  if (!session && !request.nextUrl.pathname.startsWith('/login')) {
-    return NextResponse.redirect(new URL('/login', request.url))
+  if (!session && !request.nextUrl.pathname.startsWith('/auth/login')) {
+    return NextResponse.redirect(new URL('/auth/login', request.url))
+  }
+
+  // Si hay sesión y está en la página de login, redirigir al dashboard
+  if (session && request.nextUrl.pathname.startsWith('/auth/login')) {
+    return NextResponse.redirect(new URL('/enterprise/dashboard', request.url))
   }
 
   return response
@@ -46,6 +51,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|login|api/auth).*)',
+    '/((?!_next/static|_next/image|favicon.ico|auth/login|api/auth).*)',
   ],
 }
