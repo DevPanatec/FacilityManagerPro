@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import InventoryModal from './components/InventoryModal'
+import { toast } from 'react-hot-toast'
 
 interface InventoryItem {
   id: string
@@ -229,6 +230,13 @@ export default function InventoryPage() {
 
   // Estado para controlar el modal de creación
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const handleCreateItem = (e: React.FormEvent) => {
+    e.preventDefault()
+    // Aquí iría la lógica para crear el item
+    setShowCreateModal(false)
+    toast.success('Item creado exitosamente')
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -692,11 +700,3 @@ export default function InventoryPage() {
     </div>
   )
 }
-
-// Función para manejar la creación de items
-const handleCreateItem = (e: React.FormEvent) => {
-  e.preventDefault();
-  // Aquí iría la lógica para crear el item
-  setShowCreateModal(false);
-  toast.success('Item creado exitosamente');
-};

@@ -37,3 +37,15 @@ export const setTareas = (tareas) => {
     localStorage.setItem('tareas', JSON.stringify(tareas));
   }
 };
+
+export function initLocalStorage(key: string, defaultValue: any) {
+  if (typeof window === 'undefined') return defaultValue
+  
+  try {
+    const item = window.localStorage.getItem(key)
+    return item ? JSON.parse(item) : defaultValue
+  } catch (error) {
+    console.error('Error accessing localStorage:', error)
+    return defaultValue
+  }
+}

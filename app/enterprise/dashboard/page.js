@@ -6,7 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 import { FaClock, FaRegCalendarCheck } from 'react-icons/fa';
-import { getAreas, getPersonal, getTareas } from '@/utils/initLocalStorage';
+import { initLocalStorage } from '../../utils/initLocalStorage';
 import { demoTasks, getTaskStats } from '../../mocks/taskData';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';

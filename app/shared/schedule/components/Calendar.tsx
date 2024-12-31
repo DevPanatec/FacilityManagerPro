@@ -1,38 +1,22 @@
 'use client'
 import { useState, useMemo } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/20/solid'
-import { MonthView } from './MonthView'
-import { WeekView } from './WeekView'
-import { DayView } from './DayView'
+import { ScheduledTask as Task, TaskStatus } from '../../../../lib/types/schedule'
 
 interface CalendarProps {
-  tasks: ScheduledTask[]
-  onTaskClick: (task: ScheduledTask) => void
+  tasks: Task[]
+  onTaskClick: (task: Task) => void
   onAddTask: (date: string) => void
   onDeleteTask: (id: string) => void
 }
 
-interface ScheduledTask {
-  id: string
-  title: string
-  description: string
-  date: string
-  startTime: string
-  endTime: string
-  area: string
-  shift: 'A' | 'B' | 'C'
-  status: 'pending' | 'completed' | 'cancelled'
-  assignedTo: string[]
-}
-
 export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [selectedTask, setSelectedTask] = useState<ScheduledTask | null>(null)
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [showTaskDetails, setShowTaskDetails] = useState(false)
   const [view, setView] = useState<'month' | 'week' | 'day'>('month')
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth())
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear())
-  const [selectedDayTasks, setSelectedDayTasks] = useState<{ date: Date; tasks: ScheduledTask[] } | null>(null);
+  const [selectedDayTasks, setSelectedDayTasks] = useState<{ date: Date; tasks: Task[] } | null>(null);
 
   // Obtener el primer día del mes actual
   const firstDayOfMonth = useMemo(() => {
@@ -89,7 +73,7 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
 
   // Agrupar tareas por fecha
   const tasksByDate = useMemo(() => {
-    const grouped: { [key: string]: ScheduledTask[] } = {}
+    const grouped: { [key: string]: Task[] } = {}
     tasks.forEach(task => {
       if (!grouped[task.date]) {
         grouped[task.date] = []
@@ -103,7 +87,7 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
     return date.toISOString().split('T')[0]
   }
 
-  const handleTaskClick = (task: ScheduledTask) => {
+  const handleTaskClick = (task: Task) => {
     setSelectedTask(task)
     setShowTaskDetails(true)
   }

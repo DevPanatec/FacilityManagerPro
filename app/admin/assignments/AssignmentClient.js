@@ -8,7 +8,7 @@ import { toast } from 'react-hot-toast';
 import { areasData } from '../../mocks/areasData';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { getTareas, setTareas } from '@/utils/initLocalStorage';
+import { initLocalStorage } from '../../utils/initLocalStorage';
 import { UserSelect } from './components/UserSelect';
 import { AreaSelect } from './components/AreaSelect';
 import { DateSelect } from './components/DateSelect';

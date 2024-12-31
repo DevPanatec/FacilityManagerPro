@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { dataHubService } from '@/services/dataHubService';
+import { dataHubService } from '../../services/dataHubService';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 

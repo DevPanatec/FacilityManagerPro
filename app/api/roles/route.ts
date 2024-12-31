@@ -1,37 +1,19 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { RESOURCES, ACTIONS } from '../../lib/types/permissions'
+import { RESOURCES, ACTIONS } from '../../../lib/types/permissions'
 
 export async function GET(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-
-    // Verificar permisos
+    
+    // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
 
     const { data: roles, error } = await supabase
       .from('roles')
-      .select(`
-        *,
-        permissions (
-          id,
-          resource,
-          action,
-          conditions
-        ),
-        child_roles:role_hierarchy!parent_role_id (
-          child:roles (
-            id,
-            name
-          )
-        )
-      `)
-      .eq('organization_id', organizationId)
-      .order('name')
+      .select('*')
 
     if (error) throw error
 
@@ -48,42 +30,30 @@ export async function POST(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
     const body = await request.json()
-
-    // Verificar permisos
+    
+    // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
 
-    // Crear rol
-    const { data: role, error: roleError } = await supabase
-      .from('roles')
-      .insert([{
-        name: body.name,
-        description: body.description,
-        organization_id: body.organization_id
-      }])
-      .select()
-      .single()
+    // Validar permisos
+    const permissions = body.permissions || []
+    const validPermissions = permissions.every((p: any) => 
+      RESOURCES[p.resource as keyof typeof RESOURCES] &&
+      ACTIONS[p.action as keyof typeof ACTIONS]
+    )
 
-    if (roleError) throw roleError
-
-    // Crear permisos
-    if (body.permissions?.length) {
-      const { error: permError } = await supabase
-        .from('permissions')
-        .insert(
-          body.permissions.map((p: any) => ({
-            role_id: role.id,
-            resource: p.resource,
-            action: p.action,
-            conditions: p.conditions,
-            organization_id: body.organization_id
-          }))
-        )
-
-      if (permError) throw permError
+    if (!validPermissions) {
+      throw new Error('Permisos inválidos')
     }
 
-    return NextResponse.json(role)
+    const { data, error } = await supabase
+      .from('roles')
+      .insert([body])
+      .select()
+
+    if (error) throw error
+
+    return NextResponse.json(data[0])
   } catch (error) {
     return NextResponse.json(
       { error: error.message || 'Error al crear rol' },

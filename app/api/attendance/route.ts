@@ -131,7 +131,7 @@ export async function PUT(request: Request) {
     // Verificar que es el registro del usuario
     const { data: attendance } = await supabase
       .from('attendance_records')
-      .select('employee_id, check_in')
+      .select('*')
       .eq('id', body.id)
       .single()
 
@@ -155,8 +155,8 @@ export async function PUT(request: Request) {
       .update({
         check_out: body.check_out || new Date().toISOString(),
         location_data: {
-          ...attendance.location_data,
-          ...body.location_data
+          ...(attendance.location_data || {}),
+          ...(body.location_data || {})
         },
         updated_at: new Date().toISOString()
       })

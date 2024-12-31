@@ -40,6 +40,9 @@ export default function RRHHPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showTurnosModal, setShowTurnosModal] = useState(false);
 
+  // Estados para asignaciones
+  const [assignments, setAssignments] = useState([]);
+
   // Funciones de manejo de empleados
   const handleEditEmployee = (employee: Employee) => {
     setSelectedEmployee(employee);
@@ -319,6 +322,18 @@ export default function RRHHPage() {
       }
     }
   ];
+
+  const handleNewAssignment = async (newAssignment: any) => {
+    try {
+      // Lógica para crear la asignación
+      if (newAssignment) {
+        // Actualizar el estado
+        setAssignments(prev => [...prev, newAssignment])
+      }
+    } catch (error) {
+      console.error('Error creating assignment:', error)
+    }
+  }
 
   return (
     <div className="p-6 space-y-6">

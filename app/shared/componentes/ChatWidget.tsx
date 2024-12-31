@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { AttachmentButton } from './AttachmentButton'
 import dynamic from 'next/dynamic'
+import { createBrowserClient } from '@supabase/ssr'
 
 interface ChatMessage {
   id: string
@@ -75,15 +76,19 @@ const isSuggestionsView = (state: ChatState): boolean => {
 };
 
 // Primero, agregar una función para subir la imagen
-const handleImageUpload = async (file: File): Promise<string> => {
+async function handleImageUpload(file: File) {
   const { uploadImage } = await import('@/lib/supabase')
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   try {
-    return await uploadImage(file);
+    return await uploadImage(file, supabase)
   } catch (error) {
-    console.error('Error uploading image:', error);
-    throw error;
+    console.error('Error uploading image:', error)
+    throw error
   }
-};
+}
 
 export default function ChatWidget({ 
   isAdmin = false, 

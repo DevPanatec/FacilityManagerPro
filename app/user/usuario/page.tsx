@@ -21,7 +21,7 @@ export default function UserPage() {
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
 
   useEffect(() => {
-    const exampleAssignments = [
+    const exampleAssignments: Assignment[] = [
       {
         id: 1,
         description: "LIMPIAR LAS MÁQUINAS CON CEPILLO, PAÑO MICROFIBRA Y DESENGRASANTE",
@@ -47,77 +47,62 @@ export default function UserPage() {
       setAssignments(exampleAssignments);
       localStorage.setItem('userAssignments', JSON.stringify(exampleAssignments));
     } else {
-      setAssignments(JSON.parse(savedAssignments));
+      const parsedAssignments = JSON.parse(savedAssignments) as Assignment[];
+      setAssignments(parsedAssignments);
     }
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    
-    // Validar archivos
-    const validFiles = files.filter(file => {
-      const isValid = file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024;
-      if (!isValid) {
-        toast.error(`${file.name} no es válido. Use imágenes de hasta 5MB`);
-      }
-      return isValid;
-    });
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      setSelectedFiles(files);
 
-    setSelectedFiles(validFiles);
-    const urls = validFiles.map(file => URL.createObjectURL(file));
-    setPreviewUrls(urls);
+      // Create preview URLs
+      const urls = files.map(file => URL.createObjectURL(file));
+      setPreviewUrls(urls);
+    }
   };
 
   const handleStartAssignment = (id: number) => {
-    const updatedAssignments = assignments.map(assignment =>
-      assignment.id === id ? { ...assignment, status: 'En Proceso' } : assignment
+    setAssignments(prevAssignments =>
+      prevAssignments.map(assignment =>
+        assignment.id === id
+          ? { ...assignment, status: "En Proceso" as const }
+          : assignment
+      )
     );
-    setAssignments(updatedAssignments);
-    
-    const currentTask = updatedAssignments.find(a => a.id === id);
-    if (currentTask) {
-      const taskWithChecklist = {
-        ...currentTask,
-        checklist: [
-          { id: 1, task: "LIMPIAR LAS MÁQUINAS CON CEPILLO, PAÑO MICROFIBRA Y DESENGRASANTE", completed: false },
-          { id: 2, task: "DESCONTAMINAR CON LUZ UV Y OZONO DE AMBIENTE Y SUPERFICIE", completed: false }
-        ],
-        startTime: new Date().toLocaleString()
-      };
-      localStorage.setItem('currentTask', JSON.stringify(taskWithChecklist));
-      localStorage.setItem('taskPhotos', JSON.stringify({
-        antes: null,
-        durante: null,
-        despues: null
-      }));
-      router.push('/user/currentTask');
-    }
-    
+
+    const updatedAssignments = assignments.map(assignment =>
+      assignment.id === id
+        ? { ...assignment, status: "En Proceso" as const }
+        : assignment
+    );
+
     localStorage.setItem('userAssignments', JSON.stringify(updatedAssignments));
     toast.success('Tarea iniciada');
   };
 
   const handleFinishAssignment = (id: number) => {
-    if (selectedFiles.length === 0) {
-      toast.error('Debes subir al menos una foto para finalizar');
-      return;
-    }
+    setAssignments(prevAssignments =>
+      prevAssignments.map(assignment =>
+        assignment.id === id
+          ? { ...assignment, status: "Finalizada" as const }
+          : assignment
+      )
+    );
 
     const updatedAssignments = assignments.map(assignment =>
-      assignment.id === id 
-        ? { ...assignment, status: 'Finalizada', photos: [...previewUrls] }
+      assignment.id === id
+        ? { ...assignment, status: "Finalizada" as const }
         : assignment
     );
-    
-    setAssignments(updatedAssignments);
+
     localStorage.setItem('userAssignments', JSON.stringify(updatedAssignments));
-    setSelectedFiles([]);
-    setPreviewUrls([]);
-    toast.success('Tarea finalizada exitosamente');
+    toast.success('Tarea finalizada');
   };
 
   const handleReset = () => {
-    const initialAssignments = [
+    const resetAssignments: Assignment[] = [
       {
         id: 1,
         description: "LIMPIAR LAS MÁQUINAS CON CEPILLO, PAÑO MICROFIBRA Y DESENGRASANTE",
@@ -126,17 +111,21 @@ export default function UserPage() {
         dueDate: "2024-03-21",
         status: "Pendiente",
         photos: []
+      },
+      {
+        id: 2,
+        description: "DESCONTAMINAR CON LUZ UV Y OZONO DE AMBIENTE Y SUPERFICIE",
+        area: "Área de Inyección",
+        date: "2024-03-20",
+        dueDate: "2024-03-22",
+        status: "Pendiente",
+        photos: []
       }
     ];
-
-    localStorage.removeItem('userAssignments');
-    localStorage.removeItem('currentTask');
-    localStorage.removeItem('taskPhotos');
-    setAssignments(initialAssignments);
-    localStorage.setItem('userAssignments', JSON.stringify(initialAssignments));
-    setSelectedFiles([]);
-    setPreviewUrls([]);
-    toast.success('Tareas reiniciadas correctamente');
+    
+    setAssignments(resetAssignments);
+    localStorage.setItem('userAssignments', JSON.stringify(resetAssignments));
+    toast.success('Tareas reiniciadas');
   };
 
   return (
