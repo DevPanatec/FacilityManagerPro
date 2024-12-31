@@ -1,29 +1,10 @@
-import localFont from "next/font/local"
-import "./globals.css"
-import Script from 'next/script'
-import 'leaflet/dist/leaflet.css'
-import { Toaster } from 'react-hot-toast'
-import RouteGuard from './auth/components/RouteGuard'
+import './globals.css'
+import type { Metadata } from 'next'
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
-})
-
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
-})
-
-export const metadata = {
-  title: "Hombres de Blanco",
-  description: "Sistema de Gestión Hospitalaria",
+export const metadata: Metadata = {
+  title: 'Facility Manager Pro',
+  description: 'Sistema de gestión de instalaciones',
 }
-
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
 
 export default function RootLayout({
   children,
@@ -31,14 +12,9 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es" className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="es">
       <body>
-        <Toaster position="top-center" />
-        <RouteGuard>
-          <div className="min-h-screen bg-gray-50">
-            {children}
-          </div>
-        </RouteGuard>
+        {children}
       </body>
     </html>
   )
