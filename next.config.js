@@ -2,7 +2,7 @@
 const nextConfig = {
   // Configuración de dominio
   basePath: '',
-  assetPrefix: '',
+  assetPrefix: process.env.NODE_ENV === 'production' ? 'https://gestionhbc.com' : '',
   
   // Deshabilitando la generación estática para acelerar el build
   output: 'standalone',
@@ -29,10 +29,15 @@ const nextConfig = {
   // Configuración de imágenes y dominios permitidos
   images: {
     unoptimized: true,
+    domains: ['gestionhbc.com', 'jecxswfoepdstrghyouv.supabase.co'],
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**',
+        hostname: 'gestionhbc.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'jecxswfoepdstrghyouv.supabase.co',
       }
     ]
   },
@@ -45,7 +50,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self' https: data:; img-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+            value: "default-src 'self' https://gestionhbc.com https://*.supabase.co; img-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
           }
         ]
       }
