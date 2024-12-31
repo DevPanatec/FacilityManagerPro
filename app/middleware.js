@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://gestionhbc.com';
+
 export async function middleware(request) {
   // Si ya está en login, permitir
   if (request.nextUrl.pathname === '/auth/login') {
@@ -12,22 +14,27 @@ export async function middleware(request) {
     const isAuthenticated = request.cookies.get('isAuthenticated')?.value;
     const isSuperAdmin = request.cookies.get('isSuperAdmin')?.value;
     
+    const redirectToLogin = () => {
+      const loginUrl = new URL('/auth/login', BASE_URL);
+      return NextResponse.redirect(loginUrl);
+    };
+
     if (!isAuthenticated) {
-      return NextResponse.redirect(new URL('/auth/login', request.url));
+      return redirectToLogin();
     }
 
     // Si es SuperAdmin
     if (isSuperAdmin === 'true') {
       // Si intenta acceder a login, redirigir a admin
       if (request.nextUrl.pathname === '/auth/login') {
-        return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+        return NextResponse.redirect(new URL('/admin/dashboard', BASE_URL));
       }
       // Permitir acceso a rutas admin
       if (request.nextUrl.pathname.startsWith('/admin')) {
         return NextResponse.next();
       }
       // Redirigir a admin si intenta acceder a otras rutas
-      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+      return NextResponse.redirect(new URL('/admin/dashboard', BASE_URL));
     }
 
     // Para usuarios normales
@@ -46,16 +53,16 @@ export async function middleware(request) {
     }
 
     // Si no tiene los permisos adecuados, redirigir al login
-    return NextResponse.redirect(new URL('/auth/login', request.url));
+    return redirectToLogin();
 
   } catch (error) {
     console.error('Middleware error:', error);
-    return NextResponse.redirect(new URL('/auth/login', request.url));
+    return redirectToLogin();
   }
 }
 
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|assets).*)',
   ]
 }; 

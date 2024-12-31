@@ -19,8 +19,10 @@ const storage = {
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(key, value)
+        // También establecer cookie
+        document.cookie = `${key}=${value}; path=/; max-age=86400; secure; samesite=strict`
       } catch (e) {
-        console.error('Error accessing localStorage:', e)
+        console.error('Error accessing storage:', e)
       }
     }
   },
@@ -28,8 +30,10 @@ const storage = {
     if (typeof window !== 'undefined') {
       try {
         localStorage.removeItem(key)
+        // También eliminar cookie
+        document.cookie = `${key}=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;`
       } catch (e) {
-        console.error('Error accessing localStorage:', e)
+        console.error('Error accessing storage:', e)
       }
     }
   },
@@ -38,22 +42,11 @@ const storage = {
       try {
         return localStorage.getItem(key)
       } catch (e) {
-        console.error('Error accessing localStorage:', e)
+        console.error('Error accessing storage:', e)
         return null
       }
     }
     return null
-  }
-}
-
-// Función segura para establecer cookies
-const setCookie = (name, value) => {
-  if (typeof document !== 'undefined') {
-    try {
-      document.cookie = `${name}=${value}; path=/; max-age=86400; secure; samesite=strict`
-    } catch (e) {
-      console.error('Error setting cookie:', e)
-    }
   }
 }
 
@@ -66,34 +59,14 @@ const LoginPage = () => {
         password: '',
         showPassword: false
     })
-    const [locationState, setLocationState] = useState({
-        showMap: false,
-        userLocation: null,
-        showConfirmation: false,
-        error: '',
-        isLoading: false
-    })
 
     useEffect(() => {
         setMounted(true)
         // Limpiar storage al montar
         storage.remove('userRole')
+        storage.remove('isAuthenticated')
+        storage.remove('isSuperAdmin')
     }, [])
-
-    const workArea = {
-        lat: 9.0000000,
-        lng: -79.5000000,
-        radius: 10000
-    }
-
-    const simulateGPSPosition = useCallback(() => {
-        return {
-            coords: {
-                latitude: workArea.lat + 0.0001,
-                longitude: workArea.lng + 0.0001
-            }
-        }
-    }, [workArea])
 
     const handleSubmit = useCallback(async (e) => {
         e.preventDefault()
@@ -103,111 +76,71 @@ const LoginPage = () => {
 
         try {
             if (formState.username === 'admin_principal' && formState.password === 'admin123') {
-                storage.set('adminPrincipal', 'true')
                 storage.set('userRole', 'admin')
-                storage.set('adminId', '1')
+                storage.set('isAuthenticated', 'true')
                 storage.set('isSuperAdmin', 'true')
-                setCookie('userRole', 'admin')
-                setCookie('adminPrincipal', 'true')
-                setCookie('isSuperAdmin', 'true')
                 toast.success('Bienvenido Administrador Principal')
-                await router.push('/admin/dashboard')
+                router.replace('/admin/dashboard')
+                return
+            }
+
+            if (formState.username === 'admin' && formState.password === '123456') {
+                storage.set('userRole', 'admin')
+                storage.set('isAuthenticated', 'true')
+                storage.set('isSuperAdmin', 'false')
+                toast.success('Bienvenido Administrador')
+                router.replace('/admin/dashboard')
+                return
+            }
+
+            if (formState.username === 'enterprise' && formState.password === '123456') {
+                storage.set('userRole', 'enterprise')
+                storage.set('isAuthenticated', 'true')
+                toast.success('Bienvenido Enterprise')
+                router.replace('/enterprise/dashboard')
                 return
             }
 
             if (formState.username === 'usuario' && formState.password === '123456') {
-                const position = await new Promise((resolve) => {
-                    resolve(simulateGPSPosition())
-                })
-
-                const userLocation = {
-                    lat: position.coords.latitude,
-                    lng: position.coords.longitude
-                }
-
-                const distance = calculateDistance(
-                    userLocation.lat,
-                    userLocation.lng,
-                    workArea.lat,
-                    workArea.lng
-                )
-
-                if (distance <= workArea.radius) {
-                    setLocationState(prev => ({
-                        ...prev,
-                        userLocation,
-                        showMap: true,
-                        showConfirmation: true,
-                        isLoading: false
-                    }))
-                    storage.set('userRole', 'usuario')
-                    setCookie('userRole', 'usuario')
-                } else {
-                    throw new Error('Debes estar dentro del área de trabajo para iniciar sesión')
-                }
-            } 
-            else if (formState.username === 'admin' && formState.password === '123456') {
-                storage.set('userRole', 'admin')
+                storage.set('userRole', 'usuario')
                 storage.set('isAuthenticated', 'true')
-                storage.set('adminId', '3')
-                storage.set('isSuperAdmin', 'false')
-                setCookie('userRole', 'admin')
-                setCookie('isAuthenticated', 'true')
-                setCookie('isSuperAdmin', 'false')
-                await router.push('/admin/dashboard')
-                toast.success('Bienvenido Administrador')
-            } 
-            else if (formState.username === 'enterprise' && formState.password === '123456') {
-                storage.set('userRole', 'enterprise')
-                storage.set('isAuthenticated', 'true')
-                setCookie('userRole', 'enterprise')
-                setCookie('isAuthenticated', 'true')
-                await router.push('/enterprise/dashboard')
-                toast.success('Bienvenido Enterprise')
-            } else {
-                toast.error('Las credenciales ingresadas no son correctas', {
-                    style: {
-                        background: '#FEE2E2',
-                        color: '#991B1B',
-                        padding: '16px',
-                        borderRadius: '10px',
-                        fontWeight: 'bold',
-                    },
-                    icon: '❌',
-                    position: 'top-center',
-                    duration: 3000,
-                })
+                toast.success('Bienvenido Usuario')
+                router.replace('/user/usuario')
+                return
             }
+
+            toast.error('Credenciales incorrectas', {
+                style: {
+                    background: '#FEE2E2',
+                    color: '#991B1B',
+                    padding: '16px',
+                    borderRadius: '10px',
+                    fontWeight: 'bold',
+                },
+                icon: '❌',
+                position: 'top-center',
+                duration: 3000,
+            })
         } catch (error) {
-            if (error.message.includes('dentro del área')) {
-                toast.error('Debes estar dentro del área de trabajo para iniciar sesión', {
-                    style: {
-                        background: '#FEE2E2',
-                        color: '#991B1B',
-                        padding: '16px',
-                        borderRadius: '10px',
-                        fontWeight: 'bold',
-                    },
-                    icon: '⚠️',
-                    position: 'top-center',
-                    duration: 3000,
-                })
-            }
+            console.error('Error en login:', error)
+            toast.error('Error al iniciar sesión', {
+                style: {
+                    background: '#FEE2E2',
+                    color: '#991B1B',
+                    padding: '16px',
+                    borderRadius: '10px',
+                    fontWeight: 'bold',
+                },
+                icon: '⚠️',
+                position: 'top-center',
+                duration: 3000,
+            })
         } finally {
             setIsLoading(false)
         }
-    }, [formState, router, simulateGPSPosition, mounted])
+    }, [formState, router, mounted])
 
-    const handleMapConfirmation = useCallback(() => {
-        if (locationState.showConfirmation) {
-            router.push('/user/usuario')
-            toast.success('Ubicación confirmada correctamente')
-        }
-    }, [locationState.showConfirmation, router])
-
-    if (!mounted) {
-        return null
-    }
+    if (!mounted) return null
 
     return (
         <div className="min-h-screen flex flex-col justify-between relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900">
@@ -336,31 +269,6 @@ const LoginPage = () => {
                                 ¿Olvidaste tu contraseña?
                             </a>
                         </div>
-
-                        {/* Mapa para verificación de ubicación */}
-                        {locationState.showMap && (
-                            <div className="mt-4 md:mt-6 lg:mt-8 space-y-3 md:space-y-4 lg:space-y-5 animate-fadeIn">
-                                <div className="w-full h-48 sm:h-56 md:h-64 lg:h-72 xl:h-80 bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200/50 backdrop-blur-sm">
-                                    <Map 
-                                        userLocation={locationState.userLocation}
-                                        workArea={workArea}
-                                        onConfirm={handleMapConfirmation}
-                                        showConfirmation={locationState.showConfirmation}
-                                    />
-                                </div>
-                                {locationState.showConfirmation && (
-                                    <button
-                                        onClick={handleMapConfirmation}
-                                        className="w-full py-2.5 md:py-3 lg:py-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl text-base md:text-lg lg:text-xl font-semibold
-                                                 hover:from-green-600 hover:to-green-700 transition-all duration-300 transform hover:scale-[1.02]
-                                                 focus:ring-2 focus:ring-green-400 focus:ring-offset-2
-                                                 shadow-lg hover:shadow-xl flex items-center justify-center"
-                                    >
-                                        Confirmar ubicación e iniciar sesión
-                                    </button>
-                                )}
-                            </div>
-                        )}
                     </div>
                 </div>
             </div>
