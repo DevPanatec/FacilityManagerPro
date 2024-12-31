@@ -266,7 +266,6 @@ enabled = true
 port = 54327
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"
-
 # Experimental features may be deprecated any time
 [experimental]
 # Configures Postgres storage engine to use OrioleDB (S3)
@@ -298,3 +297,4 @@ content_path = ""
 [functions]
 [functions.deploy]
 runtime = "deno"
+
