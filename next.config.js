@@ -26,11 +26,21 @@ const nextConfig = {
   // Configuración de imágenes
   images: {
     unoptimized: true,
-    domains: ['*'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
   },
 
   // Configuración de páginas
   pageExtensions: ['js', 'jsx', 'ts', 'tsx'],
+
+  // Configuración de compilación
+  experimental: {
+    serverActions: true,
+  },
 }
 
 module.exports = nextConfig 
