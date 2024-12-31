@@ -2,6 +2,7 @@
 const nextConfig = {
   output: 'standalone',
   trailingSlash: true,
+  basePath: '/facility-manager-pro',
   
   // Configuración de rutas
   async rewrites() {
@@ -27,12 +28,7 @@ const nextConfig = {
   // Configuración de imágenes
   images: {
     unoptimized: true,
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**',
-      },
-    ],
+    domains: ['*'],
   },
 
   // Configuración de headers
