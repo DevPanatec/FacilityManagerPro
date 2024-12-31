@@ -23,10 +23,13 @@ const nextConfig = {
     ]
   },
 
-  // Configuración experimental
+  // Deshabilitando el directorio app
   experimental: {
-    appDir: true,
-  }
+    appDir: false,
+  },
+
+  // Configuración de páginas
+  pageExtensions: ['js', 'jsx', 'ts', 'tsx']
 }
 
 module.exports = nextConfig 
