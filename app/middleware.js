@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://gestionhbc.com';
-
 export function middleware(request) {
   // Si ya está en login, permitir
   if (request.nextUrl.pathname === '/auth/login') {
@@ -13,29 +11,24 @@ export function middleware(request) {
     const userRole = request.cookies.get('userRole')?.value;
     const isAuthenticated = request.cookies.get('isAuthenticated')?.value;
     const isSuperAdmin = request.cookies.get('isSuperAdmin')?.value;
-    
-    const redirectToLogin = () => {
-      const loginUrl = new URL('/auth/login', BASE_URL);
-      return NextResponse.redirect(loginUrl);
-    };
 
     // Si no está autenticado, redirigir a login
     if (!isAuthenticated) {
-      return redirectToLogin();
+      return NextResponse.redirect(new URL('/auth/login', request.url));
     }
 
     // Si es SuperAdmin
     if (isSuperAdmin === 'true') {
       // Si intenta acceder a login, redirigir a admin
       if (request.nextUrl.pathname === '/auth/login') {
-        return NextResponse.redirect(new URL('/admin/dashboard', BASE_URL));
+        return NextResponse.redirect(new URL('/admin/dashboard', request.url));
       }
       // Permitir acceso a rutas admin
       if (request.nextUrl.pathname.startsWith('/admin')) {
         return NextResponse.next();
       }
       // Redirigir a admin si intenta acceder a otras rutas
-      return NextResponse.redirect(new URL('/admin/dashboard', BASE_URL));
+      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
 
     // Para usuarios normales
@@ -54,24 +47,16 @@ export function middleware(request) {
     }
 
     // Si no tiene los permisos adecuados, redirigir al login
-    return redirectToLogin();
+    return NextResponse.redirect(new URL('/auth/login', request.url));
 
   } catch (error) {
     console.error('Middleware error:', error);
-    return NextResponse.redirect(new URL('/auth/login', BASE_URL));
+    return NextResponse.redirect(new URL('/auth/login', request.url));
   }
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public files (assets, images, etc)
-     */
-    '/((?!api|_next/static|_next/image|favicon.ico|assets|logo.jpg|vercel.svg|.*\\.png|.*\\.jpg|.*\\.gif|.*\\.svg).*)',
+    '/((?!_next/static|_next/image|favicon.ico|logo.jpg|assets).*)',
   ],
 }; 

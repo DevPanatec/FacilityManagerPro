@@ -1,10 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Configuración de dominio
-  basePath: '',
-  assetPrefix: process.env.NODE_ENV === 'production' ? 'https://gestionhbc.com' : '',
-  
-  // Deshabilitando la generación estática para acelerar el build
+  // Configuración básica
   output: 'standalone',
   
   // Reduciendo el análisis estático
@@ -26,20 +22,10 @@ const nextConfig = {
     ]
   },
 
-  // Configuración de imágenes y dominios permitidos
+  // Configuración de imágenes
   images: {
     unoptimized: true,
-    domains: ['gestionhbc.com', 'jecxswfoepdstrghyouv.supabase.co'],
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'gestionhbc.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'jecxswfoepdstrghyouv.supabase.co',
-      }
-    ]
+    domains: ['*'],
   },
 
   // Configuración de headers
@@ -50,7 +36,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self' https://gestionhbc.com https://*.supabase.co; img-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+            value: "default-src 'self' *; img-src 'self' * data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
           }
         ]
       }
