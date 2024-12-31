@@ -1,6 +1,5 @@
+'use server';
 import { NextResponse } from 'next/server';
-
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://facility-manager-6lfrku13b-panatecs-projects-2fe44854.vercel.app';
 
 export async function middleware(request) {
   // Si ya está en login, permitir
@@ -15,8 +14,7 @@ export async function middleware(request) {
     const isSuperAdmin = request.cookies.get('isSuperAdmin')?.value;
     
     const redirectToLogin = () => {
-      const loginUrl = new URL('/auth/login', BASE_URL);
-      return NextResponse.redirect(loginUrl);
+      return NextResponse.redirect(new URL('/auth/login', request.url));
     };
 
     if (!isAuthenticated) {
@@ -27,14 +25,14 @@ export async function middleware(request) {
     if (isSuperAdmin === 'true') {
       // Si intenta acceder a login, redirigir a admin
       if (request.nextUrl.pathname === '/auth/login') {
-        return NextResponse.redirect(new URL('/admin/dashboard', BASE_URL));
+        return NextResponse.redirect(new URL('/admin/dashboard', request.url));
       }
       // Permitir acceso a rutas admin
       if (request.nextUrl.pathname.startsWith('/admin')) {
         return NextResponse.next();
       }
       // Redirigir a admin si intenta acceder a otras rutas
-      return NextResponse.redirect(new URL('/admin/dashboard', BASE_URL));
+      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
     }
 
     // Para usuarios normales
@@ -57,12 +55,12 @@ export async function middleware(request) {
 
   } catch (error) {
     console.error('Middleware error:', error);
-    return redirectToLogin();
+    return NextResponse.redirect(new URL('/auth/login', request.url));
   }
 }
 
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|assets|logo.jpg).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|assets|logo.jpg|vercel.svg).*)',
   ]
 }; 
