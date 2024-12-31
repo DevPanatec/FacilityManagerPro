@@ -1,7 +1,10 @@
 .git
-.env.local
 node_modules
 .next
-README.md
-.gitignore
-.vercel 
+.env
+.env.local
+.env.development
+.env.production
+FacilityManagerPro
+FacilityManagerPro-main
+FacilityManagerPro-* 
