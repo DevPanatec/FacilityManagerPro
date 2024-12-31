@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://gestionhbc.com';
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://facility-manager-6lfrku13b-panatecs-projects-2fe44854.vercel.app';
 
 export async function middleware(request) {
   // Si ya está en login, permitir
@@ -63,6 +63,6 @@ export async function middleware(request) {
 
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|assets).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|assets|logo.jpg).*)',
   ]
 }; 

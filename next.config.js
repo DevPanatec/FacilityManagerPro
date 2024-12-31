@@ -2,7 +2,7 @@
 const nextConfig = {
   // Configuración de dominio
   basePath: '',
-  assetPrefix: process.env.NODE_ENV === 'production' ? 'https://gestionhbc.com' : '',
+  assetPrefix: process.env.NODE_ENV === 'production' ? 'https://facility-manager-6lfrku13b-panatecs-projects-2fe44854.vercel.app' : '',
   
   // Deshabilitando la generación estática para acelerar el build
   output: 'standalone',
@@ -28,11 +28,11 @@ const nextConfig = {
 
   // Configuración de imágenes y dominios permitidos
   images: {
-    domains: ['gestionhbc.com', 'jecxswfoepdstrghyouv.supabase.co'],
+    domains: ['facility-manager-6lfrku13b-panatecs-projects-2fe44854.vercel.app', 'jecxswfoepdstrghyouv.supabase.co'],
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'gestionhbc.com',
+        hostname: 'facility-manager-6lfrku13b-panatecs-projects-2fe44854.vercel.app',
       },
       {
         protocol: 'https',
@@ -49,7 +49,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self' https://gestionhbc.com https://*.supabase.co; img-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+            value: "default-src 'self' https://facility-manager-6lfrku13b-panatecs-projects-2fe44854.vercel.app https://*.supabase.co; img-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
           }
         ]
       }
