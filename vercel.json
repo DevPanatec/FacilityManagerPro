@@ -1,5 +1,9 @@
 {
   "version": 2,
+  "framework": "nextjs",
+  "buildCommand": "next build",
+  "installCommand": "npm install",
+  "outputDirectory": ".next",
   "builds": [
     {
       "src": "package.json",
@@ -8,8 +12,12 @@
   ],
   "routes": [
     {
+      "src": "/",
+      "dest": "/auth/login"
+    },
+    {
       "src": "/(.*)",
-      "dest": "/"
+      "dest": "/$1"
     }
   ]
 } 
