@@ -103,6 +103,10 @@ export async function PUT(request: Request) {
       .eq('user_id', user.id)
       .single()
 
+    if (!profile) {
+      throw new Error('Profile not found')
+    }
+
     const { data, error } = await supabase
       .from('task_categories')
       .update({
@@ -111,7 +115,7 @@ export async function PUT(request: Request) {
         updated_at: new Date().toISOString()
       })
       .eq('id', body.id)
-      .eq('organization_id', profile.organization_id) // Asegurar que pertenece a la organización
+      .eq('organization_id', profile.organization_id)
       .select()
 
     if (error) throw error
@@ -142,11 +146,15 @@ export async function DELETE(request: Request) {
       .eq('user_id', user.id)
       .single()
 
+    if (!profile) {
+      throw new Error('Profile not found')
+    }
+
     const { error } = await supabase
       .from('task_categories')
       .delete()
       .eq('id', id)
-      .eq('organization_id', profile.organization_id) // Asegurar que pertenece a la organización
+      .eq('organization_id', profile.organization_id)
 
     if (error) throw error
 

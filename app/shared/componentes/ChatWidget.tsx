@@ -77,13 +77,28 @@ const isSuggestionsView = (state: ChatState): boolean => {
 
 // Primero, agregar una función para subir la imagen
 async function handleImageUpload(file: File) {
-  const { uploadImage } = await import('@/lib/supabase')
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
   try {
-    return await uploadImage(file, supabase)
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${Math.random()}.${fileExt}`
+    const filePath = `${fileName}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('images')
+      .upload(filePath, file)
+
+    if (uploadError) {
+      throw uploadError
+    }
+
+    const { data } = supabase.storage
+      .from('images')
+      .getPublicUrl(filePath)
+
+    return data.publicUrl
   } catch (error) {
     console.error('Error uploading image:', error)
     throw error
@@ -260,7 +275,7 @@ export default function ChatWidget({
 
     try {
       // Si hay un archivo adjunto, súbelo a Supabase
-      let attachmentUrl = undefined;
+      let attachmentUrl: string | undefined = undefined;
       if (attachment) {
         attachmentUrl = await handleImageUpload(attachment);
       }
@@ -431,7 +446,7 @@ export default function ChatWidget({
                 <span>{isEnterprise ? 'AD' : isAdmin ? 'EN' : 'CF'}</span>
               </div>
             </div>
-            {renderMessageBubble(selectedMessage)}
+            {selectedMessage && renderMessageBubble(selectedMessage)}
           </div>
 
           {selectedMessage?.responses?.map((response, index) => (

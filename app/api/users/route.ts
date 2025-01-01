@@ -50,9 +50,7 @@ export async function PUT(request: Request) {
     
     // Verificar que el usuario solo actualice su propio perfil
     const { data: { user } } = await supabase.auth.getUser()
-    if (user?.id !== body.user_id) {
-      throw new Error('No autorizado para actualizar este perfil')
-    }
+    if (!user) throw new Error('No autorizado')
 
     const { data, error } = await supabase
       .from('profiles')

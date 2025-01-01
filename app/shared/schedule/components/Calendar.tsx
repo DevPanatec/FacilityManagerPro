@@ -9,6 +9,12 @@ interface CalendarProps {
   onDeleteTask: (id: string) => void
 }
 
+interface CalendarDay {
+  date: Date;
+  isCurrentMonth: boolean;
+  isWeekend: boolean;
+}
+
 export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
@@ -31,7 +37,7 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
 
   // Crear array de días del mes con corrección de alineación
   const daysInMonth = useMemo(() => {
-    const days = []
+    const days: CalendarDay[] = []
     const startDay = firstDayOfMonth.getDay()
     
     // Agregar días del mes anterior para completar la primera semana
@@ -136,9 +142,9 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
 
   // Función para obtener los días de la semana actual
   const getWeekDays = () => {
-    const days = []
+    const days: Date[] = []
     const firstDay = new Date(currentDate)
-    firstDay.setDate(currentDate.getDate() - currentDate.getDay())
+    firstDay.setDate(firstDay.getDate() - firstDay.getDay())
     
     for (let i = 0; i < 7; i++) {
       const day = new Date(firstDay)

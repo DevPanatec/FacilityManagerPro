@@ -36,11 +36,6 @@ const nextConfig = {
 
   // Configuración de páginas
   pageExtensions: ['js', 'jsx', 'ts', 'tsx'],
-
-  // Configuración de compilación
-  experimental: {
-    serverActions: true,
-  },
 }
 
 module.exports = nextConfig 

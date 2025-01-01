@@ -17,6 +17,13 @@ interface Employee {
   };
 }
 
+interface Assignment {
+  user: string;
+  task: string;
+  area: string;
+  shift: string;
+}
+
 export default function RRHHPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
@@ -41,7 +48,7 @@ export default function RRHHPage() {
   const [showTurnosModal, setShowTurnosModal] = useState(false);
 
   // Estados para asignaciones
-  const [assignments, setAssignments] = useState([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
 
   // Funciones de manejo de empleados
   const handleEditEmployee = (employee: Employee) => {

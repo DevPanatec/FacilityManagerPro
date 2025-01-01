@@ -204,7 +204,7 @@ export async function PUT(request: Request) {
 
     // Registrar cambios en task_history
     if (currentTask) {
-      const changes = []
+      const changes: string[] = []
       if (currentTask.status !== body.status) {
         changes.push(`Status changed from ${currentTask.status} to ${body.status}`)
       }

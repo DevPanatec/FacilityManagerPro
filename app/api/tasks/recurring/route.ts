@@ -75,7 +75,7 @@ export async function POST(request: Request) {
       const newTask: Partial<Task> = {
         ...baseTask,
         due_date: currentDate.toISOString(),
-        recurrence: null, // las instancias no son recurrentes
+        recurrence: undefined, // las instancias no son recurrentes
         parent_task_id: baseTask.id,
         status: 'pending'
       }

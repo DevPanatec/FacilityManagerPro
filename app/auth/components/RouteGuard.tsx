@@ -21,7 +21,7 @@ export default function RouteGuard({ children }: RouteGuardProps) {
         
         // Lista de rutas públicas que no requieren autenticación
         const publicPaths = ['/auth/login'];
-        const isPublicPath = publicPaths.includes(pathname);
+        const isPublicPath = pathname ? publicPaths.includes(pathname) : false;
 
         if (!userRole && !isPublicPath) {
           setAuthorized(false);

@@ -14,9 +14,9 @@ export default function SharedLayout({
   const [userRole, setUserRole] = useState('');
 
   useEffect(() => {
-    const userRole = localStorage.getItem('userRole')
-    setUserRole(userRole);
-    if (!userRole || !['admin', 'enterprise', 'usuario'].includes(userRole)) {
+    const storedUserRole = localStorage.getItem('userRole')
+    setUserRole(storedUserRole || '');
+    if (!storedUserRole || !['admin', 'enterprise', 'usuario'].includes(storedUserRole)) {
       router.push('/auth/login')
     }
   }, [router])

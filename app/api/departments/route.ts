@@ -125,6 +125,10 @@ export async function PUT(request: Request) {
       .eq('user_id', user.id)
       .single()
 
+    if (!profile) {
+      throw new Error('Profile not found')
+    }
+
     const { data, error } = await supabase
       .from('departments')
       .update({
@@ -175,6 +179,10 @@ export async function DELETE(request: Request) {
       .select('organization_id')
       .eq('user_id', user.id)
       .single()
+
+    if (!profile) {
+      throw new Error('Profile not found')
+    }
 
     // Verificar si hay empleados en el departamento
     const { data: employees } = await supabase
