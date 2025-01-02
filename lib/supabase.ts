@@ -6,14 +6,7 @@ import { Database } from '@/types/supabase'
 export const createClient = () => {
   return createClientComponentClient<Database>({
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    options: {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true
-      }
-    }
+    supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   })
 }
 
