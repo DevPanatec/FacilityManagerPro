@@ -36,7 +36,7 @@ export default function LoginPage() {
 
       console.log('Intentando autenticar con:', { email: formState.email })
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: formState.email,
+        email: formState.email.trim().toLowerCase(),
         password: formState.password,
       })
 
@@ -45,12 +45,19 @@ export default function LoginPage() {
         console.error('Error de autenticación completo:', {
           status: authError.status,
           name: authError.name,
-          message: authError.message
+          message: authError.message,
+          details: authError
         })
 
-        if (authError.status === 400) {
+        if (authError.message?.includes('Invalid login credentials')) {
           toast.error('Email o contraseña incorrectos. Por favor verifica tus credenciales.')
           throw new Error('Credenciales inválidas')
+        } else if (authError.message?.includes('Email not confirmed')) {
+          toast.error('Por favor confirma tu email antes de iniciar sesión')
+          throw new Error('Email no confirmado')
+        } else if (authError.status === 400) {
+          toast.error('Error de autenticación. Verifica tus credenciales.')
+          throw new Error('Error de autenticación: ' + authError.message)
         } else if (authError.status === 422) {
           toast.error('El formato del email no es válido')
           throw new Error('Email inválido')
