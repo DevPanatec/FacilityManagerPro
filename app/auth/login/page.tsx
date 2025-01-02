@@ -34,7 +34,22 @@ export default function LoginPage() {
         return
       }
 
-      console.log('Intentando autenticar con:', { email: formState.email })
+      // Verificar configuración de Supabase
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      console.log('Configuración Supabase:', {
+        url: supabaseUrl,
+        keyLength: supabaseKey?.length,
+        hasUrl: !!supabaseUrl,
+        hasKey: !!supabaseKey
+      })
+
+      console.log('Intentando autenticar con:', { 
+        email: formState.email,
+        emailNormalized: formState.email.trim().toLowerCase(),
+        passwordLength: formState.password.length
+      })
+
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: formState.email.trim().toLowerCase(),
         password: formState.password,
