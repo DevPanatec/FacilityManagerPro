@@ -18,7 +18,7 @@ export interface Database {
           updated_at: string
         }
         Insert: {
-          id: string
+          id?: string
           email: string
           role: 'superadmin' | 'admin' | 'enterprise' | 'usuario'
           created_at?: string
@@ -49,4 +49,7 @@ export type Tables<T extends keyof Database['public']['Tables']> = Database['pub
 export type Enums<T extends keyof Database['public']['Enums']> = Database['public']['Enums'][T]
 
 // Tipos específicos para las consultas
-export type UserResponse = Tables<'users'> 
+export type UserResponse = Tables<'users'>
+
+// Tipo para la respuesta de la consulta de rol
+export type UserRoleResponse = Pick<UserResponse, 'role'> 

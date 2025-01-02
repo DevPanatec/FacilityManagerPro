@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { toast } from 'react-hot-toast'
 import { FaUser, FaLock } from 'react-icons/fa'
 import { supabase } from '@/lib/supabase'
-import { Database, UserResponse } from '@/types/supabase'
+import { Database, UserRoleResponse } from '@/types/supabase'
 
 type UserRole = Database['public']['Tables']['users']['Row']['role']
 
@@ -24,15 +24,21 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
+      // Paso 1: Autenticación
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: formState.email,
         password: formState.password,
       })
 
       if (authError) {
-        throw authError
+        throw new Error(authError.message)
       }
 
+      if (!authData.user) {
+        throw new Error('No se pudo autenticar el usuario')
+      }
+
+      // Paso 2: Obtener rol del usuario
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role')
@@ -40,21 +46,20 @@ export default function LoginPage() {
         .single()
 
       if (userError) {
-        throw userError
+        throw new Error('Error al obtener información del usuario')
       }
 
       if (!userData) {
         throw new Error('No se encontró información del usuario')
       }
 
+      const role = (userData as UserRoleResponse).role
+
+      // Paso 3: Redirigir según el rol
       toast.success('Inicio de sesión exitoso')
       
-      // Redirigir según el rol
-      const role = (userData as UserResponse).role
       switch(role) {
         case 'superadmin':
-          router.push('/admin/dashboard')
-          break
         case 'admin':
           router.push('/admin/dashboard')
           break
@@ -62,8 +67,6 @@ export default function LoginPage() {
           router.push('/enterprise/dashboard')
           break
         case 'usuario':
-          router.push('/user/usuario')
-          break
         default:
           router.push('/user/usuario')
       }
