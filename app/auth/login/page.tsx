@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast'
 import { FaUser, FaLock } from 'react-icons/fa'
 import { supabase } from '@/lib/supabase'
 import { Database, UserRoleResponse } from '@/types/supabase'
+import { AuthError } from '@supabase/supabase-js'
 
 type UserRole = Database['public']['Tables']['users']['Row']['role']
 
@@ -22,30 +23,45 @@ export default function LoginPage() {
   const handleSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
-    toast.loading('Iniciando proceso de login...')
+    toast.dismiss() // Limpiar toasts anteriores
 
     try {
       // Paso 1: Autenticación
-      toast.loading('Autenticando...')
+      toast.loading('Verificando credenciales...')
+      
+      if (!formState.email || !formState.password) {
+        toast.error('Por favor ingresa email y contraseña')
+        return
+      }
+
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: formState.email,
         password: formState.password,
       })
 
       if (authError) {
-        toast.error(`Error de autenticación: ${authError.message}`)
-        throw new Error(authError.message)
+        // Manejar errores específicos de autenticación
+        if (authError.status === 400) {
+          toast.error('Email o contraseña incorrectos')
+          throw new Error('Credenciales inválidas')
+        } else if (authError.status === 422) {
+          toast.error('El formato del email no es válido')
+          throw new Error('Email inválido')
+        } else {
+          toast.error(`Error de autenticación: ${authError.message}`)
+          throw authError
+        }
       }
 
-      toast.success('Autenticación exitosa')
-
-      if (!authData.user) {
-        toast.error('No hay datos de usuario en la respuesta')
-        throw new Error('No se pudo autenticar el usuario')
+      if (!authData?.user?.id) {
+        toast.error('No se pudo obtener la información del usuario')
+        throw new Error('Respuesta de autenticación inválida')
       }
+
+      toast.success('Credenciales verificadas')
 
       // Paso 2: Obtener rol del usuario
-      toast.loading(`Obteniendo información del usuario...`)
+      toast.loading('Obteniendo permisos...')
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role')
@@ -53,21 +69,20 @@ export default function LoginPage() {
         .single()
 
       if (userError) {
-        toast.error(`Error al obtener rol: ${userError.message}`)
-        throw new Error('Error al obtener información del usuario: ' + userError.message)
+        toast.error('Error al obtener permisos del usuario')
+        throw new Error(userError.message)
       }
 
-      if (!userData) {
-        toast.error('No se encontró el usuario en la base de datos')
-        throw new Error('No se encontró información del usuario en la base de datos')
+      if (!userData?.role) {
+        toast.error('Usuario sin rol asignado')
+        throw new Error('No se encontró el rol del usuario')
       }
 
-      const role = (userData as UserRoleResponse).role
-      toast.success(`Rol obtenido: ${role}`)
+      const role = userData.role
+      toast.success('Permisos verificados')
 
       // Paso 3: Redirigir según el rol
-      toast.success('Inicio de sesión exitoso')
-      toast.loading(`Redirigiendo a ${role}...`)
+      toast.loading(`Accediendo como ${role}...`)
       
       switch(role) {
         case 'superadmin':
@@ -82,10 +97,10 @@ export default function LoginPage() {
           router.push('/user/usuario')
       }
     } catch (error: any) {
-      toast.error(`Error: ${error.message}`)
+      console.error('Error detallado:', error)
+      // No mostrar toast aquí ya que ya manejamos los errores específicamente arriba
     } finally {
       setIsLoading(false)
-      toast.dismiss()
     }
   }, [formState, router])
 
