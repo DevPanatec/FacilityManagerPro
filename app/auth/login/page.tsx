@@ -22,30 +22,30 @@ export default function LoginPage() {
   const handleSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
-    console.log('Iniciando proceso de login...')
+    toast.loading('Iniciando proceso de login...')
 
     try {
       // Paso 1: Autenticación
-      console.log('Intentando autenticar con email:', formState.email)
+      toast.loading('Autenticando...')
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: formState.email,
         password: formState.password,
       })
 
       if (authError) {
-        console.error('Error de autenticación:', authError)
+        toast.error(`Error de autenticación: ${authError.message}`)
         throw new Error(authError.message)
       }
 
-      console.log('Autenticación exitosa:', authData)
+      toast.success('Autenticación exitosa')
 
       if (!authData.user) {
-        console.error('No hay datos de usuario en la respuesta')
+        toast.error('No hay datos de usuario en la respuesta')
         throw new Error('No se pudo autenticar el usuario')
       }
 
       // Paso 2: Obtener rol del usuario
-      console.log('Buscando rol del usuario con ID:', authData.user.id)
+      toast.loading(`Obteniendo información del usuario...`)
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role')
@@ -53,22 +53,21 @@ export default function LoginPage() {
         .single()
 
       if (userError) {
-        console.error('Error al obtener rol del usuario:', userError)
+        toast.error(`Error al obtener rol: ${userError.message}`)
         throw new Error('Error al obtener información del usuario: ' + userError.message)
       }
 
       if (!userData) {
-        console.error('No se encontró el rol del usuario')
+        toast.error('No se encontró el usuario en la base de datos')
         throw new Error('No se encontró información del usuario en la base de datos')
       }
 
-      console.log('Datos del usuario obtenidos:', userData)
       const role = (userData as UserRoleResponse).role
-      console.log('Rol del usuario:', role)
+      toast.success(`Rol obtenido: ${role}`)
 
       // Paso 3: Redirigir según el rol
       toast.success('Inicio de sesión exitoso')
-      console.log('Redirigiendo al usuario según su rol:', role)
+      toast.loading(`Redirigiendo a ${role}...`)
       
       switch(role) {
         case 'superadmin':
@@ -83,14 +82,10 @@ export default function LoginPage() {
           router.push('/user/usuario')
       }
     } catch (error: any) {
-      console.error('Error detallado en login:', {
-        message: error.message,
-        stack: error.stack,
-        error
-      })
-      toast.error(error.message || 'Error al iniciar sesión')
+      toast.error(`Error: ${error.message}`)
     } finally {
       setIsLoading(false)
+      toast.dismiss()
     }
   }, [formState, router])
 
