@@ -6,6 +6,9 @@ import Image from 'next/image'
 import { toast } from 'react-hot-toast'
 import { FaUser, FaLock } from 'react-icons/fa'
 import { supabase } from '@/lib/supabase'
+import { Database, UserResponse } from '@/types/supabase'
+
+type UserRole = Database['public']['Tables']['users']['Row']['role']
 
 export default function LoginPage() {
   const router = useRouter()
@@ -21,29 +24,34 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: formState.email,
         password: formState.password,
       })
 
-      if (error) {
-        throw error
+      if (authError) {
+        throw authError
       }
 
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role')
-        .eq('id', data.user.id)
+        .eq('id', authData.user.id)
         .single()
 
       if (userError) {
         throw userError
       }
 
+      if (!userData) {
+        throw new Error('No se encontró información del usuario')
+      }
+
       toast.success('Inicio de sesión exitoso')
       
       // Redirigir según el rol
-      switch(userData.role) {
+      const role = (userData as UserResponse).role
+      switch(role) {
         case 'superadmin':
           router.push('/admin/dashboard')
           break

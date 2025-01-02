@@ -6,7 +6,7 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type Database = {
+export interface Database {
   public: {
     Tables: {
       users: {
@@ -14,8 +14,6 @@ export type Database = {
           id: string
           email: string
           role: 'superadmin' | 'admin' | 'enterprise' | 'usuario'
-          full_name: string | null
-          avatar_url: string | null
           created_at: string
           updated_at: string
         }
@@ -23,8 +21,6 @@ export type Database = {
           id: string
           email: string
           role: 'superadmin' | 'admin' | 'enterprise' | 'usuario'
-          full_name?: string | null
-          avatar_url?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -32,8 +28,6 @@ export type Database = {
           id?: string
           email?: string
           role?: 'superadmin' | 'admin' | 'enterprise' | 'usuario'
-          full_name?: string | null
-          avatar_url?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -49,4 +43,10 @@ export type Database = {
       [_ in never]: never
     }
   }
-} 
+}
+
+export type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
+export type Enums<T extends keyof Database['public']['Enums']> = Database['public']['Enums'][T]
+
+// Tipos específicos para las consultas
+export type UserResponse = Tables<'users'> 
