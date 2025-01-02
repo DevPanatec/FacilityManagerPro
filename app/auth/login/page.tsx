@@ -34,6 +34,7 @@ export default function LoginPage() {
         return
       }
 
+      console.log('Intentando autenticar con:', { email: formState.email })
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: formState.email,
         password: formState.password,
@@ -41,8 +42,14 @@ export default function LoginPage() {
 
       if (authError) {
         // Manejar errores específicos de autenticación
+        console.error('Error de autenticación completo:', {
+          status: authError.status,
+          name: authError.name,
+          message: authError.message
+        })
+
         if (authError.status === 400) {
-          toast.error('Email o contraseña incorrectos')
+          toast.error('Email o contraseña incorrectos. Por favor verifica tus credenciales.')
           throw new Error('Credenciales inválidas')
         } else if (authError.status === 422) {
           toast.error('El formato del email no es válido')
@@ -54,6 +61,7 @@ export default function LoginPage() {
       }
 
       if (!authData?.user?.id) {
+        console.error('Respuesta de autenticación:', authData)
         toast.error('No se pudo obtener la información del usuario')
         throw new Error('Respuesta de autenticación inválida')
       }
@@ -62,6 +70,7 @@ export default function LoginPage() {
 
       // Paso 2: Obtener rol del usuario
       toast.loading('Obteniendo permisos...')
+      console.log('Buscando rol para usuario:', authData.user.id)
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role')
@@ -69,16 +78,19 @@ export default function LoginPage() {
         .single()
 
       if (userError) {
+        console.error('Error al obtener rol:', userError)
         toast.error('Error al obtener permisos del usuario')
         throw new Error(userError.message)
       }
 
       if (!userData?.role) {
+        console.error('Datos de usuario obtenidos:', userData)
         toast.error('Usuario sin rol asignado')
         throw new Error('No se encontró el rol del usuario')
       }
 
       const role = userData.role
+      console.log('Rol obtenido:', role)
       toast.success('Permisos verificados')
 
       // Paso 3: Redirigir según el rol
@@ -97,8 +109,11 @@ export default function LoginPage() {
           router.push('/user/usuario')
       }
     } catch (error: any) {
-      console.error('Error detallado:', error)
-      // No mostrar toast aquí ya que ya manejamos los errores específicamente arriba
+      console.error('Error detallado:', {
+        message: error.message,
+        stack: error.stack,
+        error
+      })
     } finally {
       setIsLoading(false)
     }
