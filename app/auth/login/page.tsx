@@ -135,9 +135,9 @@ export default function LoginPage() {
           id: crypto.randomUUID(),
           user_id: authData.user.id,
           action: 'LOGIN',
-          description: userData?.role ? 'User logged in successfully' : 'User logged in successfully (metadata)',
+          description: 'User logged in successfully',
           metadata: {
-            role: userData?.role || 'usuario',
+            role: userData?.role || authData.user.user_metadata?.role || 'usuario',
             email: authData.user.email,
             timestamp: new Date().toISOString()
           }
