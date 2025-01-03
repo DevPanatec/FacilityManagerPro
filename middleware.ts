@@ -40,15 +40,38 @@ export async function middleware(request: NextRequest) {
   )
 
   try {
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { session }, error } = await supabase.auth.getSession()
 
-    if (!session) {
+    if (error) {
+      console.error('Error al obtener sesión:', error)
       return NextResponse.redirect(new URL('/auth/login', request.url))
     }
 
+    if (!session) {
+      console.log('No hay sesión activa')
+      return NextResponse.redirect(new URL('/auth/login', request.url))
+    }
+
+    // Verificar el rol del usuario para rutas protegidas
+    if (request.nextUrl.pathname.startsWith('/admin')) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', session.user.id)
+        .single()
+
+      if (!userData || !['admin', 'superadmin'].includes(userData.role)) {
+        console.log('Usuario sin permisos de administrador')
+        return NextResponse.redirect(new URL('/auth/login', request.url))
+      }
+    }
+
+    // Agregar el ID del usuario al header para uso en la API
+    response.headers.set('x-user-id', session.user.id)
     return response
+
   } catch (error) {
-    console.error('Middleware error:', error)
+    console.error('Error en middleware:', error)
     return NextResponse.redirect(new URL('/auth/login', request.url))
   }
 }
