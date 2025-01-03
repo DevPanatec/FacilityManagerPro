@@ -69,19 +69,7 @@ export default function LoginPage() {
       // Obtener información del usuario
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select(`
-          id,
-          email,
-          role,
-          status,
-          hospital_id,
-          first_name,
-          last_name,
-          hospital:hospital_id (
-            id,
-            name
-          )
-        `)
+        .select('id, email, role, status')
         .eq('id', authData.user.id)
         .single()
 
@@ -96,19 +84,15 @@ export default function LoginPage() {
         try {
           await supabase
             .from('activity_logs')
-            .insert([
-              {
-                user_id: authData.user.id,
-                action: 'LOGIN',
-                description: 'User logged in successfully (metadata)',
-                metadata: {
-                  role: userRole,
-                  timestamp: new Date().toISOString()
-                }
+            .insert({
+              user_id: authData.user.id,
+              action: 'LOGIN',
+              description: 'User logged in successfully (metadata)',
+              metadata: {
+                role: userRole,
+                timestamp: new Date().toISOString()
               }
-            ])
-            .select()
-            .single()
+            })
         } catch (logError) {
           console.error('Error al registrar actividad:', logError)
         }
@@ -147,24 +131,26 @@ export default function LoginPage() {
 
       // Registrar actividad de login exitoso
       try {
-        await supabase
+        const logData = {
+          id: crypto.randomUUID(),
+          user_id: authData.user.id,
+          action: 'LOGIN',
+          description: 'User logged in successfully',
+          metadata: {
+            role: userData?.role || 'usuario',
+            timestamp: new Date().toISOString()
+          }
+        };
+        
+        const { error: logError } = await supabase
           .from('activity_logs')
-          .insert([
-            {
-              user_id: authData.user.id,
-              action: 'LOGIN',
-              description: 'User logged in successfully',
-              metadata: {
-                role: userData.role,
-                hospital_id: userData.hospital_id,
-                timestamp: new Date().toISOString()
-              }
-            }
-          ])
-          .select()
-          .single()
+          .upsert(logData);
+          
+        if (logError) {
+          console.error('Error al registrar actividad:', logError);
+        }
       } catch (logError) {
-        console.error('Error al registrar actividad:', logError)
+        console.error('Error al registrar actividad:', logError);
         // No interrumpir el login por error en logs
       }
 
