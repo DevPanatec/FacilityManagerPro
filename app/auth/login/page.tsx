@@ -87,8 +87,56 @@ export default function LoginPage() {
 
       if (userError) {
         console.error('Error al obtener datos del usuario:', userError)
-        toast.error('Error al obtener permisos del usuario')
-        throw new Error(userError.message)
+        
+        // Si el error es de permisos o recursión, intentar obtener el rol desde los metadatos
+        const userRole = authData.user.user_metadata?.role || 'usuario'
+        console.log('Usando rol desde metadatos:', userRole)
+
+        // Registrar actividad de login exitoso
+        try {
+          await supabase
+            .from('activity_logs')
+            .insert([
+              {
+                user_id: authData.user.id,
+                action: 'LOGIN',
+                description: 'User logged in successfully (metadata)',
+                metadata: {
+                  role: userRole,
+                  timestamp: new Date().toISOString()
+                }
+              }
+            ])
+            .select()
+            .single()
+        } catch (logError) {
+          console.error('Error al registrar actividad:', logError)
+        }
+
+        // Establecer cookies con datos de metadatos
+        document.cookie = `userRole=${userRole}; path=/; secure; samesite=strict`;
+        document.cookie = `isAuthenticated=true; path=/; secure; samesite=strict`;
+        document.cookie = `isSuperAdmin=${userRole === 'superadmin' ? 'true' : 'false'}; path=/; secure; samesite=strict`;
+
+        // Redirigir según el rol de los metadatos
+        let targetPath = '';
+        switch(userRole) {
+          case 'superadmin':
+          case 'admin':
+            targetPath = '/admin/dashboard';
+            break;
+          case 'enterprise':
+            targetPath = '/enterprise/dashboard';
+            break;
+          case 'usuario':
+          default:
+            targetPath = '/user/usuario';
+        }
+
+        console.log('Redirigiendo a (desde metadatos):', targetPath);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        router.replace(targetPath);
+        return;
       }
 
       if (!userData?.role) {

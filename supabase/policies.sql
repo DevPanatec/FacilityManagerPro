@@ -11,43 +11,33 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hospitals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
 
--- Política para la tabla users
-CREATE POLICY "Users can view their own data"
+-- Política simplificada para la tabla users
+CREATE POLICY "Enable read access for users"
 ON users
 FOR SELECT
 USING (
+  -- El usuario puede ver su propio registro
   auth.uid() = id
-  OR 
+  OR
+  -- Los admin/superadmin pueden ver todos los registros
   EXISTS (
-    SELECT 1 FROM users u
-    WHERE u.id = auth.uid()
-    AND u.role IN ('admin', 'superadmin')
+    SELECT 1
+    FROM auth.users
+    WHERE auth.users.id = auth.uid()
+    AND auth.users.raw_user_meta_data->>'role' IN ('admin', 'superadmin')
   )
 );
 
 -- Política para la tabla hospitals
-CREATE POLICY "Users can view their own hospital"
+CREATE POLICY "Enable read access for hospitals"
 ON hospitals
 FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM users u
-    WHERE u.hospital_id = hospitals.id
-    AND u.id = auth.uid()
-  )
-  OR 
-  EXISTS (
-    SELECT 1 FROM users u
-    WHERE u.id = auth.uid()
-    AND u.role IN ('admin', 'superadmin')
-  )
-);
+USING (true);  -- Todos los usuarios autenticados pueden ver hospitales
 
 -- Política para la tabla activity_logs
-CREATE POLICY "Users can create their own logs"
+CREATE POLICY "Enable insert for own logs"
 ON activity_logs
 FOR INSERT
 WITH CHECK (
-  user_id = auth.uid()
-  AND auth.role() = 'authenticated'
+  auth.uid() = user_id
 ); 
