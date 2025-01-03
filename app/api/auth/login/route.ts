@@ -2,12 +2,34 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
+// Configurar los métodos permitidos
+const allowedMethods = ['POST'];
+
 export async function POST(request: Request) {
+  // Verificar el método
+  if (!allowedMethods.includes(request.method)) {
+    return new NextResponse(null, {
+      status: 405,
+      statusText: 'Method Not Allowed',
+      headers: {
+        'Allow': allowedMethods.join(', '),
+        'Content-Type': 'application/json'
+      }
+    });
+  }
+
   const supabase = createRouteHandlerClient({ cookies });
   
   try {
     const body = await request.json();
     
+    if (!body.email || !body.password) {
+      return NextResponse.json(
+        { error: 'Email y contraseña son requeridos' },
+        { status: 400 }
+      );
+    }
+
     // Login del usuario
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: body.email.trim().toLowerCase(),
@@ -16,8 +38,16 @@ export async function POST(request: Request) {
 
     if (authError) {
       console.error('Error de autenticación:', authError);
+      let errorMessage = 'Error de autenticación';
+      
+      if (authError.message?.includes('Invalid login credentials')) {
+        errorMessage = 'Email o contraseña incorrectos';
+      } else if (authError.message?.includes('Email not confirmed')) {
+        errorMessage = 'Por favor confirma tu email antes de iniciar sesión';
+      }
+
       return NextResponse.json(
-        { error: authError.message },
+        { error: errorMessage },
         { status: authError.status || 400 }
       );
     }

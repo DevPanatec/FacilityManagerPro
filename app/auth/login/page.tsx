@@ -46,18 +46,40 @@ export default function LoginPage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Importante para las cookies
         body: JSON.stringify({
-          email: formState.email,
+          email: formState.email.trim().toLowerCase(),
           password: formState.password,
         }),
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
-        console.error('Error de autenticación:', data)
-        toast.error(data.error || 'Error al iniciar sesión')
-        throw new Error(data.error)
+        const errorText = await response.text()
+        console.error('Error de autenticación:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText
+        })
+        
+        let errorMessage = 'Error al iniciar sesión'
+        try {
+          const errorData = JSON.parse(errorText)
+          errorMessage = errorData.error || errorMessage
+        } catch (e) {
+          console.error('Error al parsear respuesta:', e)
+        }
+        
+        toast.error(errorMessage)
+        throw new Error(errorMessage)
+      }
+
+      const data = await response.json()
+      console.log('Respuesta de autenticación:', data)
+
+      if (!data.user) {
+        console.error('Respuesta inválida:', data)
+        toast.error('Error al obtener información del usuario')
+        throw new Error('Respuesta inválida del servidor')
       }
 
       const { user } = data
