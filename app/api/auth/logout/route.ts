@@ -31,7 +31,13 @@ export async function POST(request: Request) {
     const { error } = await supabase.auth.signOut()
     if (error) throw error
 
-    return NextResponse.json({ message: 'Logged out successfully' })
+    // Crear respuesta con eliminación de cookies
+    const response = NextResponse.json({ message: 'Logged out successfully' })
+    response.cookies.delete('userRole')
+    response.cookies.delete('isAuthenticated')
+    response.cookies.delete('isSuperAdmin')
+
+    return response
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message },

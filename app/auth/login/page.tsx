@@ -115,6 +115,11 @@ export default function LoginPage() {
       console.log('Rol obtenido:', role)
       toast.success('Permisos verificados')
 
+      // Establecer cookies
+      document.cookie = `userRole=${role}; path=/`;
+      document.cookie = `isAuthenticated=true; path=/`;
+      document.cookie = `isSuperAdmin=${role === 'superadmin' ? 'true' : 'false'}; path=/`;
+
       // Paso 3: Redirigir según el rol
       toast.loading(`Accediendo como ${role}...`)
       
