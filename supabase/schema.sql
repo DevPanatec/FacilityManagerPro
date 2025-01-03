@@ -31,7 +31,7 @@ CREATE TABLE users (
 -- Crear tabla de logs si no existe
 CREATE TABLE IF NOT EXISTS activity_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   action TEXT NOT NULL,
   description TEXT,
   metadata JSONB DEFAULT '{}',
