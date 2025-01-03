@@ -70,7 +70,13 @@ export default function LoginPage() {
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select(`
-          *,
+          id,
+          email,
+          first_name,
+          last_name,
+          role,
+          status,
+          hospital_id,
           hospital:hospital_id (
             id,
             name
@@ -90,6 +96,24 @@ export default function LoginPage() {
         toast.error('Usuario sin rol asignado')
         throw new Error('No se encontró el rol del usuario')
       }
+
+      // Registrar actividad de login exitoso
+      await supabase
+        .from('activity_logs')
+        .insert([
+          {
+            user_id: authData.user.id,
+            action: 'LOGIN',
+            description: 'User logged in successfully',
+            metadata: {
+              role: userData.role,
+              hospital_id: userData.hospital_id,
+              timestamp: new Date().toISOString()
+            }
+          }
+        ])
+        .select()
+        .single()
 
       console.log('Usuario autenticado:', { ...authData.user, ...userData })
 
