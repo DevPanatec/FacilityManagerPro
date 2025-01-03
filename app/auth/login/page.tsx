@@ -40,11 +40,16 @@ export default function LoginPage() {
         passwordLength: formState.password.length
       })
 
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
+      const loginEndpoint = `${apiUrl}/api/auth/login`
+      console.log('Usando endpoint:', loginEndpoint)
+
       // Llamar al endpoint de login
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(loginEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         credentials: 'include', // Importante para las cookies
         body: JSON.stringify({
@@ -58,13 +63,17 @@ export default function LoginPage() {
         console.error('Error de autenticación:', {
           status: response.status,
           statusText: response.statusText,
-          errorText
+          url: response.url,
+          errorText,
+          headers: Object.fromEntries(response.headers.entries())
         })
         
         let errorMessage = 'Error al iniciar sesión'
         try {
-          const errorData = JSON.parse(errorText)
-          errorMessage = errorData.error || errorMessage
+          if (errorText) {
+            const errorData = JSON.parse(errorText)
+            errorMessage = errorData.error || errorMessage
+          }
         } catch (e) {
           console.error('Error al parsear respuesta:', e)
         }
@@ -73,10 +82,17 @@ export default function LoginPage() {
         throw new Error(errorMessage)
       }
 
-      const data = await response.json()
-      console.log('Respuesta de autenticación:', data)
+      let data
+      try {
+        data = await response.json()
+        console.log('Respuesta de autenticación:', data)
+      } catch (e) {
+        console.error('Error al parsear respuesta JSON:', e)
+        toast.error('Error al procesar la respuesta del servidor')
+        throw new Error('Error al procesar la respuesta del servidor')
+      }
 
-      if (!data.user) {
+      if (!data?.user) {
         console.error('Respuesta inválida:', data)
         toast.error('Error al obtener información del usuario')
         throw new Error('Respuesta inválida del servidor')

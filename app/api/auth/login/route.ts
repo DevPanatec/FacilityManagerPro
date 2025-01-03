@@ -3,25 +3,51 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 // Configurar los métodos permitidos
-const allowedMethods = ['POST'];
+const allowedMethods = ['POST', 'OPTIONS'];
+
+export async function OPTIONS(request: Request) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Methods': allowedMethods.join(', '),
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Max-Age': '86400'
+    }
+  });
+}
 
 export async function POST(request: Request) {
   // Verificar el método
   if (!allowedMethods.includes(request.method)) {
-    return new NextResponse(null, {
-      status: 405,
-      statusText: 'Method Not Allowed',
-      headers: {
-        'Allow': allowedMethods.join(', '),
-        'Content-Type': 'application/json'
+    return new NextResponse(
+      JSON.stringify({ error: 'Method Not Allowed' }),
+      {
+        status: 405,
+        headers: {
+          'Allow': allowedMethods.join(', '),
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Methods': allowedMethods.join(', '),
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true'
+        }
       }
-    });
+    );
   }
 
   const supabase = createRouteHandlerClient({ cookies });
   
   try {
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (e) {
+      console.error('Error al parsear el body:', e);
+      return NextResponse.json(
+        { error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
     
     if (!body.email || !body.password) {
       return NextResponse.json(
@@ -48,7 +74,12 @@ export async function POST(request: Request) {
 
       return NextResponse.json(
         { error: errorMessage },
-        { status: authError.status || 400 }
+        { 
+          status: authError.status || 400,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
       );
     }
 
