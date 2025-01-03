@@ -73,12 +73,36 @@ export default function LoginPage() {
         .eq('id', authData.user.id)
         .maybeSingle();
 
-      if (userError) {
-        console.error('Error al obtener datos del usuario:', userError);
+      // Si no hay datos o hay error, usar los metadatos
+      if (!userData || userError) {
+        console.error('Error al obtener datos del usuario:', userError || 'No se encontraron datos');
         
-        // Si el error es de permisos o recursión, intentar obtener el rol desde los metadatos
+        // Intentar obtener el rol desde los metadatos
         const userRole = authData.user.user_metadata?.role || 'usuario';
         console.log('Usando rol desde metadatos:', userRole);
+
+        // Intentar crear/actualizar el usuario
+        try {
+          const { data: updatedUser, error: updateError } = await supabase
+            .from('users')
+            .upsert({
+              id: authData.user.id,
+              email: authData.user.email,
+              role: userRole,
+              first_name: authData.user.user_metadata?.first_name,
+              last_name: authData.user.user_metadata?.last_name
+            })
+            .select()
+            .single();
+
+          if (updateError) {
+            console.error('Error al actualizar usuario:', updateError);
+          } else {
+            console.log('Usuario actualizado:', updatedUser);
+          }
+        } catch (updateError) {
+          console.error('Error al actualizar usuario:', updateError);
+        }
 
         // Registrar actividad de login exitoso
         try {
