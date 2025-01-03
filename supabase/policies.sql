@@ -123,11 +123,15 @@ TO authenticated
 USING (is_admin());
 
 -- Política para activity_logs
-CREATE POLICY "allow_insert_own_logs"
+DROP POLICY IF EXISTS "allow_insert_own_logs" ON activity_logs;
+DROP POLICY IF EXISTS "allow_read_own_logs" ON activity_logs;
+DROP POLICY IF EXISTS "allow_admin_read_all_logs" ON activity_logs;
+
+CREATE POLICY "allow_insert_logs"
 ON activity_logs
 FOR INSERT
 TO authenticated
-WITH CHECK (auth.uid() = user_id);
+WITH CHECK (true);
 
 CREATE POLICY "allow_read_own_logs"
 ON activity_logs
