@@ -72,11 +72,11 @@ export default function LoginPage() {
         .select(`
           id,
           email,
-          first_name,
-          last_name,
           role,
           status,
           hospital_id,
+          first_name,
+          last_name,
           hospital:hospital_id (
             id,
             name
@@ -98,22 +98,27 @@ export default function LoginPage() {
       }
 
       // Registrar actividad de login exitoso
-      await supabase
-        .from('activity_logs')
-        .insert([
-          {
-            user_id: authData.user.id,
-            action: 'LOGIN',
-            description: 'User logged in successfully',
-            metadata: {
-              role: userData.role,
-              hospital_id: userData.hospital_id,
-              timestamp: new Date().toISOString()
+      try {
+        await supabase
+          .from('activity_logs')
+          .insert([
+            {
+              user_id: authData.user.id,
+              action: 'LOGIN',
+              description: 'User logged in successfully',
+              metadata: {
+                role: userData.role,
+                hospital_id: userData.hospital_id,
+                timestamp: new Date().toISOString()
+              }
             }
-          }
-        ])
-        .select()
-        .single()
+          ])
+          .select()
+          .single()
+      } catch (logError) {
+        console.error('Error al registrar actividad:', logError)
+        // No interrumpir el login por error en logs
+      }
 
       console.log('Usuario autenticado:', { ...authData.user, ...userData })
 
