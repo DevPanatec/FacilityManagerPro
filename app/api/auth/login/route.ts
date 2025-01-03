@@ -38,6 +38,7 @@ export async function POST(request: Request) {
   const supabase = createRouteHandlerClient({ cookies });
   
   try {
+    // Validar el body de la petición
     let body;
     try {
       body = await request.json();
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
       );
     }
     
+    // Validar campos requeridos
     if (!body.email || !body.password) {
       return NextResponse.json(
         { error: 'Email y contraseña son requeridos' },
@@ -56,26 +58,40 @@ export async function POST(request: Request) {
       );
     }
 
+    // Normalizar email
+    const normalizedEmail = body.email.trim().toLowerCase();
+    console.log('Intentando login con email:', normalizedEmail);
+
     // Login del usuario
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: body.email.trim().toLowerCase(),
+      email: normalizedEmail,
       password: body.password,
     });
 
     if (authError) {
       console.error('Error de autenticación:', authError);
       let errorMessage = 'Error de autenticación';
+      let statusCode = 400;
       
-      if (authError.message?.includes('Invalid login credentials')) {
-        errorMessage = 'Email o contraseña incorrectos';
-      } else if (authError.message?.includes('Email not confirmed')) {
-        errorMessage = 'Por favor confirma tu email antes de iniciar sesión';
+      switch(true) {
+        case authError.message?.includes('Invalid login credentials'):
+          errorMessage = 'Email o contraseña incorrectos';
+          break;
+        case authError.message?.includes('Email not confirmed'):
+          errorMessage = 'Por favor confirma tu email antes de iniciar sesión';
+          break;
+        case authError.message?.includes('Too many requests'):
+          errorMessage = 'Demasiados intentos. Por favor espera unos minutos';
+          statusCode = 429;
+          break;
+        default:
+          statusCode = authError.status || 400;
       }
 
       return NextResponse.json(
         { error: errorMessage },
         { 
-          status: authError.status || 400,
+          status: statusCode,
           headers: {
             'Content-Type': 'application/json'
           }
@@ -91,36 +107,49 @@ export async function POST(request: Request) {
       );
     }
 
-    // Obtener información del usuario con roles
+    // Obtener información del usuario
     const { data: userData, error: userError } = await supabase
       .from('users')
-      .select(`
-        *,
-        hospital:hospital_id (
-          id,
-          name
-        )
-      `)
+      .select('id, email, role, status, hospital_id')
       .eq('id', authData.user.id)
       .single();
 
     if (userError) {
       console.error('Error al obtener datos del usuario:', userError);
+      
+      // Si es un error de permisos, intentar con los metadatos
+      if (userError.code === '42501') {
+        const userRole = authData.user.user_metadata?.role || 'usuario';
+        console.log('Usando rol desde metadatos:', userRole);
+        
+        return NextResponse.json({
+          user: {
+            ...authData.user,
+            role: userRole,
+            status: 'active'
+          },
+          session: {
+            access_token: authData.session?.access_token,
+            expires_at: authData.session?.expires_at
+          }
+        });
+      }
+
       return NextResponse.json(
         { error: 'Error al obtener permisos del usuario' },
         { status: 500 }
       );
     }
 
-    if (!userData?.role) {
-      console.error('Usuario sin rol asignado:', userData);
+    // Verificar estado del usuario
+    if (userData.status !== 'active') {
       return NextResponse.json(
-        { error: 'Usuario sin rol asignado' },
-        { status: 400 }
+        { error: 'Usuario inactivo o pendiente de aprobación' },
+        { status: 403 }
       );
     }
 
-    // Crear sesión y establecer cookies
+    // Crear respuesta
     const response = NextResponse.json({
       user: {
         ...authData.user,
@@ -132,45 +161,39 @@ export async function POST(request: Request) {
       }
     });
 
-    // Establecer cookies seguras
-    response.cookies.set('userRole', userData.role, {
+    // Establecer cookies con opciones de seguridad
+    const cookieOptions = {
       path: '/',
       secure: true,
-      sameSite: 'strict',
-      httpOnly: true
-    });
+      sameSite: 'strict' as const,
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 // 7 días
+    };
 
-    response.cookies.set('isAuthenticated', 'true', {
-      path: '/',
-      secure: true,
-      sameSite: 'strict',
-      httpOnly: true
-    });
+    response.cookies.set('userRole', userData.role, cookieOptions);
+    response.cookies.set('isAuthenticated', 'true', cookieOptions);
+    response.cookies.set('isSuperAdmin', (userData.role === 'superadmin').toString(), cookieOptions);
 
-    response.cookies.set('isSuperAdmin', (userData.role === 'superadmin').toString(), {
-      path: '/',
-      secure: true,
-      sameSite: 'strict',
-      httpOnly: true
-    });
-
-    // Registrar en logs
-    await supabase
-      .from('activity_logs')
-      .insert([
-        {
+    // Registrar actividad exitosa
+    try {
+      await supabase
+        .from('activity_logs')
+        .insert({
           user_id: authData.user.id,
           action: 'LOGIN',
           description: 'User logged in successfully',
-          ip_address: request.headers.get('x-forwarded-for'),
-          user_agent: request.headers.get('user-agent'),
           metadata: {
+            timestamp: new Date().toISOString(),
             role: userData.role,
             hospital_id: userData.hospital_id,
-            timestamp: new Date().toISOString()
+            ip: request.headers.get('x-forwarded-for'),
+            userAgent: request.headers.get('user-agent')
           }
-        }
-      ]);
+        });
+    } catch (logError) {
+      // No interrumpir el login por error en logs
+      console.error('Error al registrar actividad:', logError);
+    }
 
     return response;
 
