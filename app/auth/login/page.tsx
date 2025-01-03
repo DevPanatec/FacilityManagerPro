@@ -34,97 +34,40 @@ export default function LoginPage() {
         return
       }
 
-      // Verificar configuración de Supabase
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      console.log('Configuración Supabase:', {
-        url: supabaseUrl,
-        keyLength: supabaseKey?.length,
-        hasUrl: !!supabaseUrl,
-        hasKey: !!supabaseKey
-      })
-
       console.log('Intentando autenticar con:', { 
         email: formState.email,
         emailNormalized: formState.email.trim().toLowerCase(),
         passwordLength: formState.password.length
       })
 
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: formState.email.trim().toLowerCase(),
-        password: formState.password,
+      // Llamar al endpoint de login
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formState.email,
+          password: formState.password,
+        }),
       })
 
-      if (authError) {
-        // Manejar errores específicos de autenticación
-        console.error('Error de autenticación completo:', {
-          status: authError.status,
-          name: authError.name,
-          message: authError.message,
-          details: authError
-        })
+      const data = await response.json()
 
-        if (authError.message?.includes('Invalid login credentials')) {
-          toast.error('Email o contraseña incorrectos. Por favor verifica tus credenciales.')
-          throw new Error('Credenciales inválidas')
-        } else if (authError.message?.includes('Email not confirmed')) {
-          toast.error('Por favor confirma tu email antes de iniciar sesión')
-          throw new Error('Email no confirmado')
-        } else if (authError.status === 400) {
-          toast.error('Error de autenticación. Verifica tus credenciales.')
-          throw new Error('Error de autenticación: ' + authError.message)
-        } else if (authError.status === 422) {
-          toast.error('El formato del email no es válido')
-          throw new Error('Email inválido')
-        } else {
-          toast.error(`Error de autenticación: ${authError.message}`)
-          throw authError
-        }
+      if (!response.ok) {
+        console.error('Error de autenticación:', data)
+        toast.error(data.error || 'Error al iniciar sesión')
+        throw new Error(data.error)
       }
 
-      if (!authData?.user?.id) {
-        console.error('Respuesta de autenticación:', authData)
-        toast.error('No se pudo obtener la información del usuario')
-        throw new Error('Respuesta de autenticación inválida')
-      }
+      const { user } = data
+      console.log('Usuario autenticado:', user)
 
-      toast.success('Credenciales verificadas')
-
-      // Paso 2: Obtener rol del usuario
-      toast.loading('Obteniendo permisos...')
-      console.log('Buscando rol para usuario:', authData.user.id)
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', authData.user.id)
-        .single()
-
-      if (userError) {
-        console.error('Error al obtener rol:', userError)
-        toast.error('Error al obtener permisos del usuario')
-        throw new Error(userError.message)
-      }
-
-      if (!userData?.role) {
-        console.error('Datos de usuario obtenidos:', userData)
-        toast.error('Usuario sin rol asignado')
-        throw new Error('No se encontró el rol del usuario')
-      }
-
-      const role = userData.role
-      console.log('Rol obtenido:', role)
-      toast.success('Permisos verificados')
-
-      // Establecer cookies con atributos de seguridad
-      document.cookie = `userRole=${role}; path=/; secure; samesite=strict`;
-      document.cookie = `isAuthenticated=true; path=/; secure; samesite=strict`;
-      document.cookie = `isSuperAdmin=${role === 'superadmin' ? 'true' : 'false'}; path=/; secure; samesite=strict`;
-
-      // Paso 3: Redirigir según el rol
-      toast.loading(`Accediendo como ${role}...`)
+      // Paso 2: Redirigir según el rol
+      toast.success('Iniciando sesión...')
       
       let targetPath = '';
-      switch(role) {
+      switch(user.role) {
         case 'superadmin':
         case 'admin':
           targetPath = '/admin/dashboard';
@@ -138,7 +81,13 @@ export default function LoginPage() {
       }
 
       console.log('Redirigiendo a:', targetPath);
-      window.location.href = targetPath;
+      
+      // Esperar un momento para que las cookies se establezcan
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Usar router.replace para evitar problemas de historial
+      router.replace(targetPath);
+
     } catch (error: any) {
       console.error('Error detallado:', {
         message: error.message,

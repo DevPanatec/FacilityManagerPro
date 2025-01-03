@@ -7,9 +7,9 @@ export async function GET(request: Request) {
     const supabase = createRouteHandlerClient({ cookies })
     
     // Obtener sesión actual
-    const { data: { session }, error } = await supabase.auth.getSession()
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
     
-    if (error) throw error
+    if (sessionError) throw sessionError
 
     if (!session) {
       return NextResponse.json(
@@ -18,38 +18,53 @@ export async function GET(request: Request) {
       )
     }
 
-    // Obtener perfil del usuario
-    const { data: profile } = await supabase
-      .from('profiles')
+    // Obtener información del usuario
+    const { data: userData, error: userError } = await supabase
+      .from('users')
       .select(`
         *,
-        organizations (*),
-        roles (
+        hospital:hospital_id (
           id,
-          name,
-          permissions (
-            resource,
-            action,
-            conditions
-          )
+          name
         )
       `)
-      .eq('user_id', session.user.id)
+      .eq('id', session.user.id)
       .single()
+
+    if (userError) throw userError
+
+    // Registrar actividad
+    await supabase
+      .from('activity_logs')
+      .insert([
+        {
+          user_id: session.user.id,
+          action: 'session_check',
+          description: 'User session verified',
+          metadata: {
+            ip: request.headers.get('x-forwarded-for'),
+            userAgent: request.headers.get('user-agent'),
+            timestamp: new Date().toISOString()
+          }
+        }
+      ])
 
     return NextResponse.json({
       authenticated: true,
-      user: session.user,
-      profile,
-      session: {
-        access_token: session.access_token,
-        expires_at: session.expires_at
+      user: {
+        ...session.user,
+        ...userData,
+        session: {
+          access_token: session.access_token,
+          expires_at: session.expires_at
+        }
       }
     })
   } catch (error: any) {
+    console.error('Error en /api/auth/session:', error);
     return NextResponse.json(
       { error: error.message },
-      { status: 500 }
+      { status: error.status || 500 }
     )
   }
 } 

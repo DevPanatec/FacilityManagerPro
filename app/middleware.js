@@ -8,8 +8,6 @@ export function middleware(request) {
   // Función helper para crear redirecciones
   const createRedirect = (path) => {
     const url = new URL(path, request.url);
-    url.protocol = request.nextUrl.protocol;
-    url.host = request.nextUrl.host;
     console.log('Creando redirección a:', url.toString());
     return NextResponse.redirect(url);
   };
@@ -23,7 +21,8 @@ export function middleware(request) {
   try {
     // Verificar si el usuario está autenticado usando cookies
     const cookies = request.cookies;
-    console.log('Middleware: Todas las cookies:', Object.fromEntries(cookies.getAll().map(c => [c.name, c.value])));
+    const cookieValues = Object.fromEntries(cookies.getAll().map(c => [c.name, c.value]));
+    console.log('Middleware: Todas las cookies:', cookieValues);
 
     const userRole = cookies.get('userRole')?.value;
     const isAuthenticated = cookies.get('isAuthenticated')?.value;
@@ -37,9 +36,14 @@ export function middleware(request) {
     });
 
     // Si no está autenticado, redirigir a login
-    if (!isAuthenticated) {
-      console.log('Middleware: Usuario no autenticado, redirigiendo a login');
-      return createRedirect('/auth/login');
+    if (!isAuthenticated || !userRole) {
+      console.log('Middleware: Usuario no autenticado o sin rol, redirigiendo a login');
+      const response = createRedirect('/auth/login');
+      // Limpiar cookies por seguridad
+      response.cookies.delete('userRole');
+      response.cookies.delete('isAuthenticated');
+      response.cookies.delete('isSuperAdmin');
+      return response;
     }
 
     // Si es SuperAdmin o Admin
@@ -55,7 +59,12 @@ export function middleware(request) {
       // Permitir acceso a rutas admin
       if (pathname.startsWith('/admin')) {
         console.log('Middleware: Permitiendo acceso a ruta admin');
-        return NextResponse.next();
+        const response = NextResponse.next();
+        // Asegurar que las cookies persistan
+        response.cookies.set('userRole', userRole, { path: '/' });
+        response.cookies.set('isAuthenticated', 'true', { path: '/' });
+        response.cookies.set('isSuperAdmin', isSuperAdmin, { path: '/' });
+        return response;
       }
       
       // Redirigir a admin dashboard para otras rutas
@@ -68,18 +77,33 @@ export function middleware(request) {
     // Para usuarios normales
     if (userRole === 'usuario' && pathname.startsWith('/user')) {
       console.log('Middleware: Permitiendo acceso a ruta de usuario normal');
-      return NextResponse.next();
+      const response = NextResponse.next();
+      // Asegurar que las cookies persistan
+      response.cookies.set('userRole', userRole, { path: '/' });
+      response.cookies.set('isAuthenticated', 'true', { path: '/' });
+      response.cookies.set('isSuperAdmin', 'false', { path: '/' });
+      return response;
     }
 
     // Para usuarios enterprise
     if (userRole === 'enterprise' && pathname.startsWith('/enterprise')) {
       console.log('Middleware: Permitiendo acceso a ruta enterprise');
-      return NextResponse.next();
+      const response = NextResponse.next();
+      // Asegurar que las cookies persistan
+      response.cookies.set('userRole', userRole, { path: '/' });
+      response.cookies.set('isAuthenticated', 'true', { path: '/' });
+      response.cookies.set('isSuperAdmin', 'false', { path: '/' });
+      return response;
     }
 
     // Si no tiene los permisos adecuados, redirigir al login
     console.log('Middleware: Usuario sin permisos adecuados, redirigiendo a login');
-    return createRedirect('/auth/login');
+    const response = createRedirect('/auth/login');
+    // Limpiar cookies por seguridad
+    response.cookies.delete('userRole');
+    response.cookies.delete('isAuthenticated');
+    response.cookies.delete('isSuperAdmin');
+    return response;
 
   } catch (error) {
     console.error('Middleware error detallado:', {

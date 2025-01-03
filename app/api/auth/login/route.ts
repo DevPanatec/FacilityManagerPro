@@ -10,81 +10,117 @@ export async function POST(request: Request) {
     
     // Login del usuario
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: body.email,
+      email: body.email.trim().toLowerCase(),
       password: body.password,
     });
 
-    if (authError) throw authError;
+    if (authError) {
+      console.error('Error de autenticación:', authError);
+      return NextResponse.json(
+        { error: authError.message },
+        { status: authError.status || 400 }
+      );
+    }
 
-    // Obtener perfil del usuario con roles
+    if (!authData?.user?.id) {
+      console.error('No se pudo obtener la información del usuario');
+      return NextResponse.json(
+        { error: 'Respuesta de autenticación inválida' },
+        { status: 400 }
+      );
+    }
+
+    // Obtener información del usuario con roles
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select(`
         *,
-        user_roles (
-          roles (
-            id,
-            name,
-            permissions
-          )
+        hospital:hospital_id (
+          id,
+          name
         )
       `)
       .eq('id', authData.user.id)
       .single();
 
-    if (userError) throw userError;
+    if (userError) {
+      console.error('Error al obtener datos del usuario:', userError);
+      return NextResponse.json(
+        { error: 'Error al obtener permisos del usuario' },
+        { status: 500 }
+      );
+    }
 
-    // Crear sesión
-    const { error: sessionError } = await supabase
-      .from('user_sessions')
-      .insert([
-        {
-          user_id: authData.user.id,
-          ip_address: request.headers.get('x-forwarded-for'),
-          user_agent: request.headers.get('user-agent')
-        }
-      ]);
+    if (!userData?.role) {
+      console.error('Usuario sin rol asignado:', userData);
+      return NextResponse.json(
+        { error: 'Usuario sin rol asignado' },
+        { status: 400 }
+      );
+    }
 
-    if (sessionError) throw sessionError;
-
-    // Registrar en logs
-    await supabase
-      .from('system_audit_logs')
-      .insert([
-        {
-          user_id: authData.user.id,
-          action: 'LOGIN',
-          details: 'User logged in successfully',
-          ip_address: request.headers.get('x-forwarded-for'),
-          user_agent: request.headers.get('user-agent')
-        }
-      ]);
-
-    return NextResponse.json({
-      user: authData.user,
-      profile: userData,
+    // Crear sesión y establecer cookies
+    const response = NextResponse.json({
+      user: {
+        ...authData.user,
+        ...userData
+      },
       session: {
         access_token: authData.session?.access_token,
         expires_at: authData.session?.expires_at
       }
     });
 
-  } catch (error: any) {
-    // Registrar intento fallido
+    // Establecer cookies seguras
+    response.cookies.set('userRole', userData.role, {
+      path: '/',
+      secure: true,
+      sameSite: 'strict',
+      httpOnly: true
+    });
+
+    response.cookies.set('isAuthenticated', 'true', {
+      path: '/',
+      secure: true,
+      sameSite: 'strict',
+      httpOnly: true
+    });
+
+    response.cookies.set('isSuperAdmin', (userData.role === 'superadmin').toString(), {
+      path: '/',
+      secure: true,
+      sameSite: 'strict',
+      httpOnly: true
+    });
+
+    // Registrar en logs
     await supabase
-      .from('security_logs')
+      .from('activity_logs')
       .insert([
         {
-          event_type: 'LOGIN_FAILED',
-          details: error.message,
+          user_id: authData.user.id,
+          action: 'LOGIN',
+          description: 'User logged in successfully',
           ip_address: request.headers.get('x-forwarded-for'),
-          user_agent: request.headers.get('user-agent')
+          user_agent: request.headers.get('user-agent'),
+          metadata: {
+            role: userData.role,
+            hospital_id: userData.hospital_id,
+            timestamp: new Date().toISOString()
+          }
         }
       ]);
 
+    return response;
+
+  } catch (error: any) {
+    console.error('Error en login:', error);
     return NextResponse.json(
-      { error: error.message },
-      { status: 400 }
+      { 
+        error: error.message,
+        details: error.status ? `HTTP ${error.status}` : 'Error interno del servidor'
+      },
+      { status: error.status || 500 }
     );
   }
 } 
