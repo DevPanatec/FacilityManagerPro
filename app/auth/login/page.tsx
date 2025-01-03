@@ -71,30 +71,38 @@ export default function LoginPage() {
         .from('users')
         .select('id, email, role, status')
         .eq('id', authData.user.id)
-        .single()
+        .maybeSingle();
 
       if (userError) {
-        console.error('Error al obtener datos del usuario:', userError)
+        console.error('Error al obtener datos del usuario:', userError);
         
         // Si el error es de permisos o recursión, intentar obtener el rol desde los metadatos
-        const userRole = authData.user.user_metadata?.role || 'usuario'
-        console.log('Usando rol desde metadatos:', userRole)
+        const userRole = authData.user.user_metadata?.role || 'usuario';
+        console.log('Usando rol desde metadatos:', userRole);
 
         // Registrar actividad de login exitoso
         try {
-          await supabase
+          const logData = {
+            id: crypto.randomUUID(),
+            user_id: authData.user.id,
+            action: 'LOGIN',
+            description: 'User logged in successfully (metadata)',
+            metadata: {
+              role: userRole,
+              email: authData.user.email,
+              timestamp: new Date().toISOString()
+            }
+          };
+
+          const { error: logError } = await supabase
             .from('activity_logs')
-            .insert({
-              user_id: authData.user.id,
-              action: 'LOGIN',
-              description: 'User logged in successfully (metadata)',
-              metadata: {
-                role: userRole,
-                timestamp: new Date().toISOString()
-              }
-            })
+            .insert(logData);
+
+          if (logError) {
+            console.error('Error al registrar actividad:', logError);
+          }
         } catch (logError) {
-          console.error('Error al registrar actividad:', logError)
+          console.error('Error al registrar actividad:', logError);
         }
 
         // Establecer cookies con datos de metadatos
