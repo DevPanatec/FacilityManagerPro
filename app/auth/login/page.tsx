@@ -115,26 +115,30 @@ export default function LoginPage() {
       console.log('Rol obtenido:', role)
       toast.success('Permisos verificados')
 
-      // Establecer cookies
-      document.cookie = `userRole=${role}; path=/`;
-      document.cookie = `isAuthenticated=true; path=/`;
-      document.cookie = `isSuperAdmin=${role === 'superadmin' ? 'true' : 'false'}; path=/`;
+      // Establecer cookies con atributos de seguridad
+      document.cookie = `userRole=${role}; path=/; secure; samesite=strict`;
+      document.cookie = `isAuthenticated=true; path=/; secure; samesite=strict`;
+      document.cookie = `isSuperAdmin=${role === 'superadmin' ? 'true' : 'false'}; path=/; secure; samesite=strict`;
 
       // Paso 3: Redirigir según el rol
       toast.loading(`Accediendo como ${role}...`)
       
+      let targetPath = '';
       switch(role) {
         case 'superadmin':
         case 'admin':
-          router.push('/admin/dashboard')
-          break
+          targetPath = '/admin/dashboard';
+          break;
         case 'enterprise':
-          router.push('/enterprise/dashboard')
-          break
+          targetPath = '/enterprise/dashboard';
+          break;
         case 'usuario':
         default:
-          router.push('/user/usuario')
+          targetPath = '/user/usuario';
       }
+
+      console.log('Redirigiendo a:', targetPath);
+      window.location.href = targetPath;
     } catch (error: any) {
       console.error('Error detallado:', {
         message: error.message,

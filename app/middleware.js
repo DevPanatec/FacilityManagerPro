@@ -4,7 +4,15 @@ export function middleware(request) {
   const pathname = request.nextUrl.pathname;
   console.log('Middleware: Iniciando verificación para ruta:', pathname);
   console.log('Middleware: URL completa:', request.url);
-  console.log('Middleware: Headers:', Object.fromEntries(request.headers));
+
+  // Función helper para crear redirecciones
+  const createRedirect = (path) => {
+    const url = new URL(path, request.url);
+    url.protocol = request.nextUrl.protocol;
+    url.host = request.nextUrl.host;
+    console.log('Creando redirección a:', url.toString());
+    return NextResponse.redirect(url);
+  };
 
   // Si ya está en login, permitir
   if (pathname === '/auth/login') {
@@ -31,9 +39,7 @@ export function middleware(request) {
     // Si no está autenticado, redirigir a login
     if (!isAuthenticated) {
       console.log('Middleware: Usuario no autenticado, redirigiendo a login');
-      const loginUrl = new URL('/auth/login', request.url);
-      console.log('Middleware: URL de redirección:', loginUrl.toString());
-      return NextResponse.redirect(loginUrl);
+      return createRedirect('/auth/login');
     }
 
     // Si es SuperAdmin o Admin
@@ -43,9 +49,7 @@ export function middleware(request) {
       // Si intenta acceder a login estando autenticado, redirigir a dashboard
       if (pathname === '/auth/login') {
         console.log('Middleware: Redirigiendo Admin de login a dashboard');
-        const dashboardUrl = new URL('/admin/dashboard', request.url);
-        console.log('Middleware: URL de redirección:', dashboardUrl.toString());
-        return NextResponse.redirect(dashboardUrl);
+        return createRedirect('/admin/dashboard');
       }
       
       // Permitir acceso a rutas admin
@@ -56,9 +60,7 @@ export function middleware(request) {
       
       // Redirigir a admin dashboard para otras rutas
       console.log('Middleware: Redirigiendo Admin a dashboard');
-      const dashboardUrl = new URL('/admin/dashboard', request.url);
-      console.log('Middleware: URL de redirección:', dashboardUrl.toString());
-      return NextResponse.redirect(dashboardUrl);
+      return createRedirect('/admin/dashboard');
     }
 
     console.log('Middleware: Verificando permisos específicos para rol:', userRole);
@@ -77,9 +79,7 @@ export function middleware(request) {
 
     // Si no tiene los permisos adecuados, redirigir al login
     console.log('Middleware: Usuario sin permisos adecuados, redirigiendo a login');
-    const loginUrl = new URL('/auth/login', request.url);
-    console.log('Middleware: URL de redirección final:', loginUrl.toString());
-    return NextResponse.redirect(loginUrl);
+    return createRedirect('/auth/login');
 
   } catch (error) {
     console.error('Middleware error detallado:', {
@@ -89,7 +89,7 @@ export function middleware(request) {
       cookies: Object.fromEntries(request.cookies.getAll().map(c => [c.name, c.value]))
     });
     
-    const response = NextResponse.redirect(new URL('/auth/login', request.url));
+    const response = createRedirect('/auth/login');
     response.cookies.delete('userRole');
     response.cookies.delete('isAuthenticated');
     response.cookies.delete('isSuperAdmin');
