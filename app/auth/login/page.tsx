@@ -135,16 +135,17 @@ export default function LoginPage() {
           id: crypto.randomUUID(),
           user_id: authData.user.id,
           action: 'LOGIN',
-          description: 'User logged in successfully',
+          description: userData?.role ? 'User logged in successfully' : 'User logged in successfully (metadata)',
           metadata: {
             role: userData?.role || 'usuario',
+            email: authData.user.email,
             timestamp: new Date().toISOString()
           }
         };
         
         const { error: logError } = await supabase
           .from('activity_logs')
-          .upsert(logData);
+          .insert(logData);
           
         if (logError) {
           console.error('Error al registrar actividad:', logError);
