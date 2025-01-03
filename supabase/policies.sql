@@ -35,13 +35,14 @@ DROP FUNCTION IF EXISTS is_admin() CASCADE;
 -- Crear función para verificar si un usuario es admin
 CREATE OR REPLACE FUNCTION is_admin()
 RETURNS BOOLEAN AS $$
+DECLARE
+    user_role text;
 BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM auth.users u
-    JOIN users p ON u.id = p.id
-    WHERE u.id = auth.uid()
-    AND p.role IN ('admin', 'superadmin')
-  );
+    SELECT role INTO user_role
+    FROM users
+    WHERE id = auth.uid();
+    
+    RETURN user_role IN ('admin', 'superadmin');
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -88,19 +89,14 @@ ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE webhook_configs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE webhook_logs ENABLE ROW LEVEL SECURITY;
 
--- Políticas básicas para users
-CREATE POLICY "allow_read_own_user"
+-- Política base para users (permitir lectura a todos los usuarios autenticados)
+CREATE POLICY "users_base_read_policy"
 ON users
 FOR SELECT
 TO authenticated
-USING (auth.uid() = id);
+USING (true);
 
-CREATE POLICY "allow_admin_read_all_users"
-ON users
-FOR SELECT
-TO authenticated
-USING (is_admin());
-
+-- Políticas para modificación de users
 CREATE POLICY "allow_update_own_user"
 ON users
 FOR UPDATE
