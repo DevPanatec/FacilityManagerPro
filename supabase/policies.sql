@@ -17,16 +17,33 @@ END $$;
 ALTER TABLE users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE hospitals DISABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_preferences DISABLE ROW LEVEL SECURITY;
+ALTER TABLE webhook_configs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE webhook_logs DISABLE ROW LEVEL SECURITY;
 
--- Eliminar triggers existentes
+-- Eliminar todos los triggers relacionados
 DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 DROP TRIGGER IF EXISTS update_hospitals_updated_at ON hospitals;
+DROP TRIGGER IF EXISTS update_notification_preferences_updated_at ON notification_preferences;
+DROP TRIGGER IF EXISTS update_webhook_configs_updated_at ON webhook_configs;
+DROP TRIGGER IF EXISTS update_webhook_logs_updated_at ON webhook_logs;
 
--- Eliminar funciones existentes
-DROP FUNCTION IF EXISTS update_updated_at_column();
+-- Eliminar función con CASCADE para manejar dependencias
+DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
+DROP FUNCTION IF EXISTS is_admin() CASCADE;
 
--- Eliminar tabla user_roles si existe
-DROP TABLE IF EXISTS user_roles;
+-- Crear función para verificar si un usuario es admin
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM auth.users u
+    JOIN users p ON u.id = p.id
+    WHERE u.id = auth.uid()
+    AND p.role IN ('admin', 'superadmin')
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Recrear función de actualización
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -37,7 +54,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Recrear triggers
+-- Recrear todos los triggers
 CREATE TRIGGER update_users_updated_at
     BEFORE UPDATE ON users
     FOR EACH ROW
@@ -48,23 +65,109 @@ CREATE TRIGGER update_hospitals_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_notification_preferences_updated_at
+    BEFORE UPDATE ON notification_preferences
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_webhook_configs_updated_at
+    BEFORE UPDATE ON webhook_configs
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_webhook_logs_updated_at
+    BEFORE UPDATE ON webhook_logs
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- Habilitar RLS nuevamente
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hospitals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE webhook_configs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE webhook_logs ENABLE ROW LEVEL SECURITY;
 
--- Crear una única política por tabla que permita todas las operaciones
-CREATE POLICY "authenticated_users_all_operations"
+-- Políticas básicas para users
+CREATE POLICY "allow_read_own_user"
 ON users
-FOR ALL
-USING (auth.role() = 'authenticated');
+FOR SELECT
+TO authenticated
+USING (auth.uid() = id);
 
-CREATE POLICY "authenticated_users_all_operations"
+CREATE POLICY "allow_admin_read_all_users"
+ON users
+FOR SELECT
+TO authenticated
+USING (is_admin());
+
+CREATE POLICY "allow_update_own_user"
+ON users
+FOR UPDATE
+TO authenticated
+USING (auth.uid() = id);
+
+CREATE POLICY "allow_admin_update_all_users"
+ON users
+FOR UPDATE
+TO authenticated
+USING (is_admin());
+
+-- Política para hospitals
+CREATE POLICY "allow_read_hospitals"
+ON hospitals
+FOR SELECT
+TO authenticated
+USING (true);
+
+CREATE POLICY "allow_admin_modify_hospitals"
 ON hospitals
 FOR ALL
-USING (auth.role() = 'authenticated');
+TO authenticated
+USING (is_admin());
 
-CREATE POLICY "authenticated_users_all_operations"
+-- Política para activity_logs
+CREATE POLICY "allow_insert_own_logs"
 ON activity_logs
+FOR INSERT
+TO authenticated
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "allow_read_own_logs"
+ON activity_logs
+FOR SELECT
+TO authenticated
+USING (auth.uid() = user_id);
+
+CREATE POLICY "allow_admin_read_all_logs"
+ON activity_logs
+FOR SELECT
+TO authenticated
+USING (is_admin());
+
+-- Política para notification_preferences
+CREATE POLICY "allow_manage_own_notifications"
+ON notification_preferences
 FOR ALL
-USING (auth.role() = 'authenticated'); 
+TO authenticated
+USING (user_id = auth.uid());
+
+CREATE POLICY "allow_admin_manage_all_notifications"
+ON notification_preferences
+FOR ALL
+TO authenticated
+USING (is_admin());
+
+-- Política para webhook_configs
+CREATE POLICY "allow_admin_manage_webhooks"
+ON webhook_configs
+FOR ALL
+TO authenticated
+USING (is_admin());
+
+-- Política para webhook_logs
+CREATE POLICY "allow_admin_manage_webhook_logs"
+ON webhook_logs
+FOR ALL
+TO authenticated
+USING (is_admin()); 
