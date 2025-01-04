@@ -1,6 +1,6 @@
 import './globals.css'
 import { Inter } from 'next/font/google'
-import { Providers } from './providers'
+import { Providers } from '@/app/providers'
 import RealtimeManager from './components/RealtimeManager'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -19,8 +19,8 @@ export default function RootLayout({
     <html lang="es" data-theme="light">
       <body className={inter.className}>
         <Providers>
-          {children}
           <RealtimeManager />
+          {children}
         </Providers>
       </body>
     </html>
