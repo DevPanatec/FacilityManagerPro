@@ -46,75 +46,92 @@ export default function LoginPage() {
         hasSymbols: /[!@#$%^&*(),.?":{}|<>]/.test(password)
       })
 
-      // Primero verificar si el usuario existe
-      const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password
+      // Verificar la configuración de Supabase
+      console.log('Configuración Supabase:', {
+        url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+        hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        urlLength: process.env.NEXT_PUBLIC_SUPABASE_URL?.length,
+        keyLength: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.length
       })
 
-      if (signInError) {
-        console.error('Error de autenticación detallado:', {
-          error: signInError,
-          errorMessage: signInError.message,
-          errorStatus: signInError.status,
+      try {
+        // Primero verificar si el usuario existe
+        const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({
           email,
+          password
+        })
+
+        if (signInError) {
+          console.error('Error de autenticación completo:', {
+            error: signInError,
+            errorMessage: signInError.message,
+            errorStatus: signInError.status,
+            errorCode: signInError.code,
+            errorName: signInError.name,
+            email,
+            timestamp: new Date().toISOString(),
+            supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL
+          })
+
+          if (signInError.message?.includes('Invalid login credentials')) {
+            toast.error('Email o contraseña incorrectos')
+          } else if (signInError.message?.includes('Email not confirmed')) {
+            toast.error('Por favor confirma tu email antes de iniciar sesión')
+          } else {
+            toast.error('Error de autenticación: ' + signInError.message)
+          }
+          return
+        }
+
+        if (!user?.id) {
+          console.error('No se pudo obtener la información del usuario')
+          toast.error('Error al obtener información del usuario')
+          return
+        }
+
+        // Obtener rol del usuario
+        const { data, error: userError } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+
+        if (userError) {
+          console.error('Error al obtener rol:', userError)
+          toast.error('Error al obtener permisos del usuario')
+          return
+        }
+
+        const userData = data as UserData
+        const role = userData?.role || user.user_metadata?.role || 'usuario'
+        
+        // Establecer cookies
+        document.cookie = `userRole=${role}; path=/; secure; samesite=strict`
+        document.cookie = `isAuthenticated=true; path=/; secure; samesite=strict`
+        document.cookie = `isSuperAdmin=${role === 'superadmin'}; path=/; secure; samesite=strict`
+
+        // Redirigir según el rol
+        let targetPath = '/user/usuario'
+        if (role === 'admin' || role === 'superadmin') {
+          targetPath = '/admin/dashboard'
+        } else if (role === 'enterprise') {
+          targetPath = '/enterprise/dashboard'
+        }
+
+        console.log('Login exitoso, redirigiendo a:', {
+          targetPath,
+          role,
+          userId: user.id,
           timestamp: new Date().toISOString()
         })
 
-        if (signInError.message?.includes('Invalid login credentials')) {
-          toast.error('Email o contraseña incorrectos')
-        } else if (signInError.message?.includes('Email not confirmed')) {
-          toast.error('Por favor confirma tu email antes de iniciar sesión')
-        } else {
-          toast.error('Error de autenticación: ' + signInError.message)
-        }
-        return
+        toast.success('Iniciando sesión...')
+        router.replace(targetPath)
+
+      } catch (error: any) {
+        console.error('Error inesperado:', error)
+        toast.error('Error inesperado al iniciar sesión')
       }
-
-      if (!user?.id) {
-        console.error('No se pudo obtener la información del usuario')
-        toast.error('Error al obtener información del usuario')
-        return
-      }
-
-      // Obtener rol del usuario
-      const { data, error: userError } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-
-      if (userError) {
-        console.error('Error al obtener rol:', userError)
-        toast.error('Error al obtener permisos del usuario')
-        return
-      }
-
-      const userData = data as UserData
-      const role = userData?.role || user.user_metadata?.role || 'usuario'
-      
-      // Establecer cookies
-      document.cookie = `userRole=${role}; path=/; secure; samesite=strict`
-      document.cookie = `isAuthenticated=true; path=/; secure; samesite=strict`
-      document.cookie = `isSuperAdmin=${role === 'superadmin'}; path=/; secure; samesite=strict`
-
-      // Redirigir según el rol
-      let targetPath = '/user/usuario'
-      if (role === 'admin' || role === 'superadmin') {
-        targetPath = '/admin/dashboard'
-      } else if (role === 'enterprise') {
-        targetPath = '/enterprise/dashboard'
-      }
-
-      console.log('Login exitoso, redirigiendo a:', {
-        targetPath,
-        role,
-        userId: user.id,
-        timestamp: new Date().toISOString()
-      })
-
-      toast.success('Iniciando sesión...')
-      router.replace(targetPath)
 
     } catch (error: any) {
       console.error('Error inesperado:', error)
