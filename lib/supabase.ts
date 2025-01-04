@@ -26,18 +26,28 @@ if (!SUPABASE_ANON_KEY.startsWith('eyJ') || SUPABASE_ANON_KEY.length < 100) {
 export const createClient = () => {
   console.log('Inicializando cliente Supabase con:', {
     url: SUPABASE_URL,
-    keyLength: SUPABASE_ANON_KEY.length
+    keyLength: SUPABASE_ANON_KEY.length,
+    timestamp: new Date().toISOString()
   })
   
   const client = createClientComponentClient<Database>({
     supabaseUrl: SUPABASE_URL,
-    supabaseKey: SUPABASE_ANON_KEY,
+    supabaseKey: SUPABASE_ANON_KEY
   })
 
   // Verificar que el cliente se creó correctamente
   if (!client || !client.auth) {
     throw new Error('Error al crear el cliente de Supabase')
   }
+
+  // Agregar listener para cambios de autenticación
+  client.auth.onAuthStateChange((event, session) => {
+    console.log('Cambio de estado de autenticación:', {
+      event,
+      userId: session?.user?.id,
+      timestamp: new Date().toISOString()
+    })
+  })
 
   return client
 }
