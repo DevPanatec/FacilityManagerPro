@@ -51,10 +51,12 @@ export default function LoginPage() {
         url: process.env.NEXT_PUBLIC_SUPABASE_URL,
         hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
         urlLength: process.env.NEXT_PUBLIC_SUPABASE_URL?.length,
-        keyLength: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.length
+        keyLength: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.length,
+        supabaseInstance: !!supabase
       })
 
       try {
+        console.log('Iniciando proceso de signInWithPassword...')
         // Primero verificar si el usuario existe
         const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({
           email,
@@ -70,7 +72,8 @@ export default function LoginPage() {
             errorName: signInError.name,
             email,
             timestamp: new Date().toISOString(),
-            supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL
+            supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+            supabaseInitialized: !!supabase
           })
 
           if (signInError.message?.includes('Invalid login credentials')) {
