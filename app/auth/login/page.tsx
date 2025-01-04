@@ -39,7 +39,11 @@ export default function LoginPage() {
       console.log('Intentando autenticar:', { 
         email,
         passwordLength: password.length,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        hasUpperCase: /[A-Z]/.test(password),
+        hasLowerCase: /[a-z]/.test(password),
+        hasNumbers: /\d/.test(password),
+        hasSymbols: /[!@#$%^&*(),.?":{}|<>]/.test(password)
       })
 
       // Primero verificar si el usuario existe
@@ -49,8 +53,10 @@ export default function LoginPage() {
       })
 
       if (signInError) {
-        console.error('Error de autenticación:', {
+        console.error('Error de autenticación detallado:', {
           error: signInError,
+          errorMessage: signInError.message,
+          errorStatus: signInError.status,
           email,
           timestamp: new Date().toISOString()
         })
