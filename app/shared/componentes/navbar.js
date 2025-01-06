@@ -25,8 +25,8 @@ const NAV_ITEMS = {
   ],
   enterprise: [
     { label: 'Panel Principal', href: '/enterprise/dashboard' },
-    { label: 'Calendario', href: '/shared/schedule' },
-    { label: 'Recursos Humanos', href: '/shared/rrhh' },
+    { label: 'Calendario', href: '/enterprise/schedule' },
+    { label: 'Recursos Humanos', href: '/enterprise/rrhh' },
     { label: 'Inventario', href: '/enterprise/inventory' },
     { label: 'Centro de Datos', href: '/enterprise/data-hub' },
     { label: 'Datos Externos', href: '/enterprise/external-data' }

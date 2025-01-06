@@ -62,6 +62,7 @@ export default function EnterpriseInventoryPage() {
 
   // Obtener items con stock bajo
   const lowStockItems = useMemo(() => {
+    if (!Array.isArray(items)) return []
     return items.filter(item => item.quantity <= item.minStock)
   }, [items])
 
@@ -116,6 +117,7 @@ export default function EnterpriseInventoryPage() {
 
   // Filtrar y ordenar items
   const filteredAndSortedItems = useMemo(() => {
+    if (!Array.isArray(items)) return []
     let result = [...items]
 
     // Aplicar filtros
@@ -152,6 +154,7 @@ export default function EnterpriseInventoryPage() {
 
   // Estadísticas generales
   const stats = useMemo(() => {
+    if (!Array.isArray(items)) return { total: 0, lowStock: 0, locations: 0 }
     const total = items.length
     const lowStock = items.filter(item => item.status === 'low').length
     const locations = new Set(items.map(item => item.location)).size
