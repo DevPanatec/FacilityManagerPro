@@ -28,7 +28,7 @@ yarn-error.log*
 .env
 .env.development
 .env.test
-# .env.local # Permitimos este archivo para desarrollo
+.env.local
 
 # vercel
 .vercel
