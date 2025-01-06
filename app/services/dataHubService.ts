@@ -1,9 +1,8 @@
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-
-const supabase = createClientComponentClient()
+import { createClient } from '../utils/supabase/client'
 
 export const dataHubService = {
   async getData() {
+    const supabase = createClient()
     const { data, error } = await supabase
       .from('data_hub')
       .select('*')
@@ -13,6 +12,7 @@ export const dataHubService = {
   },
 
   async saveData(data: any) {
+    const supabase = createClient()
     const { error } = await supabase
       .from('data_hub')
       .insert(data)
@@ -22,6 +22,7 @@ export const dataHubService = {
   },
 
   async updateData(id: string, data: any) {
+    const supabase = createClient()
     const { error } = await supabase
       .from('data_hub')
       .update(data)
@@ -32,6 +33,7 @@ export const dataHubService = {
   },
 
   async deleteData(id: string) {
+    const supabase = createClient()
     const { error } = await supabase
       .from('data_hub')
       .delete()
@@ -43,6 +45,7 @@ export const dataHubService = {
 
   async getDataHubSummary() {
     try {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('data_hub_summary')
         .select('*')
@@ -60,13 +63,16 @@ export const dataHubService = {
         },
         organizations: []
       }
-    } catch (error) {
-      console.error('Error fetching summary:', error)
-      throw error
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error fetching summary';
+      const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+      console.error('Error fetching summary:', errorMessage);
+      throw error;
     }
   },
 
   async deleteOrganization(id: string) {
+    const supabase = createClient()
     const { error } = await supabase
       .from('organizations')
       .delete()

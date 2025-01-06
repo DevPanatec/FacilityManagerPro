@@ -32,8 +32,13 @@ export async function GET(request: Request) {
     if (error) throw error
 
     return NextResponse.json(documents)
-  } catch (error) {
-    return NextResponse.json({ error: 'Error al obtener documentos' }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener documentos';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: statusCode }
+    )
   }
 }
 
@@ -92,10 +97,12 @@ export async function POST(request: Request) {
       ])
 
     return NextResponse.json(document)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al subir documento';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al subir documento' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -143,10 +150,12 @@ export async function DELETE(request: Request) {
     if (dbError) throw dbError
 
     return NextResponse.json({ message: 'Documento eliminado exitosamente' })
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar documento';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar documento' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

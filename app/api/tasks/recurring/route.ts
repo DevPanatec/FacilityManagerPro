@@ -92,11 +92,14 @@ export async function POST(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data)
-  } catch (error) {
-    console.error('Error generando tareas recurrentes:', error)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al generar tareas recurrentes';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    
+    console.error('Error generando tareas recurrentes:', errorMessage);
     return NextResponse.json(
-      { error: error.message || 'Error al generar tareas recurrentes' },
-      { status: 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }

@@ -76,10 +76,18 @@ export async function GET(request: Request) {
     if (roomsError) throw roomsError
 
     return NextResponse.json(rooms)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al obtener chat'
+    
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') 
+      ? 403 
+      : 500
+
     return NextResponse.json(
-      { error: error.message || 'Error al obtener chat' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -176,10 +184,12 @@ export async function POST(request: Request) {
     if (participantsError) throw participantsError
 
     return NextResponse.json(room)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear chat';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al crear chat' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -218,10 +228,12 @@ export async function PUT(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data[0])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar sala';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar sala' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -247,10 +259,12 @@ export async function DELETE(request: Request) {
     if (error) throw error
 
     return NextResponse.json({ message: 'Saliste de la sala exitosamente' })
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al salir de la sala';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al salir de la sala' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

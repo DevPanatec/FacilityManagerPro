@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase'
+import { createClient } from '../utils/supabase/client'
 import axios from 'axios'
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
@@ -20,6 +20,7 @@ const VALID_TYPES = {
 export const dataHubService = {
   async getDataHubSummary() {
     try {
+      const supabase = createClient()
       // Obtener organizaciones
       const { data: organizations, error } = await supabase
         .from('organizations')

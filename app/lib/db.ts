@@ -1,12 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-export const supabase = createClient(supabaseUrl, supabaseKey);
+import { createClient } from '../utils/supabase/client';
 
 export async function getInventoryItems() {
   try {
+    const supabase = createClient();
     const { data, error } = await supabase
       .from('inventory')
       .select('*')
@@ -14,14 +10,16 @@ export async function getInventoryItems() {
 
     if (error) throw error;
     return data;
-  } catch (error) {
-    console.error('Error getting inventory items:', error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error occurred';
+    console.error('Error getting inventory items:', errorMessage);
     throw error;
   }
 }
 
 export async function addInventoryItem(name: string, quantity: number, minQuantity: number) {
   try {
+    const supabase = createClient();
     const { data, error } = await supabase
       .from('inventory')
       .insert([
@@ -32,14 +30,16 @@ export async function addInventoryItem(name: string, quantity: number, minQuanti
 
     if (error) throw error;
     return data;
-  } catch (error) {
-    console.error('Error adding inventory item:', error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error occurred';
+    console.error('Error adding inventory item:', errorMessage);
     throw error;
   }
 }
 
 export async function updateInventoryItem(id: number, quantity: number) {
   try {
+    const supabase = createClient();
     const { data, error } = await supabase
       .from('inventory')
       .update({ 
@@ -52,8 +52,9 @@ export async function updateInventoryItem(id: number, quantity: number) {
 
     if (error) throw error;
     return data;
-  } catch (error) {
-    console.error('Error updating inventory item:', error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error occurred';
+    console.error('Error updating inventory item:', errorMessage);
     throw error;
   }
 } 

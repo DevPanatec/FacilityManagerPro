@@ -27,25 +27,26 @@ export const setAreas = (areas: Area[]) => {
 export const getTareas = () => {
   if (typeof window !== 'undefined') {
     const tareas = localStorage.getItem('tareas');
-    return tareas ? JSON.parse(tareas) : null;
+    return tareas ? JSON.parse(tareas) as Tarea[] : null;
   }
   return null;
 };
 
-export const setTareas = (tareas) => {
+export const setTareas = (tareas: Tarea[]) => {
   if (typeof window !== 'undefined') {
     localStorage.setItem('tareas', JSON.stringify(tareas));
   }
 };
 
-export function initLocalStorage(key: string, defaultValue: any) {
+export function initLocalStorage<T>(key: string, defaultValue: T): T {
   if (typeof window === 'undefined') return defaultValue
   
   try {
     const item = window.localStorage.getItem(key)
     return item ? JSON.parse(item) : defaultValue
-  } catch (error) {
-    console.error('Error accessing localStorage:', error)
-    return defaultValue
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error accessing localStorage';
+    console.error('Error accessing localStorage:', errorMessage);
+    return defaultValue;
   }
 }

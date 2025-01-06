@@ -46,10 +46,12 @@ export async function GET(request: Request) {
     if (error) throw error
 
     return NextResponse.json(evaluations)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener evaluaciones';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al obtener evaluaciones' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -108,10 +110,12 @@ export async function POST(request: Request) {
       ])
 
     return NextResponse.json(data[0])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear evaluación';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al crear evaluación' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -167,10 +171,12 @@ export async function PUT(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data[0])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar evaluación';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar evaluación' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -205,10 +211,12 @@ export async function DELETE(request: Request) {
     if (error) throw error
 
     return NextResponse.json({ message: 'Evaluación eliminada exitosamente' })
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar evaluación';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar evaluación' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

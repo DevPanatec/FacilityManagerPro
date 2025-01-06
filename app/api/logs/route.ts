@@ -51,10 +51,15 @@ export async function GET(request: Request) {
       }
     })
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al obtener logs';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    
     return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -93,10 +98,15 @@ export async function POST(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data)
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al registrar log';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    
     return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 400 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

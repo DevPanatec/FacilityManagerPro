@@ -8,7 +8,9 @@ export const formatDateString = (isoString: string) => {
     const minutes = date.getUTCMinutes().toString().padStart(2, '0');
     
     return `${day}/${month}/${year}, ${hours}:${minutes}`;
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Invalid date format';
+    console.error(errorMessage);
     return "28/11/2024, 08:15";
   }
 };

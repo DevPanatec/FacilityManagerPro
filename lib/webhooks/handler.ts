@@ -24,8 +24,10 @@ export async function handleWebhook(payload: any) {
     }
 
     return { success: true }
-  } catch (error) {
-    console.error('Webhook error:', error)
-    return { success: false, error: error.message }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Webhook processing error occurred';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    console.error('Webhook error:', errorMessage);
+    return { success: false, error: errorMessage }
   }
 } 

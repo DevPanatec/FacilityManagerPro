@@ -144,8 +144,9 @@ export default function InventoryModal({ isOpen, onClose, onSubmit, item, mode }
           try {
             const recordDate = new Date(record.date).toISOString().split('T')[0]
             return recordDate === date
-          } catch (error) {
-            console.error('Error parsing date:', error)
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+            console.error('Error parsing date:', errorMessage)
             return false
           }
         })
@@ -156,8 +157,9 @@ export default function InventoryModal({ isOpen, onClose, onSubmit, item, mode }
           try {
             const recordDate = new Date(record.date).toISOString().split('T')[0]
             return recordDate === date
-          } catch (error) {
-            console.error('Error parsing date:', error)
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+            console.error('Error parsing date:', errorMessage)
             return false
           }
         })

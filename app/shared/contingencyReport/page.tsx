@@ -111,7 +111,7 @@ export default function ReportsPage() {
       
       const reportesActuales = response.data.reports || reportes;
       const total = reportesActuales.length;
-      const pendientes = reportesActuales.filter(r => r.estado === 'Pendiente').length;
+      const pendientes = reportesActuales.filter((r: Report) => r.estado === 'Pendiente').length;
       setStats({
         total,
         pendientes,
@@ -183,8 +183,9 @@ export default function ReportsPage() {
       setPreviewUrls([]);
 
       toast.success('Reporte creado exitosamente');
-    } catch (error) {
-      toast.error('Error al crear el reporte');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error al crear el reporte';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -206,8 +207,9 @@ export default function ReportsPage() {
     try {
       // Aquí iría la lógica para generar y descargar el PDF
       toast.success('PDF descargado exitosamente');
-    } catch (error) {
-      toast.error('Error al descargar el PDF');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error al descargar el PDF';
+      toast.error(errorMessage);
     }
   };
 
@@ -236,8 +238,9 @@ export default function ReportsPage() {
       }));
 
       toast.success(`Estado actualizado a ${newStatus}`);
-    } catch (error) {
-      toast.error('Error al actualizar el estado');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error al actualizar el estado';
+      toast.error(errorMessage);
     }
   };
 
@@ -269,8 +272,9 @@ export default function ReportsPage() {
       }
 
       toast.success('Reporte eliminado exitosamente');
-    } catch (error) {
-      toast.error('Error al eliminar el reporte');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error al eliminar el reporte';
+      toast.error(errorMessage);
     }
   };
 

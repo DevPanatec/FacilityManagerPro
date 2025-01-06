@@ -27,10 +27,18 @@ export async function GET(request: Request) {
     if (error) throw error
 
     return NextResponse.json(shifts)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al obtener turnos'
+    
+    const status = error instanceof Error && error.message.includes('No autorizado') 
+      ? 403 
+      : 500
+
     return NextResponse.json(
-      { error: error.message || 'Error al obtener turnos' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -92,10 +100,18 @@ export async function POST(request: Request) {
       ])
 
     return NextResponse.json(data[0])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al crear turno'
+    
+    const status = error instanceof Error && error.message.includes('No autorizado') 
+      ? 403 
+      : 500
+
     return NextResponse.json(
-      { error: error.message || 'Error al crear turno' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -154,10 +170,18 @@ export async function PUT(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data[0])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al actualizar turno'
+    
+    const status = error instanceof Error && error.message.includes('No autorizado') 
+      ? 403 
+      : 500
+
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar turno' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -211,10 +235,18 @@ export async function DELETE(request: Request) {
     if (error) throw error
 
     return NextResponse.json({ message: 'Turno eliminado exitosamente' })
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al eliminar turno'
+    
+    const status = error instanceof Error && error.message.includes('No autorizado') 
+      ? 403 
+      : 500
+
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar turno' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 } 

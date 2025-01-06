@@ -17,10 +17,12 @@ export async function GET(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data)
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error occurred';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    )
+      { error: errorMessage },
+      { status: statusCode }
+    );
   }
 } 

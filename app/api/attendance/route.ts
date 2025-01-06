@@ -10,8 +10,8 @@ export async function GET(request: Request) {
     const employeeId = searchParams.get('employeeId')
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
-    
-    // Obtener el usuario actual
+
+    // Get current user
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
 
@@ -29,26 +29,25 @@ export async function GET(request: Request) {
       `)
       .order('check_in', { ascending: false })
 
-    // Aplicar filtros
-    if (employeeId) {
-      query = query.eq('employee_id', employeeId)
-    }
-    if (startDate) {
-      query = query.gte('check_in', startDate)
-    }
-    if (endDate) {
-      query = query.lte('check_in', endDate)
-    }
+    if (employeeId) query = query.eq('employee_id', employeeId)
+    if (startDate) query = query.gte('check_in', startDate)
+    if (endDate) query = query.lte('check_in', endDate)
 
     const { data: attendance, error } = await query
 
     if (error) throw error
 
     return NextResponse.json(attendance)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al obtener registros de asistencia';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado')
+      ? 403
+      : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al obtener registros de asistencia' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -58,7 +57,7 @@ export async function POST(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
     const body = await request.json()
-    
+
     // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
@@ -110,15 +109,21 @@ export async function POST(request: Request) {
       ])
 
     return NextResponse.json(data[0])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al registrar asistencia';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado')
+      ? 403
+      : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al registrar asistencia' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
 
-// PUT /api/attendance/[id] - Actualizar registro de asistencia (check-out)
+// PUT handler should be at the module level, not nested
 export async function PUT(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
@@ -166,10 +171,16 @@ export async function PUT(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data[0])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al actualizar registro de asistencia';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado')
+      ? 403
+      : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar registro de asistencia' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
-} 
+}

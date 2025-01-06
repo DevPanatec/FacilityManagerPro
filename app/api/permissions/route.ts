@@ -34,10 +34,12 @@ export async function GET(request: Request) {
     if (error) throw error
 
     return NextResponse.json(permissions)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener permisos';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al obtener permisos' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -101,10 +103,12 @@ export async function POST(request: Request) {
       ])
 
     return NextResponse.json(data[0])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear permiso';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al crear permiso' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -137,10 +141,12 @@ export async function DELETE(request: Request) {
     if (error) throw error
 
     return NextResponse.json({ message: 'Permiso eliminado exitosamente' })
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar permiso';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar permiso' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }

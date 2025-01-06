@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '../../../utils/supabase/server'
 
 export async function GET(request, { params }) {
+  const supabase = await createClient()
   const { id } = params
   
   const { data, error } = await supabase
@@ -42,6 +43,7 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
   try {
+    const supabase = await createClient()
     const { id } = params
     const body = await request.json()
     
@@ -109,6 +111,7 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
+    const supabase = await createClient()
     const { id } = params
     
     // Eliminar la organización (las tablas relacionadas se eliminarán por CASCADE)

@@ -18,10 +18,13 @@ export async function GET(request: Request) {
     if (error) throw error
 
     return NextResponse.json(roles)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener roles';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    
     return NextResponse.json(
-      { error: error.message || 'Error al obtener roles' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -54,10 +57,12 @@ export async function POST(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data[0])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear rol';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al crear rol' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

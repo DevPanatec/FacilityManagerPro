@@ -1,14 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '../../utils/supabase/client';
 import CreateSuperAdminForm from './createSuperAdmin';
 import { toast } from 'react-hot-toast';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
 
 export default function SuperAdminPage() {
     const [session, setSession] = useState(null);

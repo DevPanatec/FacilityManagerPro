@@ -49,8 +49,9 @@ export default function ReportesPage() {
       }));
 
       setReports(transformedReports);
-    } catch (error) {
-      console.error('Error fetching reports:', error);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error fetching reports';
+      console.error('Error fetching reports:', errorMessage);
     } finally {
       setIsLoading(false);
     }

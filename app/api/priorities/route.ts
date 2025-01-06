@@ -39,14 +39,16 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(PRIORITY_TYPES[type as keyof typeof PRIORITY_TYPES])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener prioridades';
+    const statusCode = 400;
     return NextResponse.json(
-      { error: error.message || 'Error al obtener prioridades' },
-      { status: 400 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
 
 // Tipos TypeScript
 export type PriorityType = keyof typeof PRIORITY_TYPES
-export type PriorityValue = typeof PRIORITY_TYPES[PriorityType][keyof typeof PRIORITY_TYPES[PriorityType]] 
+export type PriorityValue = typeof PRIORITY_TYPES[PriorityType][keyof typeof PRIORITY_TYPES[PriorityType]]

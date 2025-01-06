@@ -5,9 +5,7 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { toast } from 'react-hot-toast'
 import { FaUser, FaLock } from 'react-icons/fa'
-import { supabase } from '@/lib/supabase'
-import { Database } from '@/types/supabase'
-import { AuthError } from '@supabase/supabase-js'
+import { login } from './actions'
 
 type UserData = {
   role: string;
@@ -33,123 +31,41 @@ export default function LoginPage() {
         return
       }
 
-      const email = formState.email.trim().toLowerCase()
-      const password = formState.password
+      const formData = new FormData()
+      formData.append('email', formState.email.trim().toLowerCase())
+      formData.append('password', formState.password)
 
+      // Log authentication attempt (keeping your debug info)
       console.log('Intentando autenticar:', { 
-        email,
-        passwordLength: password.length,
+        email: formState.email.trim().toLowerCase(),
+        passwordLength: formState.password.length,
         timestamp: new Date().toISOString(),
-        hasUpperCase: /[A-Z]/.test(password),
-        hasLowerCase: /[a-z]/.test(password),
-        hasNumbers: /\d/.test(password),
-        hasSymbols: /[!@#$%^&*(),.?":{}|<>]/.test(password)
+        hasUpperCase: /[A-Z]/.test(formState.password),
+        hasLowerCase: /[a-z]/.test(formState.password),
+        hasNumbers: /\d/.test(formState.password),
+        hasSymbols: /[!@#$%^&*(),.?":{}|<>]/.test(formState.password)
       })
 
-      // Verificar la configuración de Supabase
-      console.log('Configuración Supabase:', {
-        url: process.env.NEXT_PUBLIC_SUPABASE_URL,
-        hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-        urlLength: process.env.NEXT_PUBLIC_SUPABASE_URL?.length,
-        keyLength: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.length,
-        supabaseInstance: !!supabase
-      })
+      await login(formData)
+      toast.success('Iniciando sesión...')
 
-      try {
-        console.log('Iniciando proceso de signInWithPassword...')
-        
-        try {
-          // Intentar autenticar directamente con email/password
-          const { data, error: signInError } = await supabase.auth.signInWithPassword({
-            email,
-            password
-          })
-
-          if (signInError) {
-            console.error('Error de autenticación completo:', {
-              error: signInError,
-              errorMessage: signInError.message,
-              errorStatus: signInError.status,
-              errorCode: signInError.code,
-              errorName: signInError.name,
-              email,
-              timestamp: new Date().toISOString()
-            })
-
-            if (signInError.message?.includes('Invalid login credentials')) {
-              toast.error('Email o contraseña incorrectos')
-            } else if (signInError.message?.includes('Email not confirmed')) {
-              toast.error('Por favor confirma tu email antes de iniciar sesión')
-            } else {
-              toast.error('Error de autenticación: ' + signInError.message)
-            }
-            return
-          }
-
-          const user = data.user
-          if (!user?.id) {
-            console.error('No se pudo obtener la información del usuario')
-            toast.error('Error al obtener información del usuario')
-            return
-          }
-
-          // Obtener rol del usuario
-          const { data: roleData, error: userError } = await supabase
-            .from('users')
-            .select('role')
-            .eq('id', user.id)
-            .single()
-
-          if (userError) {
-            console.error('Error al obtener rol:', userError)
-            toast.error('Error al obtener permisos del usuario')
-            return
-          }
-
-          const userData = roleData as UserData
-          const role = userData?.role || user.user_metadata?.role || 'usuario'
-          
-          // Establecer cookies
-          document.cookie = `userRole=${role}; path=/; secure; samesite=strict`
-          document.cookie = `isAuthenticated=true; path=/; secure; samesite=strict`
-          document.cookie = `isSuperAdmin=${role === 'superadmin'}; path=/; secure; samesite=strict`
-
-          // Redirigir según el rol
-          let targetPath = '/user/usuario'
-          if (role === 'admin' || role === 'superadmin') {
-            targetPath = '/admin/dashboard'
-          } else if (role === 'enterprise') {
-            targetPath = '/enterprise/dashboard'
-          }
-
-          console.log('Login exitoso, redirigiendo a:', {
-            targetPath,
-            role,
-            userId: user.id,
-            timestamp: new Date().toISOString()
-          })
-
-          toast.success('Iniciando sesión...')
-          router.replace(targetPath)
-
-        } catch (error: any) {
-          console.error('Error inesperado:', error)
-          toast.error('Error inesperado al iniciar sesión')
-        }
-
-      } catch (error: any) {
-        console.error('Error inesperado:', error)
+    } catch (error: unknown) {
+      console.error('Error de autenticación:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Error inesperado al iniciar sesión'
+      
+      if (errorMessage.includes('Invalid login credentials')) {
+        toast.error('Email o contraseña incorrectos')
+      } else if (errorMessage.includes('Email not confirmed')) {
+        toast.error('Por favor confirma tu email antes de iniciar sesión')
+      } else {
         toast.error('Error inesperado al iniciar sesión')
-      } finally {
-        setIsLoading(false)
       }
-
-    } catch (error: any) {
-      console.error('Error inesperado:', error)
-      toast.error('Error inesperado al iniciar sesión')
+    } finally {
+      setIsLoading(false)
     }
-  }, [formState, router])
+  }, [formState])
 
+  // Keeping your original UI code exactly the same
   return (
     <div className="min-h-screen flex flex-col justify-between relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900">
       <div className="relative w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-2xl mx-auto my-4 md:my-8 px-4">

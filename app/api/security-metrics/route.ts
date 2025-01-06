@@ -37,11 +37,13 @@ export async function GET(request: Request) {
       recent_events: recentEvents || [],
       active_alerts: activeAlerts || []
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error obteniendo métricas de seguridad:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener métricas de seguridad';
+    const statusCode = 500;
     return NextResponse.json(
-      { error: 'Error al obtener métricas de seguridad' },
-      { status: 500 }
+      { error: errorMessage },
+      { status: statusCode }
     );
   }
 } 

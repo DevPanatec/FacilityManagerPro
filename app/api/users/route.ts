@@ -37,8 +37,16 @@ export async function GET(request: Request) {
     if (error) throw error
 
     return NextResponse.json(users)
-  } catch (error) {
-    return NextResponse.json({ error: 'Error al obtener usuarios' }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al obtener usuarios';
+    const statusCode = 500;
+    
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: statusCode }
+    )
   }
 }
 
@@ -78,10 +86,17 @@ export async function PUT(request: Request) {
       ])
 
     return NextResponse.json(data)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al actualizar usuario';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') 
+      ? 403 
+      : 500;
+    
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar usuario' }, 
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

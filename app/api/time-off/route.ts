@@ -45,10 +45,18 @@ export async function GET(request: Request) {
     if (error) throw error
 
     return NextResponse.json(requests)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al obtener solicitudes'
+    
+    const status = error instanceof Error && error.message.includes('No autorizado') 
+      ? 403 
+      : 500
+
     return NextResponse.json(
-      { error: error.message || 'Error al obtener solicitudes' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -112,10 +120,18 @@ export async function POST(request: Request) {
       ])
 
     return NextResponse.json(data[0])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al crear solicitud'
+    
+    const status = error instanceof Error && error.message.includes('No autorizado') 
+      ? 403 
+      : 500
+
     return NextResponse.json(
-      { error: error.message || 'Error al crear solicitud' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -168,10 +184,12 @@ export async function PUT(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data[0])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar solicitud';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar solicitud' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -223,10 +241,12 @@ export async function DELETE(request: Request) {
     if (error) throw error
 
     return NextResponse.json({ message: 'Solicitud cancelada exitosamente' })
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al cancelar solicitud';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al cancelar solicitud' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

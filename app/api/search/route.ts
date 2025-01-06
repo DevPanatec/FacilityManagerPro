@@ -94,11 +94,13 @@ export async function GET(request: Request) {
     }))
 
     return NextResponse.json({ results })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error en búsqueda:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Error al realizar la búsqueda';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: 'Error al realizar la búsqueda' },
-      { status: 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

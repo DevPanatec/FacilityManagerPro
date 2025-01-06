@@ -45,10 +45,12 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(STATUS_TYPES[type as keyof typeof STATUS_TYPES])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener estados';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message || 'Error al obtener estados' },
-      { status: 400 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }

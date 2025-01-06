@@ -6,12 +6,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       message: 'Funcionalidad no implementada'
     });
-  } catch (error) {
-    return NextResponse.json({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    }, { 
-      status: 500 
-    });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error message';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: statusCode }
+    );
   }
 }
 
@@ -20,12 +21,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       message: 'Funcionalidad no implementada'
     });
-  } catch (error) {
-    return NextResponse.json({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    }, { 
-      status: 500 
-    });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error message';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: statusCode }
+    );
   }
 }
 
@@ -34,12 +36,13 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       message: 'Funcionalidad no implementada'
     });
-  } catch (error) {
-    return NextResponse.json({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    }, { 
-      status: 500 
-    });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error message';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: statusCode }
+    );
   }
 }
 
@@ -48,11 +51,12 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({
       message: 'Funcionalidad no implementada'
     });
-  } catch (error) {
-    return NextResponse.json({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    }, { 
-      status: 500 
-    });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error message';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: statusCode }
+    );
   }
 }

@@ -17,11 +17,13 @@ export async function POST(request: NextRequest) {
     if (error) throw error
     
     return NextResponse.json({ success: true, data })
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error processing webhook:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Error processing webhook';
+    const statusCode = 500;
     return NextResponse.json(
-      { success: false, error: 'Error processing webhook' },
-      { status: 500 }
+      { success: false, error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -36,11 +38,13 @@ export async function GET(request: NextRequest) {
     if (error) throw error
     
     return NextResponse.json(data)
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error fetching webhooks:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Error fetching webhooks';
+    const statusCode = 500;
     return NextResponse.json(
-      { error: 'Error fetching webhooks' },
-      { status: 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

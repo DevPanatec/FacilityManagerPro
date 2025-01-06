@@ -30,8 +30,15 @@ export async function GET(request: Request) {
     if (error) throw error
 
     return NextResponse.json(areas)
-  } catch (error) {
-    return NextResponse.json({ error: 'Error al obtener áreas' }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al obtener áreas'
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: statusCode }
+    )
   }
 }
 
@@ -66,10 +73,14 @@ export async function POST(request: Request) {
       ])
 
     return NextResponse.json(data)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al crear área'
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al crear área' },
-      { status: 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -93,8 +104,15 @@ export async function PUT(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data)
-  } catch (error) {
-    return NextResponse.json({ error: 'Error al actualizar área' }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al actualizar área'
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: statusCode }
+    )
   }
 }
 
@@ -113,7 +131,14 @@ export async function DELETE(request: Request) {
     if (error) throw error
 
     return NextResponse.json({ message: 'Área eliminada exitosamente' })
-  } catch (error) {
-    return NextResponse.json({ error: 'Error al eliminar área' }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al eliminar área'
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: statusCode }
+    )
   }
 } 

@@ -38,10 +38,16 @@ export async function GET(request: Request) {
     if (error) throw error
 
     return NextResponse.json(positions)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al obtener posiciones'
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') 
+      ? 403 
+      : 500
     return NextResponse.json(
-      { error: error.message || 'Error al obtener posiciones' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -98,10 +104,16 @@ export async function POST(request: Request) {
       ])
 
     return NextResponse.json(data[0])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al crear posición'
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') 
+      ? 403 
+      : 500
     return NextResponse.json(
-      { error: error.message || 'Error al crear posición' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -155,10 +167,16 @@ export async function PUT(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data[0])
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al actualizar posición'
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') 
+      ? 403 
+      : 500
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar posición' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -202,10 +220,16 @@ export async function DELETE(request: Request) {
     if (error) throw error
 
     return NextResponse.json({ message: 'Posición eliminada exitosamente' })
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al eliminar posición'
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') 
+      ? 403 
+      : 500
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar posición' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

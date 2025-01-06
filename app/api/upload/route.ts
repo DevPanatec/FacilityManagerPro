@@ -28,11 +28,13 @@ export async function POST(request: Request) {
     return NextResponse.json({
       url: `/uploads/${fileName}`
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error uploading file:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Error uploading file';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: 'Error uploading file' },
-      { status: 500 }
+      { error: errorMessage },
+      { status: statusCode }
     );
   }
 } 

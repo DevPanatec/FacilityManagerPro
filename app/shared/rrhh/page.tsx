@@ -337,8 +337,9 @@ export default function RRHHPage() {
         // Actualizar el estado
         setAssignments(prev => [...prev, newAssignment])
       }
-    } catch (error) {
-      console.error('Error creating assignment:', error)
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error creating assignment';
+      console.error('Error creating assignment:', errorMessage);
     }
   }
 

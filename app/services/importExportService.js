@@ -1,9 +1,10 @@
-import { supabase } from '../lib/supabase'
+import { createClient } from '../utils/supabase/client'
 import { saveAs } from 'file-saver'
 import * as XLSX from 'xlsx'
 
 export const importExportService = {
   async exportToJson(organizationId) {
+    const supabase = createClient()
     const { data, error } = await supabase
       .rpc('export_organization_data', { org_id: organizationId })
     

@@ -1,7 +1,7 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { DashboardLayout } from '@/lib/types/dashboard'
+// import { DashboardLayout } from '@/lib/types/dashboard'
 
 // GET /api/dashboard/layouts - Obtener layouts
 export async function GET(request: Request) {
@@ -20,10 +20,18 @@ export async function GET(request: Request) {
     if (error) throw error
 
     return NextResponse.json(layouts)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : 'Error al obtener layouts'
+    
+    const status = error instanceof Error && error.message.includes('No autorizado') 
+      ? 403 
+      : 500
+
     return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -61,10 +69,12 @@ export async function POST(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al guardar layout';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

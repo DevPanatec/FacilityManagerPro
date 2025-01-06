@@ -76,8 +76,9 @@ export default function EnterpriseInventoryPage() {
           setItems(data);
           return;
         }
-      } catch (error) {
-        console.error('Error fetching inventory:', error);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+        console.error('Error fetching inventory:', errorMessage);
       }
 
       // Si no hay API o falla, usar localStorage como respaldo
@@ -86,8 +87,9 @@ export default function EnterpriseInventoryPage() {
         try {
           const parsedItems = JSON.parse(savedItems)
           setItems(parsedItems)
-        } catch (error) {
-          console.error('Error parsing saved items:', error)
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+          console.error('Error parsing saved items:', errorMessage)
           setItems([])
         }
       }
@@ -101,8 +103,9 @@ export default function EnterpriseInventoryPage() {
         try {
           const parsedItems = JSON.parse(e.newValue)
           setItems(parsedItems)
-        } catch (error) {
-          console.error('Error parsing updated items:', error)
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+          console.error('Error parsing updated items:', errorMessage)
         }
       }
     }

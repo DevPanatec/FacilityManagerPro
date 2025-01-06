@@ -13,11 +13,13 @@ export async function GET(request: NextRequest) {
     if (error) throw error
     
     return NextResponse.json(data)
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error fetching settings:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Error fetching settings';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: 'Error fetching settings' },
-      { status: 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -35,11 +37,13 @@ export async function POST(request: NextRequest) {
     if (error) throw error
     
     return NextResponse.json(data)
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error updating settings:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Error updating settings';
+    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
     return NextResponse.json(
-      { error: 'Error updating settings' },
-      { status: 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

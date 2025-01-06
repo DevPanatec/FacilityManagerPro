@@ -1,8 +1,9 @@
-import { supabase } from '../lib/supabase'
+import { createClient } from '../utils/supabase/client'
 
 export const organizationService = {
   // Obtener todas las organizaciones
   async getOrganizations() {
+    const supabase = createClient()
     const { data, error } = await supabase
       .from('organizations')
       .select(`

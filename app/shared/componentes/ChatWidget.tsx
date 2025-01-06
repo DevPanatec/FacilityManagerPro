@@ -306,8 +306,9 @@ export default function ChatWidget({
       setResponse('');
       setAttachment(null);
       setSelectedMessage(updatedMessage);
-    } catch (error) {
-      console.error('Error sending message:', error);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error al enviar el mensaje';
+      console.error('Error sending message:', errorMessage);
       alert('Error al enviar el mensaje. Por favor, intenta de nuevo.');
     }
   };
