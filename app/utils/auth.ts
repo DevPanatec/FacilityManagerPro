@@ -80,6 +80,13 @@ export function getRedirectPath(role: string): string {
 // Función para guardar la sesión en localStorage
 export function saveSession(user: User) {
   if (typeof window !== 'undefined') {
+    // Guardar datos individuales para compatibilidad con el navbar
+    localStorage.setItem('userRole', user.role)
+    localStorage.setItem('firstName', user.firstName)
+    localStorage.setItem('lastName', user.lastName)
+    localStorage.setItem('userEmail', user.email)
+    
+    // Guardar objeto completo del usuario
     localStorage.setItem('user', JSON.stringify({
       id: user.id,
       email: user.email,
@@ -102,6 +109,7 @@ export function getSession(): User | null {
 // Función para cerrar sesión
 export function logout() {
   if (typeof window !== 'undefined') {
-    localStorage.removeItem('user')
+    localStorage.clear()
+    sessionStorage.clear()
   }
 } 
