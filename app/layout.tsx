@@ -2,6 +2,7 @@ import './globals.css'
 import { Inter } from 'next/font/google'
 import { Providers } from './providers'
 import RealtimeManager from './components/RealtimeManager'
+import { AuthProvider } from './contexts/AuthContext'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -18,10 +19,12 @@ export default function RootLayout({
   return (
     <html lang="es" data-theme="light">
       <body className={inter.className}>
-        <Providers>
-          <RealtimeManager />
-          {children}
-        </Providers>
+        <AuthProvider>
+          <Providers>
+            <RealtimeManager />
+            {children}
+          </Providers>
+        </AuthProvider>
       </body>
     </html>
   )

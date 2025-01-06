@@ -1,66 +1,57 @@
-import { createServerClient } from '@supabase/ssr'
+import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
+  try {
+    const res = NextResponse.next()
+    const supabase = createMiddlewareClient({ req: request, res })
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
-        },
-        set(name: string, value: string, options: { path: string; maxAge: number }) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-        },
-        remove(name: string, options: { path: string }) {
-          request.cookies.delete(name)
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.delete(name)
-        },
-      },
+    // Refresh session if exists
+    const { data: { session }, error } = await supabase.auth.getSession()
+
+    if (error) {
+      console.error('Middleware session error:', error)
     }
-  )
 
-  await supabase.auth.getSession()
+    // Debug log
+    console.log('Middleware check:', {
+      path: request.nextUrl.pathname,
+      hasSession: !!session,
+      timestamp: new Date().toISOString()
+    })
 
-  return response
+    // Protected routes
+    if (
+      request.nextUrl.pathname.startsWith('/protected') ||
+      request.nextUrl.pathname.startsWith('/admin') ||
+      request.nextUrl.pathname.startsWith('/enterprise')
+    ) {
+      if (!session) {
+        return NextResponse.redirect(new URL('/auth/login', request.url))
+      }
+    }
+
+    // Redirect logged-in users away from auth pages
+    if (session && (
+      request.nextUrl.pathname.startsWith('/auth/login') ||
+      request.nextUrl.pathname.startsWith('/auth/register')
+    )) {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+
+    return res
+  } catch (error) {
+    console.error('Middleware error:', error)
+    return NextResponse.next()
+  }
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
-    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
-  ],
+    '/protected/:path*',
+    '/auth/:path*',
+    '/admin/:path*',
+    '/enterprise/:path*'
+  ]
 }

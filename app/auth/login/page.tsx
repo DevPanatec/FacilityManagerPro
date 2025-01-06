@@ -1,18 +1,12 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import Image from 'next/image'
+import { useState } from 'react'
 import { toast } from 'react-hot-toast'
+import Image from 'next/image'
 import { FaUser, FaLock } from 'react-icons/fa'
 import { login } from './actions'
 
-type UserData = {
-  role: string;
-}
-
 export default function LoginPage() {
-  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [formState, setFormState] = useState({
     email: '',
@@ -20,14 +14,14 @@ export default function LoginPage() {
     showPassword: false
   })
 
-  const handleSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
     toast.dismiss()
 
     try {
       if (!formState.email || !formState.password) {
-        toast.error('Por favor ingresa email y contraseña')
+        toast.error('Please enter both email and password')
         return
       }
 
@@ -35,37 +29,30 @@ export default function LoginPage() {
       formData.append('email', formState.email.trim().toLowerCase())
       formData.append('password', formState.password)
 
-      // Log authentication attempt (keeping your debug info)
-      console.log('Intentando autenticar:', { 
+      console.log('Attempting login with:', {
         email: formState.email.trim().toLowerCase(),
-        passwordLength: formState.password.length,
-        timestamp: new Date().toISOString(),
-        hasUpperCase: /[A-Z]/.test(formState.password),
-        hasLowerCase: /[a-z]/.test(formState.password),
-        hasNumbers: /\d/.test(formState.password),
-        hasSymbols: /[!@#$%^&*(),.?":{}|<>]/.test(formState.password)
+        timestamp: new Date().toISOString()
       })
 
       await login(formData)
-      toast.success('Iniciando sesión...')
-
-    } catch (error: unknown) {
-      console.error('Error de autenticación:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Error inesperado al iniciar sesión'
       
-      if (errorMessage.includes('Invalid login credentials')) {
-        toast.error('Email o contraseña incorrectos')
-      } else if (errorMessage.includes('Email not confirmed')) {
-        toast.error('Por favor confirma tu email antes de iniciar sesión')
+    } catch (error) {
+      console.error('Login error:', error)
+      
+      const message = error instanceof Error ? error.message : 'An unexpected error occurred'
+      
+      if (message.includes('Invalid login credentials')) {
+        toast.error('Invalid email or password')
+      } else if (message.includes('Email not confirmed')) {
+        toast.error('Please confirm your email before logging in')
       } else {
-        toast.error('Error inesperado al iniciar sesión')
+        toast.error('An error occurred during login')
       }
     } finally {
       setIsLoading(false)
     }
-  }, [formState])
+  }
 
-  // Keeping your original UI code exactly the same
   return (
     <div className="min-h-screen flex flex-col justify-between relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900">
       <div className="relative w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-2xl mx-auto my-4 md:my-8 px-4">
@@ -99,6 +86,7 @@ export default function LoginPage() {
                   className="w-full pl-10 md:pl-12 pr-4 py-2.5 md:py-3 lg:py-4 border border-gray-200 rounded-xl text-sm md:text-base lg:text-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200/50"
                   placeholder="Ingresa tu correo"
                   required
+                  disabled={isLoading}
                 />
               </div>
 
@@ -111,11 +99,13 @@ export default function LoginPage() {
                   className="w-full pl-10 md:pl-12 pr-24 py-2.5 md:py-3 lg:py-4 border border-gray-200 rounded-xl text-sm md:text-base lg:text-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200/50"
                   placeholder="Ingresa tu contraseña"
                   required
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
                   onClick={() => setFormState(prev => ({ ...prev, showPassword: !prev.showPassword }))}
                   className="absolute right-3 md:right-4 top-1/2 -translate-y-1/2 text-blue-600 text-sm md:text-base font-medium"
+                  disabled={isLoading}
                 >
                   {formState.showPassword ? "Ocultar" : "Mostrar"}
                 </button>
@@ -123,8 +113,8 @@ export default function LoginPage() {
 
               <button
                 type="submit"
+                className={`w-full py-2.5 md:py-3 lg:py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm md:text-base lg:text-lg font-medium transition-colors duration-200 ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                 disabled={isLoading}
-                className={`w-full py-3 md:py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm md:text-base lg:text-lg font-medium transition-colors ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
                 {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
               </button>

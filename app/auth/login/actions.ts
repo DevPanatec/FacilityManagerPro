@@ -5,41 +5,41 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 
 export async function login(formData: FormData) {
-  const supabase = await createClient()
+  try {
+    const supabase = await createClient()
 
-  // type-casting here for convenience
-  // in practice, you should validate your inputs
-  const data = {
-    email: formData.get('email') as string,
-    password: formData.get('password') as string,
+    const email = formData.get('email') as string
+    const password = formData.get('password') as string
+
+    const { data: { session }, error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    })
+
+    if (error) {
+      throw error
+    }
+
+    if (!session) {
+      throw new Error('Authentication failed')
+    }
+
+    // Get user role from metadata
+    const role = session.user.user_metadata.role || 'usuario'
+    
+    // Determine redirect path based on role
+    let targetPath = '/user/dashboard'
+    if (role === 'admin' || role === 'superadmin') {
+      targetPath = '/admin/dashboard'
+    } else if (role === 'enterprise') {
+      targetPath = '/enterprise/dashboard'
+    }
+
+    revalidatePath('/', 'layout')
+    redirect(targetPath)
+    
+  } catch (error) {
+    console.error('Login error:', error)
+    throw error
   }
-
-  const { data: { session }, error } = await supabase.auth.signInWithPassword(data)
-
-  if (error) {
-    throw new Error('Email o contraseña incorrectos')
-  }
-
-  if (!session?.user) {
-    throw new Error('No se pudo obtener la información del usuario')
-  }
-
-  // Get user role for routing
-  const { data: userData } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', session.user.id)
-    .single()
-
-  const role = userData?.role || 'usuario'
-  let targetPath = '/user/usuario'
-  
-  if (role === 'admin' || role === 'superadmin') {
-    targetPath = '/admin/dashboard'
-  } else if (role === 'enterprise') {
-    targetPath = '/enterprise/dashboard'
-  }
-
-  revalidatePath('/', 'layout')
-  redirect(targetPath)
 }
