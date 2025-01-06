@@ -27,8 +27,9 @@ const NAV_ITEMS = {
     { label: 'Panel Principal', href: '/enterprise/dashboard' },
     { label: 'Calendario', href: '/shared/schedule' },
     { label: 'Recursos Humanos', href: '/shared/rrhh' },
-    { label: 'Inventario', href: '/shared/inventory' },
-    { label: 'Centro de Datos', href: '/enterprise/data-hub' }
+    { label: 'Inventario', href: '/enterprise/inventory' },
+    { label: 'Centro de Datos', href: '/enterprise/data-hub' },
+    { label: 'Datos Externos', href: '/enterprise/external-data' }
   ],
   superadmin: [
     { label: 'Panel Principal', href: '/admin/dashboard' },
@@ -43,14 +44,14 @@ const NAV_ITEMS = {
 export default function Navbar({ isEnterprise = false }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [userRole, setUserRole] = useState('')
+  const [userRole, setUserRole] = useState(isEnterprise ? 'enterprise' : 'admin')
   const [userName, setUserName] = useState('')
 
   useEffect(() => {
-    // Obtener datos del usuario del localStorage
-    const storedRole = localStorage.getItem('userRole')
-    const firstName = localStorage.getItem('firstName')
-    const lastName = localStorage.getItem('lastName')
+    // Obtener datos del usuario del localStorage o sessionStorage
+    const storedRole = localStorage.getItem('userRole') || sessionStorage.getItem('userRole')
+    const firstName = localStorage.getItem('firstName') || sessionStorage.getItem('firstName')
+    const lastName = localStorage.getItem('lastName') || sessionStorage.getItem('lastName')
     
     if (storedRole) {
       setUserRole(storedRole)
@@ -58,13 +59,15 @@ export default function Navbar({ isEnterprise = false }) {
     if (firstName && lastName) {
       setUserName(`${firstName} ${lastName}`)
     }
-  }, [])
+  }, [isEnterprise])
 
-  const navItems = NAV_ITEMS[userRole] || []
+  // Usar las rutas según el rol, con fallback a admin si no hay rol
+  const navItems = NAV_ITEMS[userRole] || NAV_ITEMS.admin
 
   const handleLogout = async () => {
-    // Limpiar localStorage
+    // Limpiar storage
     localStorage.clear()
+    sessionStorage.clear()
     // Redirigir a login
     router.push('/auth/login')
   }
