@@ -1,8 +1,20 @@
+export type ReportData = {
+  metrics: {
+    [key: string]: number | string | boolean
+  }
+  summary?: {
+    [key: string]: string | number
+  }
+  details?: Array<{
+    [key: string]: string | number | boolean | null
+  }>
+}
+
 export type ReportType = {
   id: string
   title: string
   description?: string
-  data: any
+  data: ReportData
   created_by: string
   created_at: string
   updated_at: string
@@ -40,6 +52,6 @@ export type NotificationPreference = {
 
 export type ExportOptions = {
   format: ExportFormat
-  filters?: Record<string, any>
+  filters?: Record<string, string | number | boolean | null>
   columns?: string[]
 } 
