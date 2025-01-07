@@ -1,53 +1,38 @@
-import { createClient } from '@supabase/supabase-js'
+import { createRouteHandlerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const email = searchParams.get('email')
+    const supabase = createRouteHandlerClient({ cookies })
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+    // Intentar login con las credenciales de prueba
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: 'test@pm.e',
+      password: '1234'
+    })
 
-    // Test the connection and check for specific user
-    const { data: authUser, error: authError } = await supabase
-      .from('auth.users')
-      .select('*')
-      .eq('email', email)
-      .single()
-
-    if (authError) {
-      console.error('Auth user check error:', authError)
-    }
-
-    // Also check the users table
+    // Verificar el usuario en la tabla users
     const { data: userData, error: userError } = await supabase
       .from('users')
-      .select('*')
-      .eq('email', email)
+      .select('id, email, role')
+      .eq('email', 'test@pm.e')
       .single()
 
-    if (userError) {
-      console.error('User data check error:', userError)
-    }
-
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Supabase connection successful',
-      timestamp: new Date().toISOString(),
-      authUser,
-      userData
+    return NextResponse.json({
+      auth: {
+        success: !authError,
+        session: authData?.session ? true : false,
+        error: authError?.message
+      },
+      user: {
+        exists: !!userData,
+        role: userData?.role,
+        error: userError?.message
+      }
     })
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error occurred';
-    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
-    
-    console.error('Unexpected error testing Supabase connection:', errorMessage);
-    return NextResponse.json({ 
-      success: false,
-      message: errorMessage
-    }, { status: statusCode })
+  } catch (error) {
+    console.error('Test error:', error)
+    return NextResponse.json({ error: 'Test failed' }, { status: 500 })
   }
 } 

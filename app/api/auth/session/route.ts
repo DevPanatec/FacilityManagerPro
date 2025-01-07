@@ -1,70 +1,108 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '../../../utils/supabase/server'
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 
-export async function GET(request: Request) {
+export const dynamic = 'force-dynamic'
+
+export async function GET() {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    // Obtener sesión actual
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    
-    if (sessionError) throw sessionError
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+
+    if (error) {
+      throw error
+    }
+
+    if (!session) {
+      return NextResponse.json({ 
+        authenticated: false 
+      })
+    }
+
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('role, status, first_name, last_name, avatar_url, hospital_id')
+      .eq('id', session.user.id)
+      .single()
+
+    if (userError) {
+      throw userError
+    }
+
+    return NextResponse.json({
+      authenticated: true,
+      session: {
+        user: {
+          ...session.user,
+          ...userData
+        },
+        expires_at: session.expires_at
+      }
+    })
+
+  } catch (error) {
+    console.error('Session error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST() {
+  try {
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
+
+    if (error) {
+      throw error
+    }
 
     if (!session) {
       return NextResponse.json(
-        { authenticated: false },
+        { error: 'No active session' },
         { status: 401 }
       )
     }
 
-    // Obtener información del usuario
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select(`
-        *,
-        hospital:hospital_id (
-          id,
-          name
-        )
-      `)
-      .eq('id', session.user.id)
-      .single()
+    // Refresh the session
+    const { data: refreshedSession, error: refreshError } = 
+      await supabase.auth.refreshSession()
 
-    if (userError) throw userError
+    if (refreshError) {
+      throw refreshError
+    }
 
-    // Registrar actividad
-    await supabase
-      .from('activity_logs')
-      .insert([
-        {
-          user_id: session.user.id,
-          action: 'session_check',
-          description: 'User session verified',
-          metadata: {
-            ip: request.headers.get('x-forwarded-for'),
-            userAgent: request.headers.get('user-agent'),
-            timestamp: new Date().toISOString()
-          }
-        }
-      ])
+    // Update cookies with new tokens
+    const cookieStore = cookies()
+    if (refreshedSession.session?.access_token) {
+      cookieStore.set('sb-token', refreshedSession.session.access_token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7 // 1 week
+      })
+    }
+    if (refreshedSession.session?.refresh_token) {
+      cookieStore.set('sb-refresh-token', refreshedSession.session.refresh_token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 30 // 30 days
+      })
+    }
 
     return NextResponse.json({
-      authenticated: true,
-      user: {
-        ...session.user,
-        ...userData,
-        session: {
-          access_token: session.access_token,
-          expires_at: session.expires_at
-        }
-      }
+      session: refreshedSession.session
     })
-  } catch (error: any) {
-    console.error('Error en /api/auth/session:', error);
+
+  } catch (error) {
+    console.error('Session refresh error:', error)
     return NextResponse.json(
-      { error: error.message },
-      { status: error.status || 500 }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 } 

@@ -1,45 +1,38 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { createClient } from '@/app/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { createClient } from '@/utils/supabase/server'
+import { loginSchema } from '@/lib/validations/auth'
+import { AuthError } from '@/types/auth'
 
 export async function login(formData: FormData) {
-  const supabase = await createClient()
+  try {
+    // Validar datos
+    const validatedFields = loginSchema.safeParse({
+      email: formData.get('email'),
+      password: formData.get('password'),
+    })
 
-  // type-casting here for convenience
-  // in practice, you should validate your inputs
-  const data = {
-    email: formData.get('email') as string,
-    password: formData.get('password') as string,
+    if (!validatedFields.success) {
+      return { error: validatedFields.error.errors[0].message }
+    }
+
+    const { email, password } = validatedFields.data
+    const supabase = createClient()
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      return { error: error.message }
+    }
+
+    redirect('/protected')
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : 'Error desconocido'
+    } as AuthError
   }
-
-  const { data: { session }, error } = await supabase.auth.signInWithPassword(data)
-
-  if (error) {
-    throw new Error('Email o contraseña incorrectos')
-  }
-
-  if (!session?.user) {
-    throw new Error('No se pudo obtener la información del usuario')
-  }
-
-  // Get user role for routing
-  const { data: userData } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', session.user.id)
-    .single()
-
-  const role = userData?.role || 'usuario'
-  let targetPath = '/user/usuario'
-  
-  if (role === 'admin' || role === 'superadmin') {
-    targetPath = '/admin/dashboard'
-  } else if (role === 'enterprise') {
-    targetPath = '/enterprise/dashboard'
-  }
-
-  revalidatePath('/', 'layout')
-  redirect(targetPath)
 }

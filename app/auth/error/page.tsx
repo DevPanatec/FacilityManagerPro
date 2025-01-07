@@ -1,23 +1,32 @@
-export default function AuthErrorPage() {
+'use client'
+
+import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+
+export default function ErrorPage() {
+  const searchParams = useSearchParams()
+  const error = searchParams.get('error')
+  const returnTo = searchParams.get('returnTo')
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Error de Autenticación
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Ha ocurrido un error durante el proceso de autenticación. Por favor, intenta nuevamente.
-          </p>
-          <div className="mt-5 text-center">
-            <a
-              href="/auth/login"
-              className="font-medium text-indigo-600 hover:text-indigo-500"
-            >
-              Volver al inicio de sesión
-            </a>
-          </div>
-        </div>
+    <div className="p-8">
+      <h1 className="text-2xl font-bold mb-4">Error de Autenticación</h1>
+      <p className="text-red-500 mb-4">{error || 'Ha ocurrido un error inesperado'}</p>
+      <div className="flex gap-4">
+        <Link 
+          href="/auth/login"
+          className="text-blue-500 hover:underline"
+        >
+          Volver al login
+        </Link>
+        {returnTo && (
+          <Link 
+            href={decodeURIComponent(returnTo)}
+            className="text-blue-500 hover:underline"
+          >
+            Volver a la página anterior
+          </Link>
+        )}
       </div>
     </div>
   )

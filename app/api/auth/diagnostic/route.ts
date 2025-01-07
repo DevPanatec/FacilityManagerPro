@@ -1,46 +1,60 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/app/utils/supabase/server'
 import { NextResponse } from 'next/server'
+import { headers } from 'next/headers'
+import { getRateLimit } from '@/utils/rate-limit'
+
+export const runtime = 'edge'
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url)
-    const email = searchParams.get('email')
+    // Rate limiting
+    const ip = headers().get('x-forwarded-for') ?? 'unknown'
+    const rateLimit = await getRateLimit(ip)
     
-    if (!email) {
-      return NextResponse.json({ error: 'Email required' }, { status: 400 })
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ 
+        error: 'Too Many Requests' 
+      }, { 
+        status: 429,
+        headers: {
+          'Retry-After': `${Math.ceil((rateLimit.reset - Date.now()) / 1000)}`,
+          'X-RateLimit-Limit': '100',
+          'X-RateLimit-Remaining': `${rateLimit.remaining}`,
+          'X-RateLimit-Reset': `${rateLimit.reset}`
+        }
+      })
     }
 
-    const supabase = createRouteHandlerClient({ cookies })
-
-    // Check auth user first
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
-
-    // Check users table
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id, email, role')
-      .eq('email', email)
-      .single()
+    const supabase = createClient()
+    
+    const [sessionResponse, databaseResponse] = await Promise.all([
+      supabase.auth.getSession(),
+      supabase.from('users').select('count').single()
+    ])
 
     return NextResponse.json({
-      authUser: {
-        exists: !!authUser,
-        id: authUser?.id,
-        email: authUser?.email,
-        error: authError?.message
+      status: 'ok',
+      auth: {
+        session: sessionResponse.data.session ? 'active' : 'none',
+        error: sessionResponse.error?.message,
+        provider: sessionResponse.data.session?.user?.app_metadata?.provider
       },
-      userData: {
-        exists: !!userData,
-        id: userData?.id,
-        email: userData?.email,
-        role: userData?.role,
-        error: userError?.message
+      database: {
+        connected: !databaseResponse.error,
+        error: databaseResponse.error?.message
       },
-      consistent: authUser?.id === userData?.id
+      rateLimit: {
+        remaining: rateLimit.remaining,
+        reset: rateLimit.reset
+      },
+      timestamp: new Date().toISOString()
     })
   } catch (error) {
     console.error('Diagnostic error:', error)
-    return NextResponse.json({ error: 'Diagnostic failed' }, { status: 500 })
+    return NextResponse.json({
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    }, { status: 500 })
   }
 } 
