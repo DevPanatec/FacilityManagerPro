@@ -39,3 +39,9 @@ next-env.d.ts
 
 # Backup folders
 FacilityManagerPro-*/
+
+# Asegurarse que estos estén incluidos
+.next
+node_modules
+*.js
+!next.config.js

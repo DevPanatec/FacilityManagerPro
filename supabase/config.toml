@@ -2,7 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "FacilityManagerPro-main"
+project_id = "FacilityManagerPro"
 
 [api]
 enabled = true
@@ -31,7 +31,7 @@ shadow_port = 54320
 major_version = 15
 
 [db.pooler]
-enabled = false
+enabled = true
 # Port to use for the local connection pooler.
 port = 54329
 # Specifies when a server connection can be reused by other clients.
@@ -51,10 +51,47 @@ sql_paths = ['./seed.sql']
 
 [realtime]
 enabled = true
-# Bind realtime via either IPv4 or IPv6. (default: IPv4)
-# ip_version = "IPv6"
-# The maximum length in bytes of HTTP request headers. (default: 4096)
-# max_header_length = 4096
+max_subscription_connection = 100
+pool_size = 100
+enable_logging = true
+
+[realtime.presence]
+enabled = true
+broadcast_interval = 1000
+
+# Configuración de canales específicos
+[realtime.channels]
+"hospital_metrics:*" = { read = true, write = false }
+"activity_logs:*" = { read = true, write = false }
+"notifications:*" = { read = true, write = false }
+
+# Configuración de broadcast
+[realtime.broadcast]
+enabled = true
+pool_size = 5
+max_payload_size = "256KB"
+
+# Configuración de métricas
+[metrics]
+enabled = true
+report_interval = 10
+
+# Configuración de logging
+[log]
+level = "warn"
+format = "json"
+
+# Configuración de performance
+[performance]
+max_rows = 1000
+timeout = 10
+statement_timeout = 60000  # 60 segundos
+
+# Configuración de cache
+[cache]
+enabled = true
+ttl = 3600  # 1 hora
+max_size = "100MB"
 
 [studio]
 enabled = true
@@ -87,11 +124,10 @@ file_size_limit = "50MiB"
 # enabled = true
 
 # Uncomment to configure local storage buckets
-# [storage.buckets.images]
-# public = false
-# file_size_limit = "50MiB"
-# allowed_mime_types = ["image/png", "image/jpeg"]
-# objects_path = "./images"
+[storage.buckets.avatars]
+public = false
+file_size_limit = "5MiB"
+allowed_mime_types = ["image/png", "image/jpeg", "image/gif"]
 
 [auth]
 enabled = true
@@ -103,8 +139,7 @@ additional_redirect_urls = [
   "https://gestionhbc.com/auth/callback",
   "https://gestionhbc.com/auth/reset-password",
   "http://localhost:3000/auth/callback",
-  "http://localhost:3000/auth/reset-password",
-  "https://gestionhbc.com/auth/login"
+  "http://localhost:3000/auth/reset-password"
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
@@ -120,10 +155,10 @@ enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
 enable_manual_linking = false
 # Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
-minimum_password_length = 8
+minimum_password_length = 12
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
-password_requirements = "lower_upper_letters_digits"
+password_requirements = "lower_upper_letters_digits_symbols"
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.
@@ -132,7 +167,7 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = true
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
@@ -300,4 +335,21 @@ content_path = ""
 [functions]
 [functions.deploy]
 runtime = "deno"
+
+# Database Functions para notificaciones
+[functions.notify]
+verify_jwt = true
+schema = "public"
+name = "handle_notification"
+
+# Configuración de Cache
+[cache]
+enabled = true
+max_age = 3600
+
+# Configuración de Rate Limiting
+[rate_limiting]
+enabled = true
+points = 100
+duration = 60
 

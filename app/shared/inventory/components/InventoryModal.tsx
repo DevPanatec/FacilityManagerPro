@@ -1,10 +1,34 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 
+interface InventoryFormData {
+  name: string
+  category: string
+  quantity: number
+  unit: string
+  minStock: number
+  location: string
+  estimatedDuration: number
+}
+
+interface UsageFormData {
+  quantity: number
+  date: string
+  user: string
+}
+
+interface RestockFormData {
+  quantity: number
+  date: string
+  supplier: string
+}
+
+type ModalFormData = InventoryFormData | UsageFormData | RestockFormData
+
 interface InventoryModalProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (data: any) => void
+  onSubmit: (data: ModalFormData) => void
   item?: InventoryItem
   mode: 'edit' | 'usage' | 'restock'
 }
@@ -37,16 +61,6 @@ interface RestockRecord {
   quantity: number
   date: string
   supplier: string
-}
-
-interface InventoryFormData {
-  name: string
-  category: string
-  quantity: number
-  unit: string
-  minStock: number
-  location: string
-  estimatedDuration: number
 }
 
 interface HistoryProps {

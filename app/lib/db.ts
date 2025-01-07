@@ -1,4 +1,23 @@
 import { createClient } from '../utils/supabase/client';
+import { PostgrestError } from '@supabase/supabase-js';
+
+interface DatabaseError extends Error {
+  code?: string;
+  details?: string;
+  hint?: string;
+  message: string;
+}
+
+const handleDatabaseError = (error: unknown): never => {
+  const dbError = error as DatabaseError;
+  console.error('Database operation failed:', {
+    message: dbError.message,
+    code: dbError.code,
+    details: dbError.details,
+    hint: dbError.hint
+  });
+  throw error;
+};
 
 export async function getInventoryItems() {
   try {
@@ -10,10 +29,8 @@ export async function getInventoryItems() {
 
     if (error) throw error;
     return data;
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error occurred';
-    console.error('Error getting inventory items:', errorMessage);
-    throw error;
+  } catch (error) {
+    handleDatabaseError(error);
   }
 }
 
@@ -23,17 +40,21 @@ export async function addInventoryItem(name: string, quantity: number, minQuanti
     const { data, error } = await supabase
       .from('inventory')
       .insert([
-        { name, quantity, min_quantity: minQuantity }
+        { 
+          name, 
+          quantity, 
+          min_quantity: minQuantity,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
       ])
       .select()
       .single();
 
     if (error) throw error;
     return data;
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error occurred';
-    console.error('Error adding inventory item:', errorMessage);
-    throw error;
+  } catch (error) {
+    handleDatabaseError(error);
   }
 }
 
@@ -44,7 +65,7 @@ export async function updateInventoryItem(id: number, quantity: number) {
       .from('inventory')
       .update({ 
         quantity,
-        last_updated: new Date().toISOString()
+        updated_at: new Date().toISOString()
       })
       .eq('id', id)
       .select()
@@ -52,9 +73,7 @@ export async function updateInventoryItem(id: number, quantity: number) {
 
     if (error) throw error;
     return data;
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error occurred';
-    console.error('Error updating inventory item:', errorMessage);
-    throw error;
+  } catch (error) {
+    handleDatabaseError(error);
   }
 } 

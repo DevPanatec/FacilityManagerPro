@@ -3,20 +3,29 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '../../utils/supabase/client';
 import CreateSuperAdminForm from './createSuperAdmin';
-import { toast } from 'react-hot-toast';
+import { Session } from '@supabase/supabase-js';
 
-export default function SuperAdminPage() {
-    const [session, setSession] = useState(null);
-    const [loading, setLoading] = useState(true);
+interface SuperAdminPageProps {}
+
+const SuperAdminPage: React.FC<SuperAdminPageProps> = () => {
+    const [session, setSession] = useState<Session | null>(null);
+    const [loading, setLoading] = useState<boolean>(true);
+    const supabase = createClient();
 
     useEffect(() => {
-        // Verificar la sesión actual
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            setLoading(false);
-        });
+        const checkSession = async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                setSession(session);
+            } catch (error) {
+                console.error('Error checking session:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
 
-        // Escuchar cambios en la autenticación
+        checkSession();
+
         const {
             data: { subscription },
         } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -34,7 +43,6 @@ export default function SuperAdminPage() {
         );
     }
 
-    // Verificar si el usuario es superadmin
     const isSuperAdmin = session?.user?.user_metadata?.role === 'superadmin';
 
     if (!session || !isSuperAdmin) {
@@ -69,4 +77,6 @@ export default function SuperAdminPage() {
             </div>
         </div>
     );
-} 
+};
+
+export default SuperAdminPage; 

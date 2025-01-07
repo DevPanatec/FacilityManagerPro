@@ -1,11 +1,18 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+interface AuthError extends Error {
+  status?: number;
+  code?: string;
+}
+
 export async function updateSession(request: NextRequest) {
   try {
-    let response = NextResponse.next({
+    // Create a response object that we can return
+    const requestHeaders = new Headers(request.headers)
+    const response = NextResponse.next({
       request: {
-        headers: request.headers,
+        headers: requestHeaders,
       },
     })
 
@@ -24,31 +31,57 @@ export async function updateSession(request: NextRequest) {
               ...options,
               sameSite: 'lax',
               secure: process.env.NODE_ENV === 'production',
+              path: '/'
             })
           },
           remove(name, options) {
             response.cookies.delete({
               name,
               ...options,
-              sameSite: 'lax',
-              secure: process.env.NODE_ENV === 'production',
+              path: '/'
             })
           },
         },
+        global: {
+          headers: {
+            'x-application-name': 'facility-manager-pro'
+          }
+        }
       }
     )
 
-    const { data: { session }, error } = await supabase.auth.getSession()
+    // Refresh the session if it exists
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError) {
+      console.error('Session error:', sessionError)
+      // Clear invalid session
+      response.cookies.delete('sb-access-token')
+      response.cookies.delete('sb-refresh-token')
+      return response
+    }
 
-    console.log('Middleware session check:', {
-      hasSession: !!session,
-      path: request.nextUrl.pathname,
-      error: error?.message,
-    })
+    // If we have a session, check if it needs refresh
+    if (session) {
+      const { data: { user }, error: refreshError } = await supabase.auth.getUser()
+      
+      if (refreshError || !user) {
+        console.error('User validation error:', refreshError)
+        response.cookies.delete('sb-access-token')
+        response.cookies.delete('sb-refresh-token')
+      }
+    }
 
     return response
   } catch (error) {
-    console.error('Middleware error:', error)
+    const authError = error as AuthError
+    console.error('Middleware error:', {
+      message: authError.message,
+      status: authError.status,
+      code: authError.code
+    })
+    
+    // En caso de error, devolver una respuesta limpia
     return NextResponse.next({
       request: {
         headers: request.headers,

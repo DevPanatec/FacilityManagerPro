@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createRouteHandlerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 export async function handleWebhook(payload: any) {
