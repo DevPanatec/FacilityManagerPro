@@ -21,6 +21,18 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@/app/*": [
+        "./app/*"
+      ],
+      "@/services/*": [
+        "./app/services/*"
+      ],
+      "@/utils/*": [
+        "./app/utils/*"
+      ],
+      "@/components/*": [
+        "./app/components/*"
       ]
     },
     "plugins": [

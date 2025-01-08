@@ -1,45 +1,44 @@
+import { createClient } from '@/app/config/supabaseServer'
 import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import type { Database } from '@/types/supabase'
 
-export async function GET(request: NextRequest) {
+type Contingency = Database['public']['Tables']['contingencies']['Row']
+type NewContingency = Database['public']['Tables']['contingencies']['Insert']
+
+export async function GET() {
+  const supabase = createClient()
+
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data, error } = await supabase
+    const { data: contingencies, error } = await supabase
       .from('contingencies')
       .select('*')
-    
+      .order('created_at', { ascending: false }) as { data: Contingency[] | null, error: any }
+
     if (error) throw error
-    
-    return NextResponse.json(data)
+
+    return NextResponse.json(contingencies)
   } catch (error) {
-    console.error('Error fetching contingencies:', error)
-    return NextResponse.json(
-      { error: 'Error fetching contingencies' },
-      { status: 500 }
-    )
+    console.error('Error:', error)
+    return NextResponse.json({ error: 'Error fetching contingencies' }, { status: 500 })
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
+  const supabase = createClient()
+  const data = await request.json() as NewContingency
+
   try {
-    const body = await request.json()
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    const { data, error } = await supabase
+    const { data: newContingency, error } = await supabase
       .from('contingencies')
-      .insert(body)
+      .insert([data])
       .select()
-    
+      .single() as { data: Contingency | null, error: any }
+
     if (error) throw error
-    
-    return NextResponse.json(data)
+
+    return NextResponse.json(newContingency)
   } catch (error) {
-    console.error('Error creating contingency:', error)
-    return NextResponse.json(
-      { error: 'Error creating contingency' },
-      { status: 500 }
-    )
+    console.error('Error:', error)
+    return NextResponse.json({ error: 'Error creating contingency' }, { status: 500 })
   }
 } 

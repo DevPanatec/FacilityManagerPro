@@ -1,175 +1,69 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { createClient } from '@/app/config/supabaseServer'
 
-// GET /api/attendance - Obtener registros de asistencia
 export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const { searchParams } = new URL(request.url)
-    const employeeId = searchParams.get('employeeId')
-    const startDate = searchParams.get('startDate')
-    const endDate = searchParams.get('endDate')
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const userId = searchParams.get('userId')
 
-    let query = supabase
-      .from('attendance_records')
-      .select(`
-        *,
-        employee:employee_records!attendance_records_employee_id_fkey (
-          id,
-          first_name,
-          last_name,
-          position,
-          department_id
-        )
-      `)
-      .order('check_in', { ascending: false })
-
-    // Aplicar filtros
-    if (employeeId) {
-      query = query.eq('employee_id', employeeId)
-    }
-    if (startDate) {
-      query = query.gte('check_in', startDate)
-    }
-    if (endDate) {
-      query = query.lte('check_in', endDate)
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Se requiere el ID del usuario' },
+        { status: 400 }
+      )
     }
 
-    const { data: attendance, error } = await query
+    const { data, error } = await supabase
+      .from('attendance')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
 
     if (error) throw error
 
-    return NextResponse.json(attendance)
+    return NextResponse.json(data)
   } catch (error) {
+    console.error('Error al obtener asistencias:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al obtener registros de asistencia' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al obtener asistencias' },
+      { status: 500 }
     )
   }
 }
 
-// POST /api/attendance - Registrar asistencia
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const body = await request.json()
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const supabase = createClient()
+    const { userId, type, location } = await request.json()
 
-    // Verificar si ya existe un registro para hoy
-    const today = new Date().toISOString().split('T')[0]
-    const { data: existingRecord } = await supabase
-      .from('attendance_records')
-      .select('id')
-      .eq('employee_id', body.employee_id || user.id)
-      .gte('check_in', today)
-      .lte('check_in', today + 'T23:59:59')
-      .maybeSingle()
-
-    if (existingRecord) {
-      throw new Error('Ya existe un registro de asistencia para hoy')
-    }
-
-    // Crear registro de asistencia
-    const { data, error } = await supabase
-      .from('attendance_records')
-      .insert([
-        {
-          employee_id: body.employee_id || user.id,
-          check_in: body.check_in || new Date().toISOString(),
-          check_out: body.check_out,
-          location_data: body.location_data || null
-        }
-      ])
-      .select(`
-        *,
-        employee:employee_records!attendance_records_employee_id_fkey (
-          first_name,
-          last_name
-        )
-      `)
-
-    if (error) throw error
-
-    // Registrar en activity_logs
-    await supabase
-      .from('activity_logs')
-      .insert([
-        {
-          user_id: user.id,
-          action: 'create_attendance',
-          description: `Attendance check-in recorded`
-        }
-      ])
-
-    return NextResponse.json(data[0])
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al registrar asistencia' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
-  }
-}
-
-// PUT /api/attendance/[id] - Actualizar registro de asistencia (check-out)
-export async function PUT(request: Request) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const body = await request.json()
-
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
-
-    // Verificar que es el registro del usuario
-    const { data: attendance } = await supabase
-      .from('attendance_records')
-      .select('*')
-      .eq('id', body.id)
-      .single()
-
-    if (!attendance) {
-      throw new Error('Registro no encontrado')
-    }
-
-    // Verificar que el registro es del usuario o tiene permisos
-    const { data: employee } = await supabase
-      .from('employee_records')
-      .select('user_id')
-      .eq('id', attendance.employee_id)
-      .single()
-
-    if (!employee || employee.user_id !== user.id) {
-      throw new Error('No autorizado para actualizar este registro')
+    if (!userId || !type || !location) {
+      return NextResponse.json(
+        { error: 'Se requieren todos los campos' },
+        { status: 400 }
+      )
     }
 
     const { data, error } = await supabase
-      .from('attendance_records')
-      .update({
-        check_out: body.check_out || new Date().toISOString(),
-        location_data: {
-          ...(attendance.location_data || {}),
-          ...(body.location_data || {})
-        },
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', body.id)
+      .from('attendance')
+      .insert([
+        {
+          user_id: userId,
+          type,
+          location
+        }
+      ])
       .select()
+      .single()
 
     if (error) throw error
 
-    return NextResponse.json(data[0])
+    return NextResponse.json(data)
   } catch (error) {
+    console.error('Error al registrar asistencia:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar registro de asistencia' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al registrar asistencia' },
+      { status: 500 }
     )
   }
 } 

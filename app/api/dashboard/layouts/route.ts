@@ -1,70 +1,66 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/app/config/supabaseServer'
 import { NextResponse } from 'next/server'
-import { DashboardLayout } from '@/lib/types/dashboard'
 
-// GET /api/dashboard/layouts - Obtener layouts
-export async function GET(request: Request) {
+export async function GET() {
+  const supabase = createClient()
+
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
-
-    const { data: layouts, error } = await supabase
-      .from('dashboard_layouts')
+    // Obtener estadísticas de tareas
+    const { data: taskStats, error: taskError } = await supabase
+      .from('task_statistics')
       .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
-
-    return NextResponse.json(layouts)
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
-  }
-}
-
-// POST /api/dashboard/layouts - Guardar layout
-export async function POST(request: Request) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
-
-    const body = await request.json()
-    const { layout, name, is_default } = body
-
-    // Si es default, quitar default de otros layouts
-    if (is_default) {
-      await supabase
-        .from('dashboard_layouts')
-        .update({ is_default: false })
-        .eq('user_id', user.id)
-    }
-
-    const { data, error } = await supabase
-      .from('dashboard_layouts')
-      .insert({
-        user_id: user.id,
-        name,
-        layout,
-        is_default
-      })
-      .select()
       .single()
 
-    if (error) throw error
+    if (taskError) throw taskError
 
-    return NextResponse.json(data)
+    // Obtener estadísticas de turnos
+    const { data: shiftStats, error: shiftError } = await supabase
+      .from('work_shift_statistics')
+      .select('*')
+      .single()
+
+    if (shiftError) throw shiftError
+
+    // Obtener estadísticas de inventario
+    const { data: inventoryStats, error: inventoryError } = await supabase
+      .from('inventory_statistics')
+      .select('*')
+      .single()
+
+    if (inventoryError) throw inventoryError
+
+    // Estructurar el layout por defecto
+    const defaultLayout = {
+      id: 'default',
+      name: 'Default Layout',
+      widgets: [
+        {
+          id: 'task-overview',
+          type: 'task-stats',
+          title: 'Resumen de Tareas',
+          data: taskStats,
+          position: { x: 0, y: 0, w: 6, h: 4 }
+        },
+        {
+          id: 'shift-overview',
+          type: 'shift-stats',
+          title: 'Resumen de Turnos',
+          data: shiftStats,
+          position: { x: 6, y: 0, w: 6, h: 4 }
+        },
+        {
+          id: 'inventory-overview',
+          type: 'inventory-stats',
+          title: 'Resumen de Inventario',
+          data: inventoryStats,
+          position: { x: 0, y: 4, w: 12, h: 4 }
+        }
+      ]
+    }
+
+    return NextResponse.json([defaultLayout])
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    console.error('Error:', error)
+    return NextResponse.json({ error: 'Error fetching layout data' }, { status: 500 })
   }
 } 

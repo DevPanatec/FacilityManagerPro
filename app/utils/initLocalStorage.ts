@@ -1,51 +1,25 @@
-import { areasData } from '../mocks/areasData';
+export const initLocalStorage = () => {
+  if (typeof window === 'undefined') return;
 
-export type Area = {
-  id: number;
-  nombre: string;
-  color: string;
-  tareas: Tarea[];
-};
-
-export type Tarea = {
-  id: number;
-  descripcion: string;
-  prioridad: string;
-  estado: string;
-};
-
-export const getAreas = (): Area[] => {
-  const stored = localStorage.getItem('areas');
-  if (stored) return JSON.parse(stored);
-  return areasData;
-};
-
-export const setAreas = (areas: Area[]) => {
-  localStorage.setItem('areas', JSON.stringify(areas));
-};
-
-export const getTareas = () => {
-  if (typeof window !== 'undefined') {
-    const tareas = localStorage.getItem('tareas');
-    return tareas ? JSON.parse(tareas) : null;
+  // Inicializar tareas si no existen
+  if (!localStorage.getItem('tareas')) {
+    localStorage.setItem('tareas', JSON.stringify([]));
   }
-  return null;
-};
 
-export const setTareas = (tareas) => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('tareas', JSON.stringify(tareas));
+  // Inicializar preferencias si no existen
+  if (!localStorage.getItem('preferences')) {
+    localStorage.setItem('preferences', JSON.stringify({
+      theme: 'light',
+      notifications: true,
+      language: 'es'
+    }));
   }
-};
 
-export function initLocalStorage(key: string, defaultValue: any) {
-  if (typeof window === 'undefined') return defaultValue
-  
-  try {
-    const item = window.localStorage.getItem(key)
-    return item ? JSON.parse(item) : defaultValue
-  } catch (error) {
-    console.error('Error accessing localStorage:', error)
-    return defaultValue
+  // Inicializar configuración si no existe
+  if (!localStorage.getItem('config')) {
+    localStorage.setItem('config', JSON.stringify({
+      autoSave: true,
+      refreshInterval: 5000
+    }));
   }
-}
+} 

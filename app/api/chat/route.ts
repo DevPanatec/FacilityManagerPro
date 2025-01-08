@@ -1,21 +1,23 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { createClient } from '@/app/config/supabaseServer'
 
-// GET /api/chat - Obtener salas de chat y mensajes
 export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const roomId = searchParams.get('roomId')
     const limit = parseInt(searchParams.get('limit') || '50')
     const before = searchParams.get('before')
     
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user) {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 401 }
+      )
+    }
 
-    // Si se proporciona roomId, obtener mensajes de esa sala
     if (roomId) {
       let query = supabase
         .from('chat_messages')
@@ -39,7 +41,6 @@ export async function GET(request: Request) {
 
       if (error) throw error
 
-      // Marcar mensajes como leídos
       await supabase
         .from('chat_participants')
         .update({ last_read_at: new Date().toISOString() })
@@ -49,7 +50,6 @@ export async function GET(request: Request) {
       return NextResponse.json(messages)
     }
 
-    // Si no hay roomId, obtener las salas de chat del usuario
     const { data: rooms, error: roomsError } = await supabase
       .from('chat_rooms')
       .select(`
@@ -77,26 +77,29 @@ export async function GET(request: Request) {
 
     return NextResponse.json(rooms)
   } catch (error) {
+    console.error('Error al obtener chat:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al obtener chat' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al obtener chat' },
+      { status: 500 }
     )
   }
 }
 
-// POST /api/chat - Crear sala de chat o enviar mensaje
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const body = await request.json()
     
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user) {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 401 }
+      )
+    }
 
-    // Si se proporciona roomId, enviar mensaje
     if (body.roomId) {
-      // Verificar que el usuario es participante
       const { data: participant } = await supabase
         .from('chat_participants')
         .select('id')
@@ -105,10 +108,12 @@ export async function POST(request: Request) {
         .single()
 
       if (!participant) {
-        throw new Error('No eres participante de esta sala')
+        return NextResponse.json(
+          { error: 'No eres participante de esta sala' },
+          { status: 403 }
+        )
       }
 
-      // Enviar mensaje
       const { data: message, error } = await supabase
         .from('chat_messages')
         .insert([
@@ -126,28 +131,31 @@ export async function POST(request: Request) {
             avatar_url
           )
         `)
+        .single()
 
       if (error) throw error
 
-      // Actualizar timestamp de la sala
       await supabase
         .from('chat_rooms')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', body.roomId)
 
-      return NextResponse.json(message[0])
+      return NextResponse.json(message)
     }
 
-    // Si no hay roomId, crear nueva sala
     const { data: profile } = await supabase
       .from('profiles')
       .select('organization_id')
       .eq('user_id', user.id)
       .single()
 
-    if (!profile) throw new Error('Perfil no encontrado')
+    if (!profile) {
+      return NextResponse.json(
+        { error: 'Perfil no encontrado' },
+        { status: 404 }
+      )
+    }
 
-    // Crear sala
     const { data: room, error: roomError } = await supabase
       .from('chat_rooms')
       .insert([
@@ -162,7 +170,6 @@ export async function POST(request: Request) {
 
     if (roomError) throw roomError
 
-    // Añadir participantes
     const participants = [user.id, ...(body.participants || [])]
     const { error: participantsError } = await supabase
       .from('chat_participants')
@@ -177,24 +184,28 @@ export async function POST(request: Request) {
 
     return NextResponse.json(room)
   } catch (error) {
+    console.error('Error al crear chat:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al crear chat' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al crear chat' },
+      { status: 500 }
     )
   }
 }
 
-// PUT /api/chat/[id] - Actualizar sala de chat
 export async function PUT(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const body = await request.json()
 
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user) {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 401 }
+      )
+    }
 
-    // Verificar que el usuario es participante
     const { data: participant } = await supabase
       .from('chat_participants')
       .select('id')
@@ -203,7 +214,10 @@ export async function PUT(request: Request) {
       .single()
 
     if (!participant) {
-      throw new Error('No eres participante de esta sala')
+      return NextResponse.json(
+        { error: 'No eres participante de esta sala' },
+        { status: 403 }
+      )
     }
 
     const { data, error } = await supabase
@@ -214,30 +228,35 @@ export async function PUT(request: Request) {
       })
       .eq('id', body.id)
       .select()
+      .single()
 
     if (error) throw error
 
-    return NextResponse.json(data[0])
+    return NextResponse.json(data)
   } catch (error) {
+    console.error('Error al actualizar sala:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar sala' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al actualizar sala' },
+      { status: 500 }
     )
   }
 }
 
-// DELETE /api/chat/[id] - Eliminar sala de chat o salir de ella
 export async function DELETE(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user) {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 401 }
+      )
+    }
 
-    // Eliminar participación del usuario
     const { error } = await supabase
       .from('chat_participants')
       .delete()
@@ -248,9 +267,10 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Saliste de la sala exitosamente' })
   } catch (error) {
+    console.error('Error al salir de la sala:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al salir de la sala' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al salir de la sala' },
+      { status: 500 }
     )
   }
 } 

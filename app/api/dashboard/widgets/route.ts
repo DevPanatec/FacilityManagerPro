@@ -1,60 +1,56 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/app/config/supabaseServer'
 import { NextResponse } from 'next/server'
-import { DashboardWidget } from '../../../../lib/types/dashboard'
 
-// GET /api/dashboard/widgets - Obtener widgets
-export async function GET(request: Request) {
+export async function GET() {
+  const supabase = createClient()
+
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
-
-    const { data: widgets, error } = await supabase
-      .from('dashboard_widgets')
+    // Obtener estadísticas de tareas
+    const { data: taskStats, error: taskError } = await supabase
+      .from('task_statistics')
       .select('*')
-      .eq('user_id', user.id)
 
-    if (error) throw error
+    if (taskError) throw taskError
+
+    // Obtener estadísticas de turnos
+    const { data: shiftStats, error: shiftError } = await supabase
+      .from('work_shift_statistics')
+      .select('*')
+
+    if (shiftError) throw shiftError
+
+    // Obtener estadísticas de inventario
+    const { data: inventoryStats, error: inventoryError } = await supabase
+      .from('inventory_statistics')
+      .select('*')
+
+    if (inventoryError) throw inventoryError
+
+    // Estructurar los widgets
+    const widgets = [
+      {
+        id: 'task-overview',
+        type: 'task-stats',
+        title: 'Resumen de Tareas',
+        data: taskStats
+      },
+      {
+        id: 'shift-overview',
+        type: 'shift-stats',
+        title: 'Resumen de Turnos',
+        data: shiftStats
+      },
+      {
+        id: 'inventory-overview',
+        type: 'inventory-stats',
+        title: 'Resumen de Inventario',
+        data: inventoryStats
+      }
+    ]
 
     return NextResponse.json(widgets)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al obtener widgets' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
-  }
-}
-
-// POST /api/dashboard/widgets - Crear widget
-export async function POST(request: Request) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const body = await request.json() as DashboardWidget
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
-
-    const { data, error } = await supabase
-      .from('dashboard_widgets')
-      .insert([
-        {
-          ...body,
-          user_id: user.id
-        }
-      ])
-      .select()
-
-    if (error) throw error
-
-    return NextResponse.json(data[0])
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al crear widget' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    console.error('Error:', error)
+    return NextResponse.json({ error: 'Error fetching widgets data' }, { status: 500 })
   }
 } 

@@ -1,74 +1,46 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { createClient } from '@/app/config/supabaseServer'
 
 // GET /api/areas - Obtener áreas
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { searchParams } = new URL(request.url)
-    const departmentId = searchParams.get('departmentId')
-    
-    let query = supabase
+    const supabase = createClient()
+    const { data, error } = await supabase
       .from('areas')
-      .select(`
-        *,
-        departments (
-          id,
-          name,
-          organization_id
-        )
-      `)
-
-    if (departmentId) {
-      query = query.eq('department_id', departmentId)
-    }
-
-    const { data: areas, error } = await query
-      .order('name', { ascending: true })
+      .select('*')
+      .order('created_at', { ascending: false })
 
     if (error) throw error
 
-    return NextResponse.json(areas)
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json({ error: 'Error al obtener áreas' }, { status: 500 })
+    console.error('Error al obtener áreas:', error)
+    return NextResponse.json(
+      { error: 'Error al obtener áreas' },
+      { status: 500 }
+    )
   }
 }
 
 // POST /api/areas - Crear área
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const body = await request.json()
 
     const { data, error } = await supabase
       .from('areas')
-      .insert([
-        {
-          department_id: body.department_id,
-          name: body.name,
-          description: body.description
-        }
-      ])
+      .insert(body)
       .select()
+      .single()
 
     if (error) throw error
 
-    // Registrar en activity_logs
-    await supabase
-      .from('activity_logs')
-      .insert([
-        {
-          user_id: (await supabase.auth.getUser()).data.user?.id,
-          action: 'create_area',
-          description: `Area created: ${body.name}`
-        }
-      ])
-
     return NextResponse.json(data)
   } catch (error) {
+    console.error('Error al crear área:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al crear área' },
+      { error: 'Error al crear área' },
       { status: 500 }
     )
   }
@@ -77,7 +49,7 @@ export async function POST(request: Request) {
 // PUT /api/areas/[id] - Actualizar área
 export async function PUT(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const body = await request.json()
 
     const { data, error } = await supabase
@@ -94,14 +66,18 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json({ error: 'Error al actualizar área' }, { status: 500 })
+    console.error('Error al actualizar área:', error)
+    return NextResponse.json(
+      { error: 'Error al actualizar área' },
+      { status: 500 }
+    )
   }
 }
 
 // DELETE /api/areas/[id] - Eliminar área
 export async function DELETE(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -114,6 +90,10 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Área eliminada exitosamente' })
   } catch (error) {
-    return NextResponse.json({ error: 'Error al eliminar área' }, { status: 500 })
+    console.error('Error al eliminar área:', error)
+    return NextResponse.json(
+      { error: 'Error al eliminar área' },
+      { status: 500 }
+    )
   }
 } 

@@ -1,70 +1,19 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { createClient } from '@/app/config/supabaseServer'
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    // Obtener sesión actual
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    
-    if (sessionError) throw sessionError
+    const supabase = createClient()
+    const { data: { session }, error } = await supabase.auth.getSession()
 
-    if (!session) {
-      return NextResponse.json(
-        { authenticated: false },
-        { status: 401 }
-      )
-    }
+    if (error) throw error
 
-    // Obtener información del usuario
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select(`
-        *,
-        hospital:hospital_id (
-          id,
-          name
-        )
-      `)
-      .eq('id', session.user.id)
-      .single()
-
-    if (userError) throw userError
-
-    // Registrar actividad
-    await supabase
-      .from('activity_logs')
-      .insert([
-        {
-          user_id: session.user.id,
-          action: 'session_check',
-          description: 'User session verified',
-          metadata: {
-            ip: request.headers.get('x-forwarded-for'),
-            userAgent: request.headers.get('user-agent'),
-            timestamp: new Date().toISOString()
-          }
-        }
-      ])
-
-    return NextResponse.json({
-      authenticated: true,
-      user: {
-        ...session.user,
-        ...userData,
-        session: {
-          access_token: session.access_token,
-          expires_at: session.expires_at
-        }
-      }
-    })
-  } catch (error: any) {
-    console.error('Error en /api/auth/session:', error);
+    return NextResponse.json({ session })
+  } catch (error) {
+    console.error('Error al obtener sesión:', error)
     return NextResponse.json(
-      { error: error.message },
-      { status: error.status || 500 }
+      { error: 'Error al obtener sesión' },
+      { status: 500 }
     )
   }
 } 

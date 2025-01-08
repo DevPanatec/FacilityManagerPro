@@ -1,16 +1,17 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { createClient } from '@/app/config/supabaseServer'
 
-// GET /api/comments - Obtener comentarios
 export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const taskId = searchParams.get('taskId')
 
     if (!taskId) {
-      throw new Error('Se requiere el ID de la tarea')
+      return NextResponse.json(
+        { error: 'Se requiere el ID de la tarea' },
+        { status: 400 }
+      )
     }
 
     const { data: comments, error } = await supabase
@@ -30,24 +31,28 @@ export async function GET(request: Request) {
 
     return NextResponse.json(comments)
   } catch (error) {
+    console.error('Error al obtener comentarios:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al obtener comentarios' },
+      { error: 'Error al obtener comentarios' },
       { status: 500 }
     )
   }
 }
 
-// POST /api/comments - Crear comentario
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const body = await request.json()
 
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user) {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 401 }
+      )
+    }
 
-    // Crear comentario
     const { data, error } = await supabase
       .from('task_comments')
       .insert([
@@ -65,10 +70,10 @@ export async function POST(request: Request) {
           avatar_url
         )
       `)
+      .single()
 
     if (error) throw error
 
-    // Registrar en activity_logs
     await supabase
       .from('activity_logs')
       .insert([
@@ -81,29 +86,39 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
+    console.error('Error al crear comentario:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al crear comentario' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al crear comentario' },
+      { status: 500 }
     )
   }
 }
 
-// PUT /api/comments/[id] - Actualizar comentario
 export async function PUT(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const body = await request.json()
 
-    // Verificar propiedad del comentario
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user) {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 401 }
+      )
+    }
+
     const { data: comment } = await supabase
       .from('task_comments')
       .select('user_id')
       .eq('id', body.id)
       .single()
 
-    if (!comment || comment.user_id !== user?.id) {
-      throw new Error('No autorizado para actualizar este comentario')
+    if (!comment || comment.user_id !== user.id) {
+      return NextResponse.json(
+        { error: 'No autorizado para actualizar este comentario' },
+        { status: 403 }
+      )
     }
 
     const { data, error } = await supabase
@@ -114,35 +129,46 @@ export async function PUT(request: Request) {
       })
       .eq('id', body.id)
       .select()
+      .single()
 
     if (error) throw error
 
     return NextResponse.json(data)
   } catch (error) {
+    console.error('Error al actualizar comentario:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar comentario' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al actualizar comentario' },
+      { status: 500 }
     )
   }
 }
 
-// DELETE /api/comments/[id] - Eliminar comentario
 export async function DELETE(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
-    // Verificar propiedad del comentario
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user) {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 401 }
+      )
+    }
+
     const { data: comment } = await supabase
       .from('task_comments')
       .select('user_id')
       .eq('id', id)
       .single()
 
-    if (!comment || comment.user_id !== user?.id) {
-      throw new Error('No autorizado para eliminar este comentario')
+    if (!comment || comment.user_id !== user.id) {
+      return NextResponse.json(
+        { error: 'No autorizado para eliminar este comentario' },
+        { status: 403 }
+      )
     }
 
     const { error } = await supabase
@@ -154,9 +180,10 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Comentario eliminado exitosamente' })
   } catch (error) {
+    console.error('Error al eliminar comentario:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar comentario' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al eliminar comentario' },
+      { status: 500 }
     )
   }
 } 

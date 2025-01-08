@@ -1,17 +1,21 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { createClient } from '@/app/config/supabaseServer'
 
 // GET /api/categories - Obtener categorías
 export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const organizationId = searchParams.get('organizationId')
     
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user) {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 401 }
+      )
+    }
 
     let query = supabase
       .from('task_categories')
@@ -22,15 +26,16 @@ export async function GET(request: Request) {
       query = query.eq('organization_id', organizationId)
     }
 
-    const { data: categories, error } = await query
+    const { data, error } = await query
 
     if (error) throw error
 
-    return NextResponse.json(categories)
+    return NextResponse.json(data)
   } catch (error) {
+    console.error('Error al obtener categorías:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al obtener categorías' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al obtener categorías' },
+      { status: 500 }
     )
   }
 }
@@ -38,12 +43,17 @@ export async function GET(request: Request) {
 // POST /api/categories - Crear categoría
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const body = await request.json()
     
-    // Obtener el usuario y su organización
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user) {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 401 }
+      )
+    }
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -52,39 +62,32 @@ export async function POST(request: Request) {
       .single()
 
     if (!profile) {
-      throw new Error('Profile not found')
+      return NextResponse.json(
+        { error: 'Perfil no encontrado' },
+        { status: 404 }
+      )
     }
 
-    // Crear categoría
     const { data, error } = await supabase
       .from('task_categories')
       .insert([
         {
           organization_id: profile.organization_id,
           name: body.name,
-          color: body.color || '#000000' // Color por defecto
+          color: body.color || '#000000'
         }
       ])
       .select()
+      .single()
 
     if (error) throw error
 
-    // Registrar en activity_logs
-    await supabase
-      .from('activity_logs')
-      .insert([
-        {
-          user_id: user.id,
-          action: 'create_category',
-          description: `Category created: ${body.name}`
-        }
-      ])
-
     return NextResponse.json(data)
   } catch (error) {
+    console.error('Error al crear categoría:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al crear categoría' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al crear categoría' },
+      { status: 500 }
     )
   }
 }
@@ -92,12 +95,17 @@ export async function POST(request: Request) {
 // PUT /api/categories/[id] - Actualizar categoría
 export async function PUT(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const body = await request.json()
 
-    // Verificar que la categoría pertenece a la organización del usuario
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user) {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 401 }
+      )
+    }
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -106,7 +114,10 @@ export async function PUT(request: Request) {
       .single()
 
     if (!profile) {
-      throw new Error('Profile not found')
+      return NextResponse.json(
+        { error: 'Perfil no encontrado' },
+        { status: 404 }
+      )
     }
 
     const { data, error } = await supabase
@@ -119,14 +130,16 @@ export async function PUT(request: Request) {
       .eq('id', body.id)
       .eq('organization_id', profile.organization_id)
       .select()
+      .single()
 
     if (error) throw error
 
     return NextResponse.json(data)
   } catch (error) {
+    console.error('Error al actualizar categoría:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar categoría' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al actualizar categoría' },
+      { status: 500 }
     )
   }
 }
@@ -134,13 +147,18 @@ export async function PUT(request: Request) {
 // DELETE /api/categories/[id] - Eliminar categoría
 export async function DELETE(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     
-    // Verificar que la categoría pertenece a la organización del usuario
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+    if (!user) {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 401 }
+      )
+    }
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -149,7 +167,10 @@ export async function DELETE(request: Request) {
       .single()
 
     if (!profile) {
-      throw new Error('Profile not found')
+      return NextResponse.json(
+        { error: 'Perfil no encontrado' },
+        { status: 404 }
+      )
     }
 
     const { error } = await supabase
@@ -162,9 +183,10 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Categoría eliminada exitosamente' })
   } catch (error) {
+    console.error('Error al eliminar categoría:', error)
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar categoría' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al eliminar categoría' },
+      { status: 500 }
     )
   }
 } 

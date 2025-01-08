@@ -1,46 +1,18 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { createClient } from '@/app/config/supabaseServer'
 
-export async function POST(request: Request) {
+export async function POST() {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    // Obtener usuario actual antes de cerrar sesión
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (user) {
-      // Registrar el logout en logs
-      await supabase
-        .from('activity_logs')
-        .insert([
-          {
-            user_id: user.id,
-            action: 'logout',
-            description: 'User logged out',
-            metadata: {
-              ip: request.headers.get('x-forwarded-for'),
-              userAgent: request.headers.get('user-agent'),
-              timestamp: new Date().toISOString()
-            }
-          }
-        ])
-    }
-
-    // Cerrar sesión
+    const supabase = createClient()
     const { error } = await supabase.auth.signOut()
+
     if (error) throw error
 
-    // Crear respuesta con eliminación de cookies
-    const response = NextResponse.json({ message: 'Logged out successfully' })
-    response.cookies.delete('userRole')
-    response.cookies.delete('isAuthenticated')
-    response.cookies.delete('isSuperAdmin')
-
-    return response
-  } catch (error: any) {
+    return NextResponse.json({ message: 'Sesión cerrada correctamente' })
+  } catch (error) {
+    console.error('Error al cerrar sesión:', error)
     return NextResponse.json(
-      { error: error.message },
+      { error: 'Error al cerrar sesión' },
       { status: 500 }
     )
   }

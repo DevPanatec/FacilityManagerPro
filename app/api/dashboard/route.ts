@@ -1,138 +1,41 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/app/config/supabaseServer'
 import { NextResponse } from 'next/server'
 
-// GET /api/dashboard - Obtener datos del dashboard
-export async function GET(request: Request) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { searchParams } = new URL(request.url)
-    const period = searchParams.get('period') || 'week' // week, month, year
-    
-    // Obtener el usuario y su organización
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+export async function GET() {
+  const supabase = createClient()
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('user_id', user.id)
+  try {
+    // Obtener estadísticas de tareas
+    const { data: taskStats, error: taskError } = await supabase
+      .from('task_statistics')
+      .select('*')
       .single()
 
-    if (!profile) throw new Error('Perfil no encontrado')
+    if (taskError) throw taskError
 
-    // Calcular fechas según el periodo
-    const now = new Date()
-    const startDate = new Date()
-    switch(period) {
-      case 'week':
-        startDate.setDate(now.getDate() - 7)
-        break
-      case 'month':
-        startDate.setMonth(now.getMonth() - 1)
-        break
-      case 'year':
-        startDate.setFullYear(now.getFullYear() - 1)
-        break
-    }
-
-    // Obtener datos analíticos
-    const { data: analyticsData, error: analyticsError } = await supabase
-      .from('analytics_data')
-      .select(`
-        id,
-        data_type,
-        data_value,
-        period_start,
-        period_end
-      `)
-      .eq('organization_id', profile.organization_id)
-      .gte('period_start', startDate.toISOString().split('T')[0])
-      .lte('period_end', now.toISOString().split('T')[0])
-      .order('period_start', { ascending: false })
-
-    if (analyticsError) throw analyticsError
-
-    // Obtener métricas de rendimiento
-    const { data: performanceData, error: performanceError } = await supabase
-      .from('performance_metrics')
-      .select(`
-        id,
-        metric_type,
-        metric_value,
-        measured_at
-      `)
-      .eq('organization_id', profile.organization_id)
-      .gte('measured_at', startDate.toISOString())
-      .lte('measured_at', now.toISOString())
-      .order('measured_at', { ascending: false })
-
-    if (performanceError) throw performanceError
-
-    // Estructurar respuesta
-    const dashboardData = {
-      analytics: {
-        data: analyticsData,
-        period: period,
-        timeRange: {
-          start: startDate.toISOString(),
-          end: now.toISOString()
-        }
-      },
-      performance: {
-        metrics: performanceData,
-        lastUpdated: performanceData[0]?.measured_at || null
-      }
-    }
-
-    return NextResponse.json(dashboardData)
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al obtener datos del dashboard' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
-  }
-}
-
-// POST /api/dashboard/analytics - Registrar datos analíticos
-export async function POST(request: Request) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const body = await request.json()
-    
-    // Obtener el usuario y su organización
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('user_id', user.id)
+    // Obtener estadísticas de turnos
+    const { data: shiftStats, error: shiftError } = await supabase
+      .from('work_shift_statistics')
+      .select('*')
       .single()
 
-    if (!profile) throw new Error('Perfil no encontrado')
+    if (shiftError) throw shiftError
 
-    // Registrar datos analíticos
-    const { data, error } = await supabase
-      .from('analytics_data')
-      .insert([
-        {
-          organization_id: profile.organization_id,
-          data_type: body.data_type,
-          data_value: body.data_value,
-          period_start: body.period_start,
-          period_end: body.period_end || new Date().toISOString().split('T')[0]
-        }
-      ])
-      .select()
+    // Obtener estadísticas de inventario
+    const { data: inventoryStats, error: inventoryError } = await supabase
+      .from('inventory_statistics')
+      .select('*')
+      .single()
 
-    if (error) throw error
+    if (inventoryError) throw inventoryError
 
-    return NextResponse.json(data)
+    return NextResponse.json({
+      taskStats,
+      shiftStats,
+      inventoryStats
+    })
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al registrar datos analíticos' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    console.error('Error:', error)
+    return NextResponse.json({ error: 'Error fetching dashboard data' }, { status: 500 })
   }
 } 
