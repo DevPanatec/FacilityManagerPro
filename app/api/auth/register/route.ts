@@ -1,10 +1,21 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const cookieStore = cookies()
+    
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          persistSession: false
+        }
+      }
+    )
+    
     const body = await request.json()
     
     // Validar datos requeridos
@@ -32,7 +43,7 @@ export async function POST(request: Request) {
       )
     }
 
-    // Registrar usuario en auth
+    // Registrar usuario en auth con verificación de email
     const { data: authData, error: signUpError } = await supabase.auth.signUp({
       email: body.email,
       password: body.password,
@@ -41,68 +52,58 @@ export async function POST(request: Request) {
           first_name: body.first_name,
           last_name: body.last_name,
           hospital_id: body.hospital_id
-        }
+        },
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
       }
     })
 
     if (signUpError) throw signUpError
 
-    if (!authData.user) {
-      throw new Error('No se pudo crear el usuario')
-    }
-
-    // Crear usuario en la tabla users
-    const { error: userError } = await supabase
-      .from('users')
-      .insert([
-        {
-          id: authData.user.id,
-          email: body.email,
-          first_name: body.first_name,
-          last_name: body.last_name,
-          hospital_id: body.hospital_id,
-          role: body.role || 'usuario',
-          status: 'active'
-        }
-      ])
-
-    if (userError) {
-      // Si falla la creación del usuario, intentar eliminar el auth user
-      await supabase.auth.admin.deleteUser(authData.user.id)
-      throw userError
-    }
-
-    // Registrar en logs
-    await supabase
-      .from('activity_logs')
-      .insert([
-        {
-          user_id: authData.user.id,
-          action: 'register',
-          description: 'New user registered',
-          metadata: {
-            ip: request.headers.get('x-forwarded-for'),
-            userAgent: request.headers.get('user-agent'),
-            timestamp: new Date().toISOString(),
-            hospital_id: body.hospital_id,
-            role: body.role || 'usuario'
-          }
-        }
-      ])
-
-    return NextResponse.json({
-      user: authData.user,
-      message: 'Registro exitoso. Por favor verifica tu email para continuar.'
+    // Registrar el intento de registro en activity_logs
+    await supabase.from('activity_logs').insert({
+      action: 'registration_attempt',
+      description: 'Intento de registro de nuevo usuario',
+      metadata: {
+        email: body.email,
+        hospital_id: body.hospital_id,
+        success: true
+      }
     })
 
-  } catch (error: any) {
-    console.error('Error en /api/auth/register:', error)
+    const response = NextResponse.json({
+      message: 'Registro exitoso. Por favor verifica tu correo electrónico.',
+      user: authData.user,
+      status: 'pending_verification'
+    })
+
+    return response
+
+  } catch (error: unknown) {
+    console.error('Error en registro:', error)
+    
+    // Registrar el error en activity_logs
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          persistSession: false
+        }
+      }
+    )
+    
+    await supabase.from('activity_logs').insert({
+      action: 'registration_error',
+      description: 'Error durante el registro de usuario',
+      metadata: {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      }
+    })
+
     return NextResponse.json(
-      { 
-        error: error.message,
-        details: error.status ? `HTTP ${error.status}` : 'Error interno del servidor'
-      },
-      { status: error.status || 400 }
+      { error: 'Error en el registro. Por favor intenta nuevamente.' },
+      { status: 500 }
     )
   }
 } 

@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  studio:
+    networks:
+      - supabase_network
+  db:
+    networks:
+      - supabase_network
+  auth:
+    networks:
+      - supabase_network
+  rest:
+    networks:
+      - supabase_network
+  realtime:
+    networks:
+      - supabase_network
+  storage:
+    networks:
+      - supabase_network
+  meta:
+    networks:
+      - supabase_network
+  inbucket:
+    networks:
+      - supabase_network
+  kong:
+    networks:
+      - supabase_network
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
+networks:
+  supabase_network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+      com.docker.network.bridge.host_binding_ipv4: "0.0.0.0" 

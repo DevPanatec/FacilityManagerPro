@@ -3,8 +3,7 @@ import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
-    const { email } = await request.json()
-    const requestUrl = new URL(request.url)
+    const { password } = await request.json()
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,8 +15,8 @@ export async function POST(request: Request) {
       }
     )
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${requestUrl.origin}/auth/callback?next=/auth/update-password`,
+    const { error } = await supabase.auth.updateUser({
+      password
     })
 
     if (error) {
@@ -28,12 +27,12 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      message: 'Revisa tu correo electrónico para restablecer tu contraseña'
+      message: 'Contraseña actualizada exitosamente'
     })
   } catch (error) {
-    console.error('Error al solicitar restablecimiento de contraseña:', error)
+    console.error('Error al actualizar contraseña:', error)
     return NextResponse.json(
-      { error: 'Error al procesar la solicitud' },
+      { error: 'Error al actualizar la contraseña' },
       { status: 500 }
     )
   }

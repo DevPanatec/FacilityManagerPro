@@ -22,20 +22,30 @@ export async function middleware(request: NextRequest) {
             value,
             ...options,
             sameSite: 'lax',
-            secure: process.env.NODE_ENV === 'production'
+            secure: process.env.NODE_ENV === 'production',
           })
         },
         remove(name: string, options: CookieOptions) {
           response.cookies.delete({
             name,
-            ...options
+            ...options,
+            sameSite: 'lax',
+            secure: process.env.NODE_ENV === 'production',
           })
         },
       },
     }
   )
 
-  await supabase.auth.getSession()
+  const { data: { session } } = await supabase.auth.getSession()
+
+  if (!session && request.nextUrl.pathname.startsWith('/dashboard')) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  if (session && (request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/register'))) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
 
   return response
 }
@@ -48,7 +58,8 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder
+     * - api routes
      */
-    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
+    '/((?!_next/static|_next/image|favicon.ico|public/|api/).*)',
   ],
 }

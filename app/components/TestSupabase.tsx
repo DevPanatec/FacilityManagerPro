@@ -1,5 +1,3 @@
-'use client'
-
 import { createClient } from '@/app/utils/supabase/server'
 
 export default async function TestSupabase() {

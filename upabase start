@@ -1,0 +1,186 @@
+* [33m8dc5978[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mauth-update[m[33m)[m chore: Update remaining files and configurations
+* [33m168fe37[m feat(api): Update API routes with enhanced security and error handling
+* [33m2cd0c7f[m feat(auth): Complete authentication system with Supabase integration
+* [33m0d13d6f[m[33m ([m[1;31morigin/auth-update[m[33m, [m[1;31morigin/auth-fix[m[33m, [m[1;32mauth-implementation-v2[m[33m, [m[1;32mauth-fix[m[33m)[m chore: refactor Supabase client integration and improve error handling across API routes
+* [33m1a666b9[m[33m ([m[1;31morigin/main[m[33m, [m[1;32mmain[m[33m)[m chore: update .gitignore to allow .env.local for development
+* [33me538329[m refactor: simplify authentication process and improve error handling
+* [33mf640791[m feat: add supabase configuration debugging
+* [33m15998ca[m feat: add more detailed authentication logs
+* [33m32e2226[m feat: add detailed authentication logs
+* [33mfba9ea6[m Restore original login page design
+* [33m868459e[m Fix TypeScript errors in login and Supabase client
+* [33m754fec5[m Update Supabase auth configuration for better security
+* [33mb59aa9f[m Update layout.tsx to include RealtimeManager
+* [33m91e5a83[m Implement real-time listeners and RealtimeManager component
+* [33m0867766[m Revert to commit 373ebf0101bfdbaa711a5c56b861c6e9ef7c4bee
+* [33m373ebf0[m fix: mejorado manejo de cookies y logging en middleware
+* [33m736695f[m fix: mejorado middleware de autenticación y verificación de roles
+* [33m01d8223[m fix: mejorado trigger de creación de usuarios
+* [33mf076d7d[m fix: mejorado manejo de usuario no encontrado y corregido botón de login
+* [33m0ce13ba[m fix: corregida consulta de usuario y manejo de errores
+* [33me1cacc1[m fix: unificada inserción en activity_logs
+* [33m6a9ea5d[m fix: mejorada inserción en activity_logs
+* [33m794daf7[m fix: corregida estructura de tabla activity_logs y agregados índices
+* [33m6c283f2[m fix: mejorado manejo de inserción en activity_logs
+* [33mb6ac59d[m fix: simplificada política de inserción para activity_logs
+* [33md3d49d7[m fix: corregida creación de tabla activity_logs
+* [33m5b38436[m fix: corregida referencia en activity_logs para apuntar a users
+* [33m180fcda[m fix: simplificada función is_admin y políticas de users para evitar recursión
+* [33m8be6cd6[m fix: corregida estructura de tablas y políticas de seguridad
+* [33mf624187[m fix: simplificadas políticas de Supabase y eliminada recursión
+* [33m09f9687[m fix: simplificadas políticas de seguridad y mejorado manejo de roles
+* [33mcfe4e37[m fix: actualizada estructura de base de datos y manejo de campos opcionales
+* [33m792ecac[m fix: corregidas políticas de Supabase para evitar duplicados
+* [33m2e798e1[m refactor: cambiado manejo de autenticación para usar Supabase directamente
+* [33md40ebac[m fix: corregido manejo de CORS y endpoints de autenticación
+* [33m8e3ef66[m fix: corregido error 405 en login y mejorado manejo de errores
+* [33m983c3ea[m refactor: mejora en el manejo de autenticación y redirección
+* [33m66b0e53[m fix: mejora en manejo de redirecciones y cookies
+* [33m30594c1[m feat: mejora en middleware con logs detallados y manejo de redirecciones
+* [33m8b7e6a2[m feat: mejora en manejo de autenticación y cookies
+* [33me4ccd48[m feat: add supabase configuration debugging
+* [33mcef4d3d[m fix: improve supabase client validation and error handling
+* [33m1994ce6[m feat: add detailed error logging for authentication
+* [33m57a990c[m fix: improve authentication error handling
+* [33mf9f4737[m feat: improve error visibility with toasts
+* [33m774a9ae[m feat: add detailed logging for login process
+* [33m4f1f2e2[m refactor: improve login types and error handling
+* [33m0efe5ce[m refactor: simplify supabase client configuration
+* [33m9008093[m fix: typescript types for login
+* [33mc14c505[m refactor: update login system and add supabase migrations
+* [33mcd1e1ac[m refactor: move login to app router, add supabase types and migrations
+* [33med82741[m refactor: move login to app router and add supabase types
+* [33me4bd494[m fix: Eliminar propiedad no válida rootDirectory de vercel.json
+* [33m1f8aa8b[m fix: Corregir configuración del directorio raíz en vercel.json
+* [33mac3afdc[m fix: Corrección de errores de build y limpieza de archivos de respaldo
+* [33m651e5a6[m revert: Regresando al commit 8b97d55
+* [33mc9643ee[m fix: Actualizada la configuración de Next.js para producción
+* [33m6f7cc54[m fix: Limpieza adicional de archivos innecesarios
+* [33m013c0c2[m fix: Limpieza de directorios duplicados y archivos temporales
+* [33me383028[m fix: Actualizada la configuración de Vercel
+* [33m8b97d55[m fix: Simplificada la configuración de Next.js y actualizada la URL de despliegue
+* [33m0b47ab0[m fix: Agregado basePath para coincidir con la URL de Vercel
+* [33m2aa3b81[m fix: Actualizada la configuración de rutas y páginas
+* [33md15f596[m fix: Migrado a páginas tradicionales de Next.js
+* [33m609b3bf[m fix: Agregados componentes de error y carga, simplificada configuración
+* [33m39e630f[m fix: Mejorado manejo de rutas y redirecciones
+* [33m6168e94[m fix: Simplificada configuración para resolver problemas de rutas
+* [33me224237[m fix: Actualizada configuración para usar dominio personalizado gestionhbc.com
+* [33mda54a21[m fix: Simplificada configuración de Next.js y middleware
+* [33mb62f8e8[m fix: Mejorado manejo de rutas y redirecciones
+* [33m7d32e72[m fix: Optimizada configuración de Next.js para imágenes y assets
+* [33md9e0601[m fix: Actualizada configuración de Supabase con URLs de Vercel
+* [33m3fb12d6[m fix: Actualizada configuración con la URL correcta de Vercel
+* [33me7ee220[m fix: Restaurado diseño original del login con mejoras de autenticación
+* [33m175d151[m fix: Configuración completa para dominio gestionhbc.com
+* [33m9c096dd[m fix: Mejorado manejo de redirecciones y layout principal
+* [33m01c0131[m fix: Corregidos problemas de build y archivos duplicados. Optimizada configuración de Next.js
+* [33m3a19a2d[m fix: Actualiza configuración de rutas y middleware
+* [33mf1a4ab8[m fix: Simplifica configuración base y middleware
+* [33meea3dd9[m fix: Implementa sistema de autenticación completo
+* [33m8067c1f[m fix: Corrige rutas de autenticación y agrega página principal
+* [33m4b60138[m actual
+* [33mfa2eb87[m Merge complete API structure from prueba branch
+* [33mac424a2[m Guardando cambios antes del merge con prueba
+* [33me5c057f[m Add untracked directory
+* [33m85912dc[m Descripción de los cambios realizados
+* [33m0757407[m Descripción de los cambios realizados
+* [33md515925[m[33m ([m[1;32mprueba[m[33m)[m Update .gitignore and add .env.local for development
+* [33mbef1189[m[33m ([m[1;31morigin/prueba[m[33m)[m feat: actualización de endpoints de auth y logs
+* [33m8caf406[m tu mensaje del commit
+* [33m34476d0[m Primer intento
+* [33m08dcd2f[m[33m ([m[1;31morigin/aris[m[33m)[m fix: corrige sintaxis en la ruta de reportes
+* [33m03bd8dc[m fix: corrige errores de SSR y configuración
+* [33m8654af3[m fix: actualiza configuración de Supabase y Next.js
+* [33m74024b3[m chore: actualiza dependencias de Supabase a versiones compatibles
+* [33mbc59224[m fix: corrige errores de despliegue en Vercel
+* [33mbfdd529[m feat: actualiza configuración de Supabase y mejora la página de login
+* [33m5ffbf17[m fix: actualiza configuración de Supabase y corrige errores de build
+* [33me57a1d7[m fix: corrige tipos en reportes y actualiza configuración de Supabase
+* [33m6de918b[m Fix: corregir errores de renderizado dinámico y Supabase
+* [33m151afa3[m Fix: corregir errores de despliegue
+* [33m644d8c3[m Fix: Resolve build errors and update dependencies
+[32m|[m * [33mbd1ea96[m[33m ([m[1;31morigin/Anyel[m[33m)[m ApiFinal
+[32m|[m * [33m07c2648[m FinalAPI
+[32m|[m * [33m230c456[m Detalles finales
+[32m|[m * [33m3e0f6e4[m TarjetasDashboard
+[32m|[m * [33me60da6a[m Tu mensaje del commit aquí
+[32m|[m * [33m7cc82ed[m APiVisual
+[32m|[m[32m/[m  
+* [33mbd86f8a[m Fix: Move RouteGuard to auth/components and update imports
+* [33mccd4c43[m Fix: Remove Firebase references and fix authentication middleware
+* [33mcd77720[m Descripción de los cambios
+* [33m7b15a40[m Refactor: Elimina Firebase y configura Supabase
+* [33m35e1711[m Elimina Firebase
+* [33m3cedc28[m Elimina Firebase y corrige errores de importación
+* [33ma1c71e0[m Resuelve conflictos y guarda cambios
+*   [33maa51cb4[m Merge remote-tracking branch 'origin/Anyel'
+[34m|[m[35m\[m  
+[34m|[m * [33m6d43d57[m ConfigurciónExportarResumen
+* [35m|[m [33m1bd52e7[m Resolución de conflictos
+[36m|[m[35m\[m[35m|[m 
+[36m|[m * [33mdecf6b3[m ExportarDATAHUB
+[36m|[m *   [33mf0bb711[m Configuración API
+[36m|[m [1;32m|[m[1;33m\[m  
+[36m|[m * [1;33m|[m [33m0980f53[m Inicio data base API
+* [1;33m|[m [1;33m|[m [33mdab4ef4[m Mejoras en el login y ajustes en la interfaz de usuario
+* [1;33m|[m [1;33m|[m [33m0a622f8[m feat: Actualización completa del diseño responsivo y efectos visuales del login
+* [1;33m|[m [1;33m|[m   [33m634e6ed[m feat: Mejoras en el diseño responsivo del login y efectos visuales
+[1;34m|[m[1;33m\[m [1;33m\[m [1;33m\[m  
+[1;34m|[m [1;33m|[m [1;33m|[m[1;33m/[m  
+[1;34m|[m [1;33m|[m[1;33m/[m[1;33m|[m   
+[1;34m|[m * [1;33m|[m [33m45ce058[m feat: add file import and processing tables
+[1;34m|[m [1;33m|[m[1;33m/[m  
+[1;34m|[m * [33m12b9863[m DISEÑO LUNES
+[1;34m|[m * [33m8e2b9e1[m Frontend API
+[1;34m|[m * [33m08842a2[m Botón de importar
+[1;34m|[m * [33mfb22e74[m Footer
+[1;34m|[m * [33m78f7b93[m Actualizción diseño User
+[1;34m|[m * [33md34cc70[m Actualización diseño admin
+[1;34m|[m * [33m3d57111[m Diseo user
+* [1;35m|[m [33m5f90abd[m 14/12
+[1;35m|[m[1;35m/[m  
+* [33m3e8d55d[m actuali
+* [33mfc23da4[m atualizacion 29/11
+* [33mff4597b[m Actualización del reporte de contingencia
+* [33mf59fcbd[m Actualizacion
+* [33m2322865[m actualizacion
+* [33m92d30fc[m feat: modificado el comportamiento del calendario para mostrar tareas por día en modal
+* [33m4f0b2f0[m feat: Mejoras en el sistema de reportes y tareas
+* [33mc7315e8[m feat: actualizado diseño del perfil enterprise y modificadas áreas en taskHistory
+* [33mfe58994[m actualizacion
+* [33m3cd81c5[m fix: eliminada referencia a UserNavbar y uso del Navbar compartido en páginas de usuario
+* [33m06be5b6[m fix: eliminada referencia a UserNavbar y uso del Navbar compartido en páginas de usuario
+* [33m99f0516[m feat: Implementación de áreas y tareas
+*   [33me4e0c6f[m merge y nav nar a usuario
+[1;36m|[m[31m\[m  
+[1;36m|[m * [33m75911d1[m fix: corregido sistema de reportes y tareas, mejorada la gestión de estados y localStorage
+[1;36m|[m * [33m1fad0f8[m feat: login page with GPS validation and multi-user auth
+[1;36m|[m *   [33m24dfd21[m Merge remote changes and integrate components from both branches Merge branch 'Alejandro-Calendario-Inventario' of https://github.com/ramsesgmz/WebAppHospital into Alejandro-Calendario-Inventario
+[1;36m|[m [32m|[m[33m\[m  
+[1;36m|[m [32m|[m * [33ma7bf3ce[m Resuelto conflicto en package.json y corregido login/page.js
+[1;36m|[m * [33m|[m [33md8df873[m Integrados componentes de ambas ramas y actualizado layout
+[1;36m|[m [33m|[m[33m/[m  
+[1;36m|[m * [33m7e43034[m Actualizado package.json con daisyui
+[1;36m|[m *   [33mebc026a[m Resuelto conflicto en package.json y package-lock.json
+[1;36m|[m [34m|[m[35m\[m  
+* [34m|[m [35m|[m [33m6732b04[m nuevo mensaje
+* [34m|[m [35m|[m [33m1ecf954[m rol funcional y actualizacion a calendario
+* [34m|[m [35m|[m [33mdc12cf4[m actualizacion
+* [34m|[m [35m|[m [33m827acff[m feat: Implementada de rrhh y actualizacion de reportes
+[35m|[m[34m\[m[34m|[m [35m|[m 
+[35m|[m [34m|[m[35m/[m  
+[35m|[m[35m/[m[34m|[m   
+[35m|[m * [33m48e06e5[m feat: chat implementation and other updates
+* [1;31m|[m [33m851e18e[m Creacion del enterprise y actualizacion asignacion y reportes
+* [1;31m|[m [33m96e07a2[m dashboard y reportes
+* [1;31m|[m [33m19ff1e0[m Pagina de Asignacion
+[1;31m|[m[1;31m/[m  
+*   [33m872bf41[m Merge pull request #1 from ramsesgmz/ft-contingencyReport
+[1;32m|[m[1;33m\[m  
+[1;32m|[m * [33m56c1f66[m cambios
+[1;32m|[m[1;32m/[m  
+* [33m74eb3f8[m imagen
+* [33m19e91f4[m first commit
+* [33m5bebbd4[m first commit
+* [33me2cbb90[m Initial commit from Create Next App
