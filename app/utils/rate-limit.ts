@@ -1,29 +1,25 @@
-import { headers } from 'next/headers'
-import { LRUCache } from 'lru-cache'
+import { Ratelimit } from '@upstash/ratelimit'
+import { Redis } from '@upstash/redis'
 
-const rateLimit = new LRUCache({
-  max: 500,
-  ttl: 60 * 1000 // 1 minute
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 })
 
-export async function getRateLimit(ip: string) {
-  const tokenCount = rateLimit.get(ip) || [0]
-  const currentTime = Date.now()
-  const windowSize = 60 * 1000 // 1 minute
+// Create a new ratelimiter, that allows 10 requests per 10 seconds
+const ratelimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(10, '10 s'),
+  analytics: true,
+})
 
-  if (tokenCount[0] > 100) { // 100 requests per minute
-    return {
-      allowed: false,
-      remaining: 0,
-      reset: currentTime + windowSize
-    }
-  }
-
-  rateLimit.set(ip, tokenCount[0] + 1)
-
+export async function getRateLimit(identifier: string) {
+  const { success, limit, remaining, reset } = await ratelimit.limit(identifier)
+  
   return {
-    allowed: true,
-    remaining: 100 - tokenCount[0],
-    reset: currentTime + windowSize
+    success,
+    limit,
+    remaining,
+    reset: reset - Date.now()
   }
 } 

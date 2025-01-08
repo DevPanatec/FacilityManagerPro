@@ -1,11 +1,11 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
+import { createRouteHandlerClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
 // GET /api/users - Obtener usuarios
 export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createRouteHandlerClient()
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
     

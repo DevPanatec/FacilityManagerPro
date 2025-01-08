@@ -1,32 +1,30 @@
 import './globals.css'
 import { Inter } from 'next/font/google'
-import { Providers } from './providers'
-import { Metadata } from 'next'
-import { SessionProvider } from '@/app/providers/SessionProvider'
+import SessionProvider from './providers/SessionProvider'
+import { createClient } from '@/utils/supabase/server'
 
 const inter = Inter({ subsets: ['latin'] })
 
-export const metadata: Metadata = {
-  title: {
-    template: '%s | Facility Manager Pro',
-    default: 'Facility Manager Pro'
-  },
-  description: 'Sistema de gestión de instalaciones',
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000')
+export const metadata = {
+  title: 'Facility Manager Pro',
+  description: 'Sistema de gestión para hospitales y centros médicos',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const supabase = createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+
   return (
-    <html lang="es" data-theme="light">
+    <html lang="es">
       <body className={inter.className}>
-        <SessionProvider>
-          <Providers>
+        <SessionProvider initialSession={session}>
+          <main className="min-h-screen flex flex-col items-center">
             {children}
-          </Providers>
+          </main>
         </SessionProvider>
       </body>
     </html>

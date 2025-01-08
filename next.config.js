@@ -1,19 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  poweredByHeader: false,
-  reactStrictMode: true,
+  serverExternalPackages: ['@node-rs/argon2', '@node-rs/bcrypt'],
   images: {
-    domains: ['jecxswfoepdstrghyouv.supabase.co'],
-    formats: ['image/avif', 'image/webp'],
-    minimumCacheTTL: 60,
-    dangerouslyAllowSVG: true,
-    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;"
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'avatars.githubusercontent.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+      },
+    ],
   },
-  logging: {
-    fetches: {
-      fullUrl: true
-    }
-  }
 }
 
 module.exports = nextConfig 

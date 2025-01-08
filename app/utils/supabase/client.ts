@@ -1,12 +1,29 @@
 'use client'
 
 import { createBrowserClient } from '@supabase/ssr'
-import { type Database } from '@/types/database.types'
+import { type Database } from '../../../types/database.types'
 
 export const createClient = () =>
   createBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        flowType: 'pkce',
+        detectSessionInUrl: true,
+        autoRefreshToken: true
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10
+        }
+      },
+      global: {
+        headers: {
+          'x-application-name': 'facility-manager-pro'
+        }
+      }
+    }
   )
 
 // Export a singleton instance for use in components

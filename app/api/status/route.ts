@@ -1,5 +1,4 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createRouteHandlerClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
 
 // Estados predefinidos por tipo

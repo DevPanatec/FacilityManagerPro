@@ -1,74 +1,75 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '../../../utils/supabase/server'
 import { NextResponse } from 'next/server'
 
-// GET /api/tags - Obtener etiquetas
 export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    // Verificar autenticación
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
 
-    const { searchParams } = new URL(request.url)
-    const organization_id = searchParams.get('organization_id')
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
 
-    // Obtener etiquetas con conteo de uso
-    const { data: tags, error } = await supabase
+    const { data, error } = await supabase
       .from('tags')
-      .select(`
-        *,
-        entity_tags (
-          count
-        )
-      `)
-      .eq('organization_id', organization_id)
+      .select('*')
+      .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
 
-    return NextResponse.json(tags)
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error fetching tags';
-    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error fetching tags:', error)
     return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 }
 
-// POST /api/tags - Crear etiqueta
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
 
-    const body = await request.json()
-    const { name, color, organization_id } = body
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
 
-    const { data: tag, error } = await supabase
+    const tag = await request.json()
+    const { data, error } = await supabase
       .from('tags')
-      .insert({ 
-        name, 
-        color, 
-        organization_id,
-        created_by: user.id 
+      .insert({
+        created_by: session.user.id,
+        ...tag
       })
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
 
-    return NextResponse.json(tag)
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error creating tag';
-    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error creating tag:', error)
     return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 } 

@@ -1,41 +1,105 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '../../../utils/supabase/server'
 import { NextResponse } from 'next/server'
 
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { event_type, endpoint_url, secret_key } = await request.json()
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    // Verify admin role
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single()
+
+    if (profileError || !profile || profile.role !== 'admin') {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 403 }
+      )
+    }
 
     const { data, error } = await supabase
       .from('webhook_configs')
-      .insert([
-        {
-          event_type,
-          endpoint_url,
-          secret_key,
-          is_active: true,
-          retry_count: 3
-        }
-      ])
-      .select()
+      .select('*')
+      .order('created_at', { ascending: false })
 
     if (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Database error occurred';
-      const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 400;
       return NextResponse.json(
-        { error: errorMessage },
-        { status: statusCode }
-      );
+        { error: error.message },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({ data })
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error occurred';
-    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+  } catch (error) {
+    console.error('Error fetching webhook configs:', error)
     return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
-    );
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    // Verify admin role
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single()
+
+    if (profileError || !profile || profile.role !== 'admin') {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 403 }
+      )
+    }
+
+    const webhook = await request.json()
+    const { data, error } = await supabase
+      .from('webhook_configs')
+      .insert({
+        created_by: session.user.id,
+        ...webhook,
+        is_active: true,
+        retry_count: 3
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error creating webhook config:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
 }

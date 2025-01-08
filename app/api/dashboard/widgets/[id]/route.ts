@@ -1,37 +1,68 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createRouteHandlerClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
+
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const supabase = createRouteHandlerClient()
+
+  const { data: widget, error } = await supabase
+    .from('dashboard_widgets')
+    .select('*')
+    .eq('id', params.id)
+    .single()
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  if (!widget) {
+    return NextResponse.json({ error: 'Widget not found' }, { status: 404 })
+  }
+
+  return NextResponse.json(widget)
+}
 
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  try {
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+  const supabase = createRouteHandlerClient()
+  const updates = await request.json()
 
-    const body = await request.json()
-    const { position } = body
+  const { data: widget, error } = await supabase
+    .from('dashboard_widgets')
+    .update(updates)
+    .eq('id', params.id)
+    .select()
+    .single()
 
-    const { data, error } = await supabase
-      .from('dashboard_widgets')
-      .update({ position })
-      .eq('id', params.id)
-      .eq('user_id', user.id)
-      .select()
-      .single()
-
-    if (error) throw error
-
-    return NextResponse.json(data)
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error al obtener widget';
-    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
-    )
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  if (!widget) {
+    return NextResponse.json({ error: 'Widget not found' }, { status: 404 })
+  }
+
+  return NextResponse.json(widget)
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const supabase = createRouteHandlerClient()
+
+  const { error } = await supabase
+    .from('dashboard_widgets')
+    .delete()
+    .eq('id', params.id)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ message: 'Widget deleted successfully' })
 } 

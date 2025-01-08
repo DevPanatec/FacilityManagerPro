@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../utils/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -6,20 +6,17 @@ export async function GET(request: Request) {
   const code = requestUrl.searchParams.get('code')
 
   if (code) {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          persistSession: false
-        }
-      }
-    )
+    const supabase = createClient()
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
 
-    await supabase.auth.exchangeCodeForSession(code)
+    if (error) {
+      console.error('Error exchanging code for session:', error)
+      return NextResponse.redirect(`${requestUrl.origin}/auth/error`)
+    }
+
+    return NextResponse.redirect(`${requestUrl.origin}/dashboard`)
   }
 
-  // Get the next URL from the search params or default to dashboard
-  const next = requestUrl.searchParams.get('next') ?? '/dashboard'
-  return NextResponse.redirect(new URL(next, requestUrl))
+  // Return the user to an error page with instructions
+  return NextResponse.redirect(`${requestUrl.origin}/auth/error`)
 } 

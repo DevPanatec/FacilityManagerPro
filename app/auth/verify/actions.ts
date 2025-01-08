@@ -1,18 +1,29 @@
 'use server'
 
-import { createClient } from '@/app/utils/supabase/server'
-import { redirect } from 'next/navigation'
+import { createClient } from '../../../utils/supabase/server'
 
-export async function verifyEmail(token: string) {
+export async function verify(formData: FormData) {
+  const token = formData.get('token') as string
+  const email = formData.get('email') as string
+
+  if (!token || !email) {
+    return {
+      error: 'Missing token or email',
+    }
+  }
+
   const supabase = createClient()
 
   const { error } = await supabase.auth.verifyOtp({
-    token_hash: token,
-    type: 'email'
+    token,
+    type: 'email',
+    email,
   })
 
   if (error) {
-    return { error: error.message }
+    return {
+      error: error.message,
+    }
   }
 
   return { success: true }

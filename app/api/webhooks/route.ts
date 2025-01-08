@@ -1,50 +1,97 @@
+import { createClient } from '../../../utils/supabase/server'
 import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { getRateLimit } from '@/utils/rate-limit'
 
-export async function POST(request: NextRequest) {
+export const runtime = 'edge'
+
+export async function GET(request: Request) {
   try {
-    const body = await request.json()
-    const supabase = createRouteHandlerClient({ cookies })
-    
-    // Procesar el webhook
+    // Rate limiting
+    const ip = request.headers.get('x-forwarded-for')
+    const rateLimit = await getRateLimit(ip || 'anonymous')
+
+    if (!rateLimit.success) {
+      return new NextResponse(
+        JSON.stringify({ error: 'Too many requests' }),
+        { 
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': rateLimit.limit.toString(),
+            'X-RateLimit-Remaining': rateLimit.remaining.toString(),
+            'X-RateLimit-Reset': rateLimit.reset.toString()
+          }
+        }
+      )
+    }
+
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
     const { data, error } = await supabase
       .from('webhooks')
-      .insert(body)
-      .select()
-    
-    if (error) throw error
-    
-    return NextResponse.json({ success: true, data })
-  } catch (error: unknown) {
-    console.error('Error processing webhook:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Error processing webhook';
-    const statusCode = 500;
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error fetching webhooks:', error)
     return NextResponse.json(
-      { success: false, error: errorMessage },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const webhook = await request.json()
     const { data, error } = await supabase
       .from('webhooks')
-      .select('*')
-    
-    if (error) throw error
-    
-    return NextResponse.json(data)
-  } catch (error: unknown) {
-    console.error('Error fetching webhooks:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Error fetching webhooks';
-    const statusCode = 500;
+      .insert({
+        created_by: session.user.id,
+        ...webhook
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error creating webhook:', error)
     return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 } 

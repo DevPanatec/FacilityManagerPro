@@ -1,131 +1,108 @@
+import { createClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
-import { createClient } from '../../../utils/supabase/server'
 
 export async function GET(request, { params }) {
-  const supabase = await createClient()
-  const { id } = params
-  
-  const { data, error } = await supabase
-    .from('organizations')
-    .select(`
-      *,
-      staff_shifts(
-        id,
-        staff_id,
-        shift_id
-      ),
-      tasks(
-        id,
-        title,
-        description,
-        status
-      ),
-      documents(
-        id,
-        title,
-        file_url
-      ),
-      cleaning_checklists(
-        id,
-        title,
-        status
+  try {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
       )
-    `)
-    .eq('id', id)
-    .single()
-  
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    const { data, error } = await supabase
+      .from('organizations')
+      .select('*')
+      .eq('id', params.id)
+      .single()
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error fetching organization:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
-  
-  return NextResponse.json(data)
 }
 
 export async function PUT(request, { params }) {
   try {
-    const supabase = await createClient()
-    const { id } = params
-    const body = await request.json()
-    
-    // Actualizar organización principal
-    const { data, error: orgError } = await supabase
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const updates = await request.json()
+    const { data, error } = await supabase
       .from('organizations')
-      .update({
-        name: body.name,
-        logo_url: body.logo_url,
-        status: body.status
-      })
-      .eq('id', id)
+      .update(updates)
+      .eq('id', params.id)
       .select()
+      .single()
 
-    if (orgError) throw orgError
-
-    // Actualizar tareas si existen
-    if (body.tasks) {
-      // Eliminar tareas existentes
-      await supabase
-        .from('tasks')
-        .delete()
-        .eq('organization_id', id)
-
-      // Insertar nuevas tareas
-      if (body.tasks.length > 0) {
-        const { error: tasksError } = await supabase
-          .from('tasks')
-          .insert(body.tasks.map(task => ({
-            organization_id: id,
-            title: task.title,
-            description: task.description,
-            status: task.status
-          })))
-
-        if (tasksError) throw tasksError
-      }
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
     }
 
-    // Actualizar documentos si existen
-    if (body.documents) {
-      await supabase
-        .from('documents')
-        .delete()
-        .eq('organization_id', id)
-
-      if (body.documents.length > 0) {
-        const { error: docsError } = await supabase
-          .from('documents')
-          .insert(body.documents.map(doc => ({
-            organization_id: id,
-            title: doc.title,
-            file_url: doc.file_url
-          })))
-
-        if (docsError) throw docsError
-      }
-    }
-
-    return NextResponse.json(data[0])
+    return NextResponse.json({ data })
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Error updating organization:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
 }
 
 export async function DELETE(request, { params }) {
   try {
-    const supabase = await createClient()
-    const { id } = params
-    
-    // Eliminar la organización (las tablas relacionadas se eliminarán por CASCADE)
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
     const { error } = await supabase
       .from('organizations')
       .delete()
-      .eq('id', id)
-    
-    if (error) throw error
-    
-    return NextResponse.json({ 
-      message: 'Organization and related data deleted successfully' 
-    })
+      .eq('id', params.id)
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ success: true })
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Error deleting organization:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
 } 

@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
+import { createRouteHandlerClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { RecurrencePattern, Task } from '../../../../lib/types/tasks'
@@ -6,7 +6,7 @@ import { addDays, addWeeks, addMonths, addYears, isWeekend } from 'date-fns'
 
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createRouteHandlerClient()
     const body = await request.json()
     
     // Obtener el usuario actual

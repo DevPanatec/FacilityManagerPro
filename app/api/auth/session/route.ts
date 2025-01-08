@@ -1,8 +1,5 @@
-import { createClient } from '../../../utils/supabase/server'
+import { createClient } from '../../../../utils/supabase/server'
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-
-export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
@@ -10,99 +7,38 @@ export async function GET() {
     const { data: { session }, error } = await supabase.auth.getSession()
 
     if (error) {
-      throw error
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     if (!session) {
-      return NextResponse.json({ 
-        authenticated: false 
-      })
+      return NextResponse.json({ error: 'No session found' }, { status: 401 })
     }
 
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role, status, first_name, last_name, avatar_url, hospital_id')
-      .eq('id', session.user.id)
-      .single()
-
-    if (userError) {
-      throw userError
-    }
-
-    return NextResponse.json({
-      authenticated: true,
-      session: {
-        user: {
-          ...session.user,
-          ...userData
-        },
-        expires_at: session.expires_at
-      }
-    })
-
-  } catch (error) {
-    console.error('Session error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function POST() {
-  try {
-    const supabase = createClient()
-    const { data: { session }, error } = await supabase.auth.getSession()
-
-    if (error) {
-      throw error
-    }
-
-    if (!session) {
-      return NextResponse.json(
-        { error: 'No active session' },
-        { status: 401 }
-      )
-    }
-
-    // Refresh the session
-    const { data: refreshedSession, error: refreshError } = 
-      await supabase.auth.refreshSession()
+    // Check if token needs refresh
+    const { data: { user }, error: refreshError } = await supabase.auth.getUser()
 
     if (refreshError) {
-      throw refreshError
+      return NextResponse.json({ error: refreshError.message }, { status: 500 })
     }
 
-    // Update cookies with new tokens
-    const cookieStore = cookies()
-    if (refreshedSession.session?.access_token) {
-      cookieStore.set('sb-token', refreshedSession.session.access_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 7 // 1 week
-      })
-    }
-    if (refreshedSession.session?.refresh_token) {
-      cookieStore.set('sb-refresh-token', refreshedSession.session.refresh_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 30 // 30 days
-      })
+    if (!user) {
+      return NextResponse.json({ error: 'No user found' }, { status: 401 })
     }
 
-    return NextResponse.json({
-      session: refreshedSession.session
-    })
+    // Refresh session if needed
+    const { data: refreshedSession, error: sessionError } = await supabase.auth.refreshSession()
 
+    if (sessionError) {
+      return NextResponse.json({ error: sessionError.message }, { status: 500 })
+    }
+
+    if (!refreshedSession?.session) {
+      return NextResponse.json({ error: 'Could not refresh session' }, { status: 500 })
+    }
+
+    return NextResponse.json({ session: refreshedSession.session })
   } catch (error) {
-    console.error('Session refresh error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('Session error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 } 

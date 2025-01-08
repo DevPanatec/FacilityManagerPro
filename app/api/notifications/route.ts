@@ -1,39 +1,38 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '../../../utils/supabase/server'
 import { NextResponse } from 'next/server'
 
 // GET /api/notifications - Obtener notificaciones
 export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { searchParams } = new URL(request.url)
-    const unreadOnly = searchParams.get('unread') === 'true'
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
 
-    let query = supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
-
-    if (unreadOnly) {
-      query = query.eq('read', false)
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
     }
 
-    const { data: notifications, error } = await query
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
 
-    return NextResponse.json(notifications)
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error al obtener notificaciones';
-    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error fetching notifications:', error)
     return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 }
@@ -41,30 +40,39 @@ export async function GET(request: Request) {
 // POST /api/notifications - Crear notificación
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const body = await request.json()
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
 
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const notification = await request.json()
     const { data, error } = await supabase
       .from('notifications')
-      .insert([
-        {
-          user_id: body.user_id,
-          title: body.title,
-          content: body.content,
-          type: body.type
-        }
-      ])
+      .insert({
+        user_id: session.user.id,
+        ...notification
+      })
       .select()
+      .single()
 
-    if (error) throw error
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
 
-    return NextResponse.json(data)
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error al crear notificación';
-    const statusCode = 500;
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error creating notification:', error)
     return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 }
@@ -72,29 +80,38 @@ export async function POST(request: Request) {
 // PUT /api/notifications/[id] - Marcar notificación como leída
 export async function PUT(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const body = await request.json()
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
 
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const { id } = await request.json()
     const { data, error } = await supabase
       .from('notifications')
       .update({ read: true })
-      .eq('id', body.id)
-      .eq('user_id', user.id) // Asegurar que la notificación pertenece al usuario
+      .eq('id', id)
+      .eq('user_id', session.user.id)
       .select()
+      .single()
 
-    if (error) throw error
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
 
-    return NextResponse.json(data)
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar notificación';
-    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error updating notification:', error)
     return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 }
@@ -102,29 +119,38 @@ export async function PUT(request: Request) {
 // DELETE /api/notifications/[id] - Eliminar notificación
 export async function DELETE(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
 
     const { error } = await supabase
       .from('notifications')
       .delete()
       .eq('id', id)
-      .eq('user_id', user.id) // Asegurar que la notificación pertenece al usuario
+      .eq('user_id', session.user.id)
 
-    if (error) throw error
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
 
-    return NextResponse.json({ message: 'Notificación eliminada exitosamente' })
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar notificación';
-    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting notification:', error)
     return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 } 

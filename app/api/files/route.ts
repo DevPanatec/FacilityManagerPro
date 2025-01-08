@@ -1,161 +1,153 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '../../../utils/supabase/server'
 import { NextResponse } from 'next/server'
 
-// GET /api/files - Obtener documentos
 export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-    
-    let query = supabase
-      .from('documents')
-      .select(`
-        *,
-        profiles!documents_uploaded_by_fkey (
-          first_name,
-          last_name
-        ),
-        organizations (
-          name
-        )
-      `)
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
 
-    if (organizationId) {
-      query = query.eq('organization_id', organizationId)
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
     }
 
-    const { data: documents, error } = await query
+    const { data, error } = await supabase
+      .from('files')
+      .select('*')
+      .eq('user_id', session.user.id)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
 
-    return NextResponse.json(documents)
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error al obtener documentos';
-    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error fetching files:', error)
     return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 }
 
-// POST /api/files - Subir documento
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const metadata = JSON.parse(formData.get('metadata') as string)
+    const path = formData.get('path') as string
 
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    if (!file) {
+      return NextResponse.json(
+        { error: 'No file provided' },
+        { status: 400 }
+      )
+    }
 
-    // Subir archivo
-    const { data: fileData, error: uploadError } = await supabase
-      .storage
-      .from('documents')
-      .upload(`${metadata.organization_id}/${Date.now()}-${file.name}`, file)
+    const { data, error } = await supabase.storage
+      .from('files')
+      .upload(`${session.user.id}/${path || ''}/${file.name}`, file)
 
-    if (uploadError) throw uploadError
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
 
-    // Obtener URL pública del archivo
-    const { data: { publicUrl } } = supabase
-      .storage
-      .from('documents')
-      .getPublicUrl(fileData.path)
-
-    // Crear registro en la tabla documents
-    const { data: document, error: dbError } = await supabase
-      .from('documents')
-      .insert([
-        {
-          organization_id: metadata.organization_id,
-          title: metadata.title || file.name,
-          description: metadata.description,
-          file_url: publicUrl,
-          file_type: file.type,
-          uploaded_by: user.id
-        }
-      ])
-      .select()
-
-    if (dbError) throw dbError
-
-    // Registrar en activity_logs
-    await supabase
-      .from('activity_logs')
-      .insert([
-        {
-          user_id: user.id,
-          action: 'upload_document',
-          description: `Document uploaded: ${metadata.title || file.name}`
-        }
-      ])
-
-    return NextResponse.json(document)
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error al subir documento';
-    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error uploading file:', error)
     return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 }
 
-// DELETE /api/files/[id] - Eliminar documento
 export async function DELETE(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
-    // Obtener información del documento
-    const { data: document } = await supabase
-      .from('documents')
-      .select('file_url, uploaded_by')
+    // Get file information
+    const { data: file, error: fileError } = await supabase
+      .from('files')
+      .select('file_path, user_id')
       .eq('id', id)
       .single()
 
-    if (!document) throw new Error('Documento no encontrado')
-
-    // Verificar propiedad
-    const { data: { user } } = await supabase.auth.getUser()
-    if (document.uploaded_by !== user?.id) {
-      throw new Error('No autorizado para eliminar este documento')
+    if (fileError || !file) {
+      return NextResponse.json(
+        { error: 'File not found' },
+        { status: 404 }
+      )
     }
 
-    // Obtener path del archivo desde la URL
-    const fileUrl = new URL(document.file_url)
-    const filePath = fileUrl.pathname.split('/').slice(-2).join('/')
+    // Verify ownership
+    if (file.user_id !== session.user.id) {
+      return NextResponse.json(
+        { error: 'Unauthorized to delete this file' },
+        { status: 403 }
+      )
+    }
 
-    // Eliminar archivo del storage
-    const { error: storageError } = await supabase
-      .storage
-      .from('documents')
-      .remove([filePath])
+    // Delete from storage
+    const { error: storageError } = await supabase.storage
+      .from('files')
+      .remove([file.file_path])
 
-    if (storageError) throw storageError
+    if (storageError) {
+      return NextResponse.json(
+        { error: storageError.message },
+        { status: 500 }
+      )
+    }
 
-    // Eliminar registro de la base de datos
+    // Delete from database
     const { error: dbError } = await supabase
-      .from('documents')
+      .from('files')
       .delete()
       .eq('id', id)
 
-    if (dbError) throw dbError
+    if (dbError) {
+      return NextResponse.json(
+        { error: dbError.message },
+        { status: 500 }
+      )
+    }
 
-    return NextResponse.json({ message: 'Documento eliminado exitosamente' })
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar documento';
-    const statusCode = error instanceof Error && error.message.includes('No autorizado') ? 403 : 500;
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting file:', error)
     return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 } 

@@ -1,56 +1,40 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
-import { Session, AuthChangeEvent } from '@supabase/supabase-js'
-import { supabase } from '../utils/supabase/client'
+import { Session } from '@supabase/supabase-js'
 
-const SessionContext = createContext<{
+interface SessionContextValue {
   session: Session | null
-  isLoading: boolean
-}>({
+  loading: boolean
+}
+
+const SessionContext = createContext<SessionContextValue>({
   session: null,
-  isLoading: true
+  loading: true,
 })
 
-export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+export function useSession() {
+  return useContext(SessionContext)
+}
+
+export default function SessionProvider({
+  children,
+  initialSession,
+}: {
+  children: React.ReactNode
+  initialSession: Session | null
+}) {
+  const [session, setSession] = useState<Session | null>(initialSession)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-      setSession(initialSession)
-      setIsLoading(false)
-    })
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, currentSession: Session | null) => {
-      setSession(currentSession)
-      setIsLoading(false)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
+    setSession(initialSession)
+    setLoading(false)
+  }, [initialSession])
 
   return (
-    <SessionContext.Provider value={{ session, isLoading }}>
+    <SessionContext.Provider value={{ session, loading }}>
       {children}
     </SessionContext.Provider>
   )
-}
-
-export const useSession = () => useContext(SessionContext)
-
-export function useAuth() {
-  const { session, isLoading } = useSession()
-  const isAuthenticated = !!session
-  
-  return {
-    session,
-    isLoading,
-    isAuthenticated,
-    user: session?.user
-  }
 } 

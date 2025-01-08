@@ -1,5 +1,6 @@
 {
   "framework": "nextjs",
+  "buildCommand": "npm run build",
   "git": {
     "deploymentEnabled": {
       "main": true
@@ -55,6 +56,20 @@
           "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization"
         }
       ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/session-cleanup",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/email-worker",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/webhook-retry",
+      "schedule": "*/15 * * * *"
     }
   ]
 } 

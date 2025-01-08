@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 // import { DashboardLayout } from '@/lib/types/dashboard'

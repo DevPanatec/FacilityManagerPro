@@ -1,43 +1,58 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
+import { type EmailOtpType } from '@supabase/supabase-js'
 
 export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const token_hash = searchParams.get('token_hash')
+  const type = searchParams.get('type') as EmailOtpType | null
+  const next = searchParams.get('next') ?? '/'
+
+  if (!token_hash || !type) {
+    return NextResponse.redirect(new URL(`/auth/auth-code-error`, request.url))
+  }
+
+  const supabase = createClient()
+
+  const { error } = await supabase.auth.verifyOtp({
+    type,
+    token_hash,
+  })
+
+  if (error) {
+    return NextResponse.redirect(new URL(`/auth/auth-code-error?error=${error.message}`, request.url))
+  }
+
+  return NextResponse.redirect(new URL(next, request.url))
+}
+
+export async function POST(request: Request) {
   try {
-    const { searchParams } = new URL(request.url)
-    const token_hash = searchParams.get('token_hash')
-    const type = searchParams.get('type')
-    const next = searchParams.get('next') ?? '/dashboard'
-
-    if (!token_hash || !type) {
-      return NextResponse.redirect(new URL('/auth/error?message=Parámetros inválidos', request.url))
-    }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          persistSession: false
-        }
-      }
-    )
+    const { email, token } = await request.json()
+    const supabase = createClient()
 
     const { error } = await supabase.auth.verifyOtp({
-      token_hash,
-      type: type as any,
+      email,
+      token,
+      type: 'email',
     })
 
     if (error) {
-      return NextResponse.redirect(
-        new URL(`/auth/error?message=${encodeURIComponent(error.message)}`, request.url)
+      return NextResponse.json(
+        { error: error.message },
+        { status: 400 }
       )
     }
 
-    return NextResponse.redirect(new URL(next, request.url))
+    return NextResponse.json(
+      { message: 'Email verified successfully' },
+      { status: 200 }
+    )
   } catch (error) {
-    console.error('Error al verificar email:', error)
-    return NextResponse.redirect(
-      new URL('/auth/error?message=Error al verificar el email', request.url)
+    console.error('Error verifying email:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 } 

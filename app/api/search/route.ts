@@ -1,5 +1,4 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createRouteHandlerClient } from '@/utils/supabase/server'
 import { NextResponse } from 'next/server'
 
 // Definimos las interfaces
@@ -31,7 +30,7 @@ export const runtime = 'edge'
 
 export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createRouteHandlerClient()
     const { searchParams } = new URL(request.url)
     const query = searchParams.get('q')
     const type = searchParams.get('type')

@@ -1,53 +1,37 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '../../../utils/supabase/server'
 import { NextResponse } from 'next/server'
 
 // GET /api/positions - Obtener posiciones
 export async function GET(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { searchParams } = new URL(request.url)
-    const departmentId = searchParams.get('departmentId')
-    const search = searchParams.get('search')
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
 
-    let query = supabase
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const { data, error } = await supabase
       .from('positions')
-      .select(`
-        *,
-        department:departments (
-          id,
-          name
-        )
-      `)
-      .order('name', { ascending: true })
+      .select('*')
+      .order('created_at', { ascending: false })
 
-    // Aplicar filtros
-    if (departmentId) {
-      query = query.eq('department_id', departmentId)
-    }
-    if (search) {
-      query = query.ilike('name', `%${search}%`)
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
     }
 
-    const { data: positions, error } = await query
-
-    if (error) throw error
-
-    return NextResponse.json(positions)
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error 
-      ? error.message 
-      : 'Error al obtener posiciones'
-    const statusCode = error instanceof Error && error.message.includes('No autorizado') 
-      ? 403 
-      : 500
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error fetching positions:', error)
     return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 }
@@ -55,65 +39,39 @@ export async function GET(request: Request) {
 // POST /api/positions - Crear posición
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const body = await request.json()
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
 
-    // Verificar que el departamento existe y el usuario tiene acceso
-    const { data: department } = await supabase
-      .from('departments')
-      .select('id')
-      .eq('id', body.department_id)
-      .single()
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
 
-    if (!department) throw new Error('Departamento no encontrado')
-
-    // Crear posición
+    const position = await request.json()
     const { data, error } = await supabase
       .from('positions')
-      .insert([
-        {
-          department_id: body.department_id,
-          name: body.name,
-          description: body.description,
-          requirements: body.requirements
-        }
-      ])
-      .select(`
-        *,
-        department:departments (
-          id,
-          name
-        )
-      `)
+      .insert({
+        created_by: session.user.id,
+        ...position
+      })
+      .select()
+      .single()
 
-    if (error) throw error
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      )
+    }
 
-    // Registrar en activity_logs
-    await supabase
-      .from('activity_logs')
-      .insert([
-        {
-          user_id: user.id,
-          action: 'create_position',
-          description: `Position created: ${body.name}`
-        }
-      ])
-
-    return NextResponse.json(data[0])
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error 
-      ? error.message 
-      : 'Error al crear posición'
-    const statusCode = error instanceof Error && error.message.includes('No autorizado') 
-      ? 403 
-      : 500
+    return NextResponse.json({ data })
+  } catch (error) {
+    console.error('Error creating position:', error)
     return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 }
@@ -121,7 +79,7 @@ export async function POST(request: Request) {
 // PUT /api/positions/[id] - Actualizar posición
 export async function PUT(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const body = await request.json()
 
     // Obtener el usuario actual
@@ -184,7 +142,7 @@ export async function PUT(request: Request) {
 // DELETE /api/positions/[id] - Eliminar posición
 export async function DELETE(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     

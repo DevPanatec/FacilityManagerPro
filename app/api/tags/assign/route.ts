@@ -1,10 +1,10 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
+import { createRouteHandlerClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createRouteHandlerClient()
     
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')

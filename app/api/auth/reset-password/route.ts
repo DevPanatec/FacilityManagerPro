@@ -1,39 +1,24 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '../../../../utils/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
     const { email } = await request.json()
-    const requestUrl = new URL(request.url)
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          persistSession: false
-        }
-      }
-    )
+    const supabase = createClient()
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${requestUrl.origin}/auth/callback?next=/auth/update-password`,
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/update-password`,
     })
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json({
-      message: 'Revisa tu correo electrónico para restablecer tu contraseña'
-    })
+    return NextResponse.json({ message: 'Password reset email sent' })
   } catch (error) {
-    console.error('Error al solicitar restablecimiento de contraseña:', error)
+    console.error('Error resetting password:', error)
     return NextResponse.json(
-      { error: 'Error al procesar la solicitud' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

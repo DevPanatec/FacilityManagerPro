@@ -1,27 +1,26 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '../../../../utils/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
-    const { email } = await request.json()
-    const supabase = createRouteHandlerClient({ cookies })
+    const { email, password } = await request.json()
+    const supabase = createClient()
 
-    // Check if user exists in users table
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id, email')
-      .eq('email', email)
-      .single()
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
 
-    if (userError) {
-      console.error('User verification error:', userError)
-      return NextResponse.json({ exists: false })
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 401 })
     }
 
-    return NextResponse.json({ exists: !!userData })
+    return NextResponse.json({ data })
   } catch (error) {
-    console.error('Credential verification error:', error)
-    return NextResponse.json({ exists: false })
+    console.error('Error verifying credentials:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
   }
 } 

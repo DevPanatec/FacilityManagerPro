@@ -1,8 +1,7 @@
-import { createRouteHandlerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createRouteHandlerClient } from '@/utils/supabase/server'
 
 export async function processWebhook(payload: any) {
-  const supabase = createRouteHandlerClient({ cookies })
+  const supabase = createRouteHandlerClient()
 
   switch(payload.type) {
     case 'task.created':
