@@ -1,36 +1,62 @@
 'use server'
 
+import { cookies } from 'next/headers'
 import { createClient } from '../../../utils/supabase/server'
-import { z } from 'zod'
 import { loginSchema } from '../../../lib/validations/auth'
+import type { AuthResponse } from '../../../types/auth'
 
-export async function login(formData: FormData) {
-  const validatedFields = loginSchema.safeParse({
-    email: formData.get('email'),
-    password: formData.get('password'),
-  })
+export async function login(formData: FormData): Promise<AuthResponse> {
+  try {
+    const validatedFields = loginSchema.safeParse({
+      email: formData.get('email'),
+      password: formData.get('password'),
+    })
 
-  if (!validatedFields.success) {
+    if (!validatedFields.success) {
+      return {
+        error: {
+          message: validatedFields.error.errors[0].message,
+          status: 400
+        }
+      }
+    }
+
+    const { email, password } = validatedFields.data
+
+    const supabase = createClient()
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      return {
+        error: {
+          message: error.message,
+          status: error.status || 400
+        }
+      }
+    }
+
+    // Ensure session is properly set
+    if (!data?.session) {
+      return {
+        error: {
+          message: 'Authentication failed',
+          status: 401
+        }
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Login error:', error)
     return {
-      error: 'Invalid fields',
+      error: {
+        message: 'An unexpected error occurred',
+        status: 500
+      }
     }
   }
-
-  const email = formData.get('email') as string
-  const password = formData.get('password') as string
-
-  const supabase = createClient()
-
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  })
-
-  if (error) {
-    return {
-      error: error.message,
-    }
-  }
-
-  return { success: true }
 }

@@ -14,15 +14,25 @@ export const createClient = () => {
           return cookie?.value
         },
         set(name: string, value: string, options: CookieOptions) {
-          cookieStore.set(name, value, options)
+          try {
+            cookieStore.set(name, value, options)
+          } catch (error) {
+            // Handle cookie error in dev mode
+            console.error('Error setting cookie:', error)
+          }
         },
         remove(name: string, options: CookieOptions) {
-          cookieStore.set(name, '', { ...options, maxAge: 0 })
+          try {
+            cookieStore.set(name, '', { ...options, maxAge: 0 })
+          } catch (error) {
+            // Handle cookie error in dev mode
+            console.error('Error removing cookie:', error)
+          }
         },
       },
     }
   )
 }
 
-// Alias para mantener compatibilidad con código existente
-export const createRouteHandlerClient = createClient 
+// Export for backwards compatibility
+export const createServerComponentClient = createClient 

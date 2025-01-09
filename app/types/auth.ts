@@ -1,14 +1,20 @@
-export interface AuthError {
+import type { User, Session } from '@supabase/supabase-js'
+
+export type AuthError = {
   message: string
   status?: number
 }
 
-export interface AuthResponse {
+export type AuthResponse = {
   error?: AuthError
   success?: boolean
+  data?: {
+    user: User | null
+    session: Session | null
+  }
 }
 
-export interface Profile {
+export type Profile = {
   id: string
   email: string
   name: string | null

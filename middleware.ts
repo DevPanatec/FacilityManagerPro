@@ -17,20 +17,27 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value
         },
         set(name: string, value: string, options: CookieOptions) {
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
           response.cookies.set({
             name,
             value,
             ...options,
-            sameSite: 'lax',
-            secure: process.env.NODE_ENV === 'production',
           })
         },
         remove(name: string, options: CookieOptions) {
-          response.cookies.delete({
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          response.cookies.set({
             name,
+            value: '',
             ...options,
-            sameSite: 'lax',
-            secure: process.env.NODE_ENV === 'production',
           })
         },
       },
@@ -39,11 +46,15 @@ export async function middleware(request: NextRequest) {
 
   const { data: { session } } = await supabase.auth.getSession()
 
+  // Protected routes
   if (!session && request.nextUrl.pathname.startsWith('/dashboard')) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    const redirectUrl = new URL('/auth/login', request.url)
+    redirectUrl.searchParams.set('redirect', request.nextUrl.pathname)
+    return NextResponse.redirect(redirectUrl)
   }
 
-  if (session && (request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/register'))) {
+  // Auth routes
+  if (session && request.nextUrl.pathname.startsWith('/auth/login')) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
@@ -52,14 +63,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     * - api routes
-     */
-    '/((?!_next/static|_next/image|favicon.ico|public/|api/).*)',
+    '/dashboard/:path*',
+    '/auth/:path*',
   ],
 }
