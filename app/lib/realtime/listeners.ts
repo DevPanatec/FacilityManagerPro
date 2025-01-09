@@ -1,5 +1,5 @@
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createBrowserClient } from '@supabase/ssr'
 
 interface DatabaseRecord {
   [key: string]: any
@@ -7,7 +7,10 @@ interface DatabaseRecord {
 
 // Listener general para todas las tablas
 export function setupGeneralListener(): RealtimeChannel {
-  const supabase = createClientComponentClient()
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   return supabase
     .channel('db-changes')
     .on(
@@ -50,7 +53,10 @@ interface NotificationRecord {
 
 // Listener específico para notificaciones
 export function setupNotificationListener(): RealtimeChannel {
-  const supabase = createClientComponentClient()
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   return supabase
     .channel('notification-changes')
     .on(
@@ -79,7 +85,10 @@ interface TaskRecord {
 
 // Listener específico para tareas
 export function setupTaskListener(): RealtimeChannel {
-  const supabase = createClientComponentClient()
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   return supabase
     .channel('task-changes')
     .on(
@@ -106,7 +115,10 @@ interface ChatMessageRecord {
 
 // Listener específico para chat
 export function setupChatListener(): RealtimeChannel {
-  const supabase = createClientComponentClient()
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   return supabase
     .channel('chat-changes')
     .on(

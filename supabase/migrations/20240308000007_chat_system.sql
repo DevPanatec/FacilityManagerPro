@@ -60,10 +60,8 @@ CREATE TABLE IF NOT EXISTS chat_message_attachments (
 
 -- Enable RLS
 ALTER TABLE chat_rooms ENABLE ROW LEVEL SECURITY;
-ALTER TABLE chat_room_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE chat_message_reactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE chat_message_attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_room_members ENABLE ROW LEVEL SECURITY;
 
 -- Create indexes
 CREATE INDEX idx_chat_rooms_organization ON chat_rooms(organization_id);
@@ -203,100 +201,63 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Create policies for chat rooms
-CREATE POLICY "Chat rooms are viewable by their members" ON chat_rooms
+CREATE POLICY "Chat rooms are viewable by members" ON chat_rooms
     FOR SELECT USING (
-        auth.role() = 'authenticated' AND (
-            EXISTS (
-                SELECT 1 FROM chat_room_members
-                WHERE room_id = chat_rooms.id
-                AND user_id = auth.uid()
-            ) OR (
-                NOT chat_rooms.is_private AND
-                chat_rooms.organization_id IN (
-                    SELECT organization_id FROM users WHERE id = auth.uid()
-                )
-            )
+        auth.role() = 'authenticated' AND
+        EXISTS (
+            SELECT 1 FROM chat_room_members 
+            WHERE room_id = id 
+            AND user_id = auth.uid()
         )
     );
 
-CREATE POLICY "Chat rooms can be created by organization members" ON chat_rooms
+CREATE POLICY "Chat rooms can be created by authenticated users" ON chat_rooms
     FOR INSERT WITH CHECK (
-        auth.role() = 'authenticated' AND (
-            organization_id IN (
-                SELECT organization_id FROM users WHERE id = auth.uid()
-            )
+        auth.role() = 'authenticated' AND
+        organization_id IN (
+            SELECT organization_id FROM users WHERE id = auth.uid()
         )
     );
 
-CREATE POLICY "Chat rooms can be updated by owners and admins" ON chat_rooms
-    FOR UPDATE USING (
-        auth.role() = 'authenticated' AND (
-            EXISTS (
-                SELECT 1 FROM chat_room_members
-                WHERE room_id = chat_rooms.id
-                AND user_id = auth.uid()
-                AND role IN ('owner', 'admin')
-            )
-        )
-    );
-
--- Create policies for chat room members
-CREATE POLICY "Chat room members are viewable by room members" ON chat_room_members
-    FOR SELECT USING (
-        auth.role() = 'authenticated' AND (
-            EXISTS (
-                SELECT 1 FROM chat_room_members
-                WHERE room_id = chat_room_members.room_id
-                AND user_id = auth.uid()
-            )
-        )
-    );
-
-CREATE POLICY "Chat room members can be managed by room owners and admins" ON chat_room_members
-    FOR ALL USING (
-        auth.role() = 'authenticated' AND (
-            EXISTS (
-                SELECT 1 FROM chat_room_members
-                WHERE room_id = chat_room_members.room_id
-                AND user_id = auth.uid()
-                AND role IN ('owner', 'admin')
-            )
-        )
-    );
-
--- Create policies for chat messages
+-- Create policies for chat_messages
 CREATE POLICY "Chat messages are viewable by room members" ON chat_messages
     FOR SELECT USING (
-        auth.role() = 'authenticated' AND (
-            EXISTS (
-                SELECT 1 FROM chat_room_members
-                WHERE room_id = chat_messages.room_id
-                AND user_id = auth.uid()
-            )
+        auth.role() = 'authenticated' AND
+        EXISTS (
+            SELECT 1 FROM chat_room_members 
+            WHERE room_id = chat_messages.room_id 
+            AND user_id = auth.uid()
         )
     );
 
-CREATE POLICY "Chat messages can be created by room members" ON chat_messages
+CREATE POLICY "Users can insert messages in rooms they belong to" ON chat_messages
     FOR INSERT WITH CHECK (
-        auth.role() = 'authenticated' AND (
-            EXISTS (
-                SELECT 1 FROM chat_room_members
-                WHERE room_id = NEW.room_id
-                AND user_id = auth.uid()
-            )
+        auth.role() = 'authenticated' AND
+        EXISTS (
+            SELECT 1 FROM chat_room_members 
+            WHERE room_id = room_id 
+            AND user_id = auth.uid()
         )
     );
 
-CREATE POLICY "Chat messages can be updated by their authors" ON chat_messages
-    FOR UPDATE USING (
-        auth.role() = 'authenticated' AND (
-            user_id = auth.uid() OR
-            EXISTS (
-                SELECT 1 FROM chat_room_members
-                WHERE room_id = chat_messages.room_id
-                AND user_id = auth.uid()
-                AND role IN ('owner', 'admin')
-            )
+-- Create policies for chat_room_members
+CREATE POLICY "Room members are viewable by room participants" ON chat_room_members
+    FOR SELECT USING (
+        auth.role() = 'authenticated' AND
+        EXISTS (
+            SELECT 1 FROM chat_room_members 
+            WHERE room_id = chat_room_members.room_id 
+            AND user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Room members can be added by room creator" ON chat_room_members
+    FOR INSERT WITH CHECK (
+        auth.role() = 'authenticated' AND
+        EXISTS (
+            SELECT 1 FROM chat_rooms 
+            WHERE id = room_id 
+            AND created_by = auth.uid()
         )
     );
 

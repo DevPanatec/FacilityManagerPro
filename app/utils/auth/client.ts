@@ -1,14 +1,11 @@
-import { supabase } from '@/app/config/supabaseClient'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { Database } from '@/types/supabase'
 
-export const auth = {
-  getUser: async () => {
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (error) throw error
-    return user
-  },
+export const supabaseClient = createClientComponentClient<Database>()
 
-  signIn: async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
+export const authService = {
+  async login(email: string, password: string) {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
       email,
       password
     })
@@ -16,18 +13,33 @@ export const auth = {
     return data
   },
 
-  signOut: async () => {
-    const { error } = await supabase.auth.signOut()
+  async logout() {
+    const { error } = await supabaseClient.auth.signOut()
     if (error) throw error
   },
 
-  getSession: async () => {
-    const { data: { session }, error } = await supabase.auth.getSession()
+  async getCurrentUser() {
+    const { data: { user }, error } = await supabaseClient.auth.getUser()
     if (error) throw error
-    return session
+    return user
   },
 
-  onAuthStateChange: (callback: (event: string, session: any) => void) => {
-    return supabase.auth.onAuthStateChange(callback)
+  async getUserRole() {
+    const user = await this.getCurrentUser()
+    if (!user) return null
+    
+    const { data, error } = await supabaseClient
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+      
+    if (error) throw error
+    return data?.role
+  },
+
+  async isAdmin() {
+    const role = await this.getUserRole()
+    return ['admin', 'superadmin'].includes(role || '')
   }
 } 
