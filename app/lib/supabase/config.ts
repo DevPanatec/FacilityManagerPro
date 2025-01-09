@@ -17,14 +17,17 @@ export const createServerSupabaseClient = () => {
     supabaseAnonKey,
     {
       cookies: {
-        get(name: string) {
-          return cookies().get(name)?.value
+        async get(name: string) {
+          const cookieStore = await cookies()
+          return cookieStore.get(name)?.value
         },
-        set(name: string, value: string, options: CookieOptions) {
-          cookies().set({ name, value, ...options })
+        async set(name: string, value: string, options: CookieOptions) {
+          const cookieStore = await cookies()
+          cookieStore.set({ name, value, ...options })
         },
-        remove(name: string, options: CookieOptions) {
-          cookies().delete({ name, ...options })
+        async remove(name: string, options: CookieOptions) {
+          const cookieStore = await cookies()
+          cookieStore.delete({ name, ...options })
         },
       },
     }

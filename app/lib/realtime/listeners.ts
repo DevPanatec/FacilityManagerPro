@@ -1,138 +1,37 @@
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
-import { createBrowserClient } from '@supabase/ssr'
+import { supabaseService } from '@/services/supabaseService'
 
 interface DatabaseRecord {
+  id: string
   [key: string]: any
 }
 
-// Listener general para todas las tablas
-export function setupGeneralListener(): RealtimeChannel {
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-  return supabase
-    .channel('db-changes')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: '*'
-      },
-      (payload: RealtimePostgresChangesPayload<DatabaseRecord>) => {
-        console.log('Cambio en la base de datos:', payload)
-        const { eventType, table, new: newRecord, old: oldRecord } = payload
-        
-        switch (eventType) {
-          case 'INSERT':
-            console.log(`Nuevo registro en ${table}:`, newRecord)
-            break
-          case 'UPDATE':
-            console.log(`Actualización en ${table}:`, {
-              anterior: oldRecord,
-              nuevo: newRecord
-            })
-            break
-          case 'DELETE':
-            console.log(`Eliminación en ${table}:`, oldRecord)
-            break
-        }
-      }
-    )
-}
+export class RealtimeListener<T extends DatabaseRecord> {
+  private channel: RealtimeChannel
+  private table: string
+  private callback: (payload: RealtimePostgresChangesPayload<T>) => void
 
-interface NotificationRecord {
-  id: string
-  user_id: string
-  title: string
-  content: string
-  read: boolean
-  created_at: string
-}
+  constructor(table: string, callback: (payload: RealtimePostgresChangesPayload<T>) => void) {
+    this.table = table
+    this.callback = callback
+    this.channel = supabaseService.db
+      .channel('db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: this.table
+        },
+        this.callback
+      )
+  }
 
-// Listener específico para notificaciones
-export function setupNotificationListener(): RealtimeChannel {
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-  return supabase
-    .channel('notification-changes')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'notifications'
-      },
-      (payload: RealtimePostgresChangesPayload<NotificationRecord>) => {
-        if (payload.new && 'read' in payload.new && payload.new.read === false) {
-          console.log('Nueva notificación:', payload.new)
-          // Aquí puedes disparar una notificación al usuario
-        }
-      }
-    )
-}
+  subscribe() {
+    this.channel.subscribe()
+  }
 
-interface TaskRecord {
-  id: string
-  title: string
-  description: string
-  status: string
-  [key: string]: any
-}
-
-// Listener específico para tareas
-export function setupTaskListener(): RealtimeChannel {
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-  return supabase
-    .channel('task-changes')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'tasks'
-      },
-      (payload: RealtimePostgresChangesPayload<TaskRecord>) => {
-        console.log('Cambio en tareas:', payload)
-        // Aquí puedes manejar actualizaciones de tareas
-      }
-    )
-}
-
-interface ChatMessageRecord {
-  id: string
-  chat_room_id: string
-  sender_id: string
-  content: string
-  created_at: string
-}
-
-// Listener específico para chat
-export function setupChatListener(): RealtimeChannel {
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-  return supabase
-    .channel('chat-changes')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'chat_messages'
-      },
-      (payload: RealtimePostgresChangesPayload<ChatMessageRecord>) => {
-        if (payload.eventType === 'INSERT') {
-          console.log('Nuevo mensaje:', payload.new)
-          // Aquí puedes actualizar el chat
-        }
-      }
-    )
+  unsubscribe() {
+    this.channel.unsubscribe()
+  }
 } 

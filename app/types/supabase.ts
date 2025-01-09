@@ -458,6 +458,59 @@ export type Database = {
           created_by: string
         }>
       }
+      inventory_items: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          description: string | null
+          category: string
+          quantity: number
+          unit: string
+          location: string | null
+          min_stock: number | null
+          max_stock: number | null
+          reorder_point: number | null
+          cost: number | null
+          supplier: string | null
+          status: 'active' | 'inactive'
+          last_inventory_date: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          organization_id: string
+          name: string
+          description?: string
+          category: string
+          quantity: number
+          unit: string
+          location?: string
+          min_stock?: number
+          max_stock?: number
+          reorder_point?: number
+          cost?: number
+          supplier?: string
+          status?: 'active' | 'inactive'
+          last_inventory_date?: string
+        }
+        Update: Partial<{
+          organization_id: string
+          name: string
+          description: string | null
+          category: string
+          quantity: number
+          unit: string
+          location: string | null
+          min_stock: number | null
+          max_stock: number | null
+          reorder_point: number | null
+          cost: number | null
+          supplier: string | null
+          status: 'active' | 'inactive'
+          last_inventory_date: string | null
+        }>
+      }
     }
   }
 } 

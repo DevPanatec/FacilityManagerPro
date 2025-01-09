@@ -8,7 +8,6 @@ import { toast } from 'react-hot-toast';
 import { demoAreas as areasData } from '@/mocks/areasData';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { initLocalStorage } from '@/utils/initLocalStorage';
 import { UserSelect } from './components/UserSelect';
 import { AreaSelect } from './components/AreaSelect';
 import { DateSelect } from './components/DateSelect';
@@ -121,9 +120,6 @@ export default function AssignmentClient() {
             return area;
           });
           
-          // Guardar en localStorage
-          setTareas(newAreasTareas);
-          
           return newAreasTareas;
         });
       });
@@ -223,7 +219,7 @@ export default function AssignmentClient() {
       return area;
     }));
     
-    showNotification(`Tarea actualizada a: ${nuevoEstado.replace('_', ' ')}`);
+    toast.success(`Tarea actualizada a: ${nuevoEstado.replace('_', ' ')}`);
   };
 
   // Agregar estado para el botón toggle de duración
@@ -494,8 +490,8 @@ export default function AssignmentClient() {
               />
 
               <DurationButtons 
-                selectedDuration={selectedDuration}
-                onSelect={handleDurationSelect}
+                selectedDuration={selectedDuration} 
+                onSelect={handleDurationSelect} 
               />
             </div>
 

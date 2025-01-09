@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { supabase } from '@/app/config/supabaseClient'
+import { supabaseService } from '@/services/supabaseService'
 import { toast } from 'react-hot-toast'
 import { FaUser, FaLock } from 'react-icons/fa'
 
@@ -30,10 +30,7 @@ export default function LoginPage() {
       const email = formState.email.trim().toLowerCase()
       const password = formState.password
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      })
+      const { data, error } = await supabaseService.auth.login(email, password)
 
       if (error) {
         if (error.message?.includes('Invalid login credentials')) {
@@ -46,13 +43,13 @@ export default function LoginPage() {
         return
       }
 
-      if (!data.user?.id) {
+      if (!data?.user?.id) {
         toast.error('Error al obtener información del usuario')
         return
       }
 
       // Obtener rol del usuario
-      const { data: userData, error: userError } = await supabase
+      const { data: userData, error: userError } = await supabaseService.db
         .from('users')
         .select('role')
         .eq('id', data.user.id)

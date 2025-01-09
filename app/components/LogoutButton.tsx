@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { clearSession } from '@/utils/auth/auth'
+import { clearSession } from '../../utils/auth/auth'
 import Cookies from 'js-cookie'
 
 export default function LogoutButton() {

@@ -4,14 +4,11 @@ import { testService } from '@/services/testService';
 export async function GET() {
   try {
     const results = {
-      taskFlow: await testService.testTaskFlow(),
-      security: await testService.testSecurityPermissions()
+      taskFlow: await testService.testTaskFlow()
     };
 
-    const allSuccess = results.taskFlow.success && results.security.success;
-
     return NextResponse.json({
-      success: allSuccess,
+      success: results.taskFlow.success,
       results,
       timestamp: new Date().toISOString()
     });

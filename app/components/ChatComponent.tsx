@@ -1,49 +1,30 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import type { Database } from '@/types/supabase'
+import { supabaseService } from '@/services/supabaseService'
 
-type Message = Database['public']['Tables']['chat_messages']['Row']
+interface Message {
+  id: string
+  content: string
+  user_id: string
+  created_at: string
+}
 
 export default function ChatComponent({ roomId }: { roomId: string }) {
   const [messages, setMessages] = useState<Message[]>([])
+  const [newMessage, setNewMessage] = useState('')
 
   useEffect(() => {
-    // Suscribirse a nuevos mensajes
-    const channel = supabase
-      .channel('chat_messages')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `room_id=eq.${roomId}`
-        },
-        (payload) => {
-          console.log('Cambio recibido:', payload)
-          if (payload.eventType === 'INSERT') {
-            setMessages(prev => [...prev, payload.new as Message])
-          } else if (payload.eventType === 'UPDATE') {
-            setMessages(prev => 
-              prev.map(msg => 
-                msg.id === payload.new.id ? payload.new as Message : msg
-              )
-            )
-          } else if (payload.eventType === 'DELETE') {
-            setMessages(prev => 
-              prev.filter(msg => msg.id !== payload.old.id)
-            )
-          }
-        }
-      )
-      .subscribe()
-
     // Cargar mensajes existentes
     const loadMessages = async () => {
-      const { data, error } = await supabase
-        .from('chat_messages')
+      const { data: authData, error: authError } = await supabaseService.auth.getUser()
+      if (authError || !authData?.user) {
+        console.error('Error de autenticación:', authError)
+        return
+      }
+
+      const { data, error } = await supabaseService.db
+        .from('messages')
         .select('*')
         .eq('room_id', roomId)
         .order('created_at', { ascending: true })
@@ -53,16 +34,59 @@ export default function ChatComponent({ roomId }: { roomId: string }) {
         return
       }
 
-      setMessages(data)
+      setMessages(data || [])
     }
 
     loadMessages()
 
-    // Limpieza al desmontar
+    // Suscribirse a nuevos mensajes
+    const channel = supabaseService.db
+      .channel('messages')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
+          filter: `room_id=eq.${roomId}`
+        },
+        (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            setMessages(prev => [...prev, payload.new])
+          }
+        }
+      )
+      .subscribe()
+
     return () => {
       channel.unsubscribe()
     }
   }, [roomId])
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim()) return
+
+    const { data: authData, error: authError } = await supabaseService.auth.getUser()
+    if (authError || !authData?.user) {
+      console.error('Error de autenticación:', authError)
+      return
+    }
+
+    const { error } = await supabaseService.db
+      .from('messages')
+      .insert({
+        content: newMessage.trim(),
+        room_id: roomId,
+        user_id: authData.user.id
+      })
+
+    if (error) {
+      console.error('Error enviando mensaje:', error)
+      return
+    }
+
+    setNewMessage('')
+  }
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return ''
@@ -70,13 +94,33 @@ export default function ChatComponent({ roomId }: { roomId: string }) {
   }
 
   return (
-    <div className="flex flex-col space-y-4">
-      {messages.map(message => (
-        <div key={message.id} className="p-4 bg-white rounded shadow">
-          <p>{message.content}</p>
-          <small>{formatDate(message.created_at)}</small>
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map(message => (
+          <div key={message.id} className="p-4 bg-white rounded-lg shadow">
+            <p className="text-gray-800">{message.content}</p>
+            <small className="text-gray-500">{formatDate(message.created_at)}</small>
+          </div>
+        ))}
+      </div>
+      <div className="p-4 border-t">
+        <div className="flex space-x-2">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+            placeholder="Escribe un mensaje..."
+            className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            onClick={handleSendMessage}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            Enviar
+          </button>
         </div>
-      ))}
+      </div>
     </div>
   )
 } 

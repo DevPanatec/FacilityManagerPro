@@ -1,111 +1,46 @@
-'use client';
+'use client'
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { createBrowserClient } from '@supabase/ssr';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Database } from '@/types/supabase';
 
-interface Report {
-  id: number;
-  titulo: string;
-  fecha: string;
-  estado: 'Pendiente' | 'Resuelto';
-  descripcion: string;
-  archivos?: string[];
-  esContingencia: boolean;
-}
+type Reporte = Database['public']['Tables']['contingencies']['Row'];
 
 export default function ReportesPage() {
-  const router = useRouter();
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [reports, setReports] = useState<Report[]>([]);
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const [reportes, setReportes] = useState<Reporte[]>([]);
+  const supabase = createClientComponentClient<Database>();
 
   useEffect(() => {
-    fetchReports();
-  }, []);
-
-  const fetchReports = async () => {
-    try {
-      setIsLoading(true);
+    const fetchReportes = async () => {
       const { data, error } = await supabase
-        .from('reportes')
+        .from('contingencies')
         .select('*')
-        .order('fecha', { ascending: false });
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error cargando reportes:', error);
+        return;
+      }
 
-      // Transform the data to match the Report type
-      const transformedReports: Report[] = data.map(report => ({
-        id: report.id,
-        titulo: report.titulo,
-        fecha: new Date(report.fecha).toISOString().split('T')[0],
-        estado: report.estado === 'Pendiente' ? 'Pendiente' : 'Resuelto',
-        descripcion: report.descripcion,
-        archivos: report.archivos || [],
-        esContingencia: report.es_contingencia || false
-      }));
+      setReportes(data || []);
+    };
 
-      setReports(transformedReports);
-    } catch (error) {
-      console.error('Error fetching reports:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    fetchReportes();
+  }, [supabase]);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">
-          Reportes
-        </h1>
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          {isLoading ? (
-            <div className="p-6 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-6">Mis Reportes</h1>
+      <div className="grid gap-4">
+        {reportes.map((reporte) => (
+          <div key={reporte.id} className="bg-white p-4 rounded-lg shadow">
+            <h2 className="text-lg font-semibold">{reporte.title}</h2>
+            <p className="text-gray-600">{reporte.description}</p>
+            <div className="mt-2 text-sm text-gray-500">
+              {new Date(reporte.created_at).toLocaleDateString()}
             </div>
-          ) : reports.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Título</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {reports.map((report) => (
-                    <tr key={report.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/user/usuario/reportes/${report.id}`)}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{report.titulo}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{report.fecha}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          report.estado === 'Resuelto' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {report.estado}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {report.esContingencia ? 'Contingencia' : 'Normal'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="p-6 text-center text-gray-500">
-              No hay reportes disponibles
-            </div>
-          )}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
   );

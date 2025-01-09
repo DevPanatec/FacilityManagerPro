@@ -1,24 +1,14 @@
-import { createClient } from '@/lib/supabase/middleware'
+import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 import { NextResponse, type NextRequest } from 'next/server'
+import { Database } from '@/types/supabase'
 
-export async function middleware(request: NextRequest) {
-  try {
-    // Create a response and supabase client
-    const { supabase, response } = createClient(request)
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next()
+  const supabase = createMiddlewareClient<Database>({ req, res })
 
-    // Refresh session if expired - required for Server Components
-    await supabase.auth.getSession()
+  await supabase.auth.getSession()
 
-    return response
-  } catch (e) {
-    // If you are here, a Supabase client could not be created!
-    // This is likely because you have not set up environment variables.
-    return NextResponse.next({
-      request: {
-        headers: request.headers,
-      },
-    })
-  }
+  return res
 }
 
 export const config = {

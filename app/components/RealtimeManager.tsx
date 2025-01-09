@@ -1,13 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { RealtimeChannel } from '@supabase/supabase-js'
-import {
-  setupGeneralListener,
-  setupNotificationListener,
-  setupTaskListener,
-  setupChatListener
-} from '../lib/realtime/listeners'
+import { RealtimeListener } from '../lib/realtime/listeners'
+import { Database } from '@/types/supabase'
+
+type TaskRecord = Database['public']['Tables']['tasks']['Row']
+type MessageRecord = Database['public']['Tables']['messages']['Row']
 
 export default function RealtimeManager() {
   const [isMounted, setIsMounted] = useState(false)
@@ -17,25 +15,30 @@ export default function RealtimeManager() {
     
     // Solo inicializar los listeners cuando el componente está montado en el cliente
     if (typeof window !== 'undefined') {
-      const channels: RealtimeChannel[] = [
-        setupGeneralListener(),
-        setupNotificationListener(),
-        setupTaskListener(),
-        setupChatListener()
-      ]
+      // Crear listeners para diferentes tablas
+      const taskListener = new RealtimeListener<TaskRecord>(
+        'tasks',
+        (payload) => {
+          console.log('Cambio en tareas:', payload)
+        }
+      )
+
+      const messageListener = new RealtimeListener<MessageRecord>(
+        'messages',
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            console.log('Nuevo mensaje:', payload.new)
+          }
+        }
+      )
 
       // Suscribirse a todos los canales
-      channels.forEach(channel => {
-        channel.subscribe((status) => {
-          console.log(`Canal ${channel.topic} estado:`, status)
-        })
-      })
+      const listeners = [taskListener, messageListener]
+      listeners.forEach(listener => listener.subscribe())
 
       // Limpiar suscripciones al desmontar
       return () => {
-        channels.forEach(channel => {
-          channel.unsubscribe()
-        })
+        listeners.forEach(listener => listener.unsubscribe())
       }
     }
   }, [])

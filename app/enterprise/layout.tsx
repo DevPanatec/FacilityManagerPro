@@ -29,10 +29,8 @@ export default function EnterpriseLayout({
         </div>
       </main>
       <ChatWidget 
-        isEnterprise={true}
-        onNewMessage={(message) => {
-          console.log('Nuevo mensaje:', message)
-        }}
+        isAdmin={false}
+        isAdminPrincipal={false}
       />
     </div>
   )
