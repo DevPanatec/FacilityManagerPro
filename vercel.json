@@ -62,14 +62,6 @@
     {
       "path": "/api/cron/session-cleanup",
       "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/email-worker",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/webhook-retry",
-      "schedule": "*/15 * * * *"
     }
   ]
 } 
