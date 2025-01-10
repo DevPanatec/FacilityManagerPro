@@ -1,22 +1,48 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
 export type Database = {
   public: {
     Tables: {
       users: {
         Row: {
           id: string
-          role: string
-          created_at?: string
-          updated_at?: string
+          email: string
+          role: 'superadmin' | 'admin' | 'enterprise' | 'usuario'
+          first_name: string | null
+          last_name: string | null
+          status: 'active' | 'inactive' | 'pending'
+          organization_id: string | null
+          avatar_url: string | null
+          created_at: string
+          updated_at: string
         }
         Insert: {
           id: string
-          role: string
+          email: string
+          role?: 'superadmin' | 'admin' | 'enterprise' | 'usuario'
+          first_name?: string | null
+          last_name?: string | null
+          status?: 'active' | 'inactive' | 'pending'
+          organization_id?: string | null
+          avatar_url?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
-          role?: string
+          email?: string
+          role?: 'superadmin' | 'admin' | 'enterprise' | 'usuario'
+          first_name?: string | null
+          last_name?: string | null
+          status?: 'active' | 'inactive' | 'pending'
+          organization_id?: string | null
+          avatar_url?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -25,41 +51,22 @@ export type Database = {
         Row: {
           id: string
           name: string
-          created_at?: string
-          updated_at?: string
+          logo_url: string | null
+          status: 'active' | 'inactive' | 'pending'
+          created_at: string
+          updated_at: string
         }
         Insert: {
-          id: string
           name: string
+          logo_url?: string | null
+          status?: 'active' | 'inactive' | 'pending'
           created_at?: string
           updated_at?: string
         }
         Update: {
-          id?: string
           name?: string
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      profiles: {
-        Row: {
-          id: string
-          user_id: string
-          organization_id?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Insert: {
-          id: string
-          user_id: string
-          organization_id?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          organization_id?: string
+          logo_url?: string | null
+          status?: 'active' | 'inactive' | 'pending'
           created_at?: string
           updated_at?: string
         }

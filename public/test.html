@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Admin Creation</title>
+</head>
+<body>
+    <h1>Test Admin Creation</h1>
+    <button onclick="createAdmin()">Create Admin</button>
+    <pre id="result"></pre>
+
+    <script>
+        async function createAdmin() {
+            try {
+                const response = await fetch('/api/auth/create-verified-admin');
+                const data = await response.json();
+                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('result').textContent = 'Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html> 

@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { supabaseService } from '@/services/supabaseService'
 import { toast } from 'react-hot-toast'
 import { FaUser, FaLock } from 'react-icons/fa'
+import { supabase } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -15,6 +15,27 @@ export default function LoginPage() {
     password: '',
     showPassword: false
   })
+
+  // Verificar si el usuario ya está autenticado al cargar la página
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', session.user.id)
+          .single()
+
+        if (userData?.role === 'admin') {
+          router.push('/admin/dashboard')
+        } else {
+          router.push('/dashboard')
+        }
+      }
+    }
+    checkSession()
+  }, [router])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -30,56 +51,47 @@ export default function LoginPage() {
       const email = formState.email.trim().toLowerCase()
       const password = formState.password
 
-      const { data, error } = await supabaseService.auth.login(email, password)
+      console.log('Intentando login con:', { email, password: '***' })
 
-      if (error) {
-        if (error.message?.includes('Invalid login credentials')) {
-          toast.error('Email o contraseña incorrectos')
-        } else if (error.message?.includes('Email not confirmed')) {
-          toast.error('Por favor confirma tu email antes de iniciar sesión')
-        } else {
-          toast.error('Error de autenticación: ' + error.message)
-        }
+      // Intentar login usando el endpoint personalizado
+      const response = await fetch('/api/auth/test-login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        console.error('Error en login:', data.error)
+        toast.error(data.error || 'Error al iniciar sesión')
         return
       }
 
-      if (!data?.user?.id) {
-        toast.error('Error al obtener información del usuario')
-        return
-      }
+      console.log('Login exitoso:', data)
 
-      // Obtener rol del usuario
-      const { data: userData, error: userError } = await supabaseService.db
-        .from('users')
-        .select('role')
-        .eq('id', data.user.id)
-        .single()
-
-      if (userError) {
-        toast.error('Error al obtener permisos del usuario')
-        return
-      }
-
-      // Redirigir según el rol
-      const role = userData?.role || 'user'
-      let targetPath
-      
-      switch (role) {
-        case 'superadmin':
-        case 'admin':
-          targetPath = '/admin'
-          break
-        case 'enterprise':
-          targetPath = '/enterprise'
-          break
-        default:
-          targetPath = '/user'
+      // Establecer la sesión en el cliente
+      if (data.session) {
+        const { access_token, refresh_token } = data.session
+        await supabase.auth.setSession({
+          access_token,
+          refresh_token
+        })
       }
 
       toast.success('Iniciando sesión...')
-      router.replace(targetPath)
+
+      // Redirigir según el rol
+      if (data.user.role === 'admin') {
+        router.push('/admin/dashboard')
+      } else {
+        router.push('/dashboard')
+      }
 
     } catch (error: any) {
+      console.error('Error en login:', error)
       toast.error('Error inesperado al iniciar sesión')
     } finally {
       setIsLoading(false)
