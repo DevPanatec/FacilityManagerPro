@@ -389,6 +389,47 @@ export interface Database {
           last_accessed_at?: string | null
         }
       }
+      contingencies: {
+        Row: {
+          id: string
+          title: string
+          description: string | null
+          status: string
+          priority: string
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          assigned_to: string | null
+          area_id: string | null
+          organization_id: string | null
+        }
+        Insert: {
+          id?: string
+          title: string
+          description?: string | null
+          status?: string
+          priority?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          assigned_to?: string | null
+          area_id?: string | null
+          organization_id?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: string | null
+          status?: string
+          priority?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          assigned_to?: string | null
+          area_id?: string | null
+          organization_id?: string | null
+        }
+      }
     }
     Views: {
       [_ in never]: never

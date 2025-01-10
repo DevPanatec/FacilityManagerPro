@@ -1,8 +1,8 @@
 import { supabaseService } from './supabaseService'
-import { Database } from '@/types/supabase'
+import { Database } from '@/lib/types/database'
 
 type Notification = Database['public']['Tables']['notifications']['Row']
-type CreateNotification = Pick<Notification, 'message' | 'title' | 'type' | 'organization_id'> & Partial<Omit<Notification, 'message' | 'title' | 'type' | 'organization_id'>>
+type CreateNotification = Pick<Notification, 'message' | 'title' | 'type' | 'user_id'> & Partial<Omit<Notification, 'message' | 'title' | 'type' | 'user_id'>>
 
 export const notificationService = {
   getNotifications: async (userId: string) => {

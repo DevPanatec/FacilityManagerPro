@@ -1,5 +1,5 @@
 import { BaseService } from './base.service'
-import { Database } from '@/types/supabase'
+import { Database } from '@/lib/types/database'
 
 type WorkShift = Database['public']['Tables']['work_shifts']['Row']
 type WorkShiftInsert = Database['public']['Tables']['work_shifts']['Insert']

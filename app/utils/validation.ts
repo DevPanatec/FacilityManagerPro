@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { Database } from '@/types/supabase'
+import type { Database } from '@/lib/types/database'
 
 type User = Database['public']['Tables']['users']['Row']
 type Task = Database['public']['Tables']['tasks']['Row']
@@ -20,35 +20,36 @@ const userSchema = z.object({
 
 const organizationSchema = z.object({
   name: z.string().min(3),
+  description: z.string().nullable().optional(),
   logo_url: z.string().url().nullable().optional(),
-  status: z.enum(['active', 'inactive', 'pending']).default('active')
+  status: z.enum(['active', 'inactive']).default('active')
 })
 
 const taskSchema = z.object({
-  organization_id: z.string().uuid(),
-  area_id: z.string().uuid().nullable().optional(),
   title: z.string().min(3),
   description: z.string().nullable().optional(),
-  status: z.enum(['pending', 'in_progress', 'completed', 'cancelled']).default('pending'),
-  priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
+  area_id: z.string().uuid(),
   assigned_to: z.string().uuid().nullable().optional(),
+  priority: z.enum(['low', 'medium', 'high']).default('medium'),
+  status: z.enum(['pending', 'in_progress', 'completed', 'cancelled']).default('pending'),
   due_date: z.string().datetime().nullable().optional(),
-  created_by: z.string().uuid().nullable()
+  created_by: z.string().uuid()
 })
 
 const notificationSchema = z.object({
-  organization_id: z.string().uuid(),
   user_id: z.string().uuid(),
   title: z.string().min(3),
   message: z.string(),
-  type: z.string(),
-  read: z.boolean().default(false)
+  type: z.enum(['task', 'work_shift', 'inventory', 'system']),
+  priority: z.enum(['low', 'medium', 'high']).default('medium'),
+  read: z.boolean().default(false),
+  action_url: z.string().url().nullable().optional()
 })
 
 const areaSchema = z.object({
-  organization_id: z.string().uuid(),
   name: z.string().min(3),
   description: z.string().nullable().optional(),
+  organization_id: z.string().uuid(),
   parent_id: z.string().uuid().nullable().optional(),
   status: z.enum(['active', 'inactive']).default('active')
 })

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Database } from '@/types/supabase';
+import { Database } from '@/lib/types/database';
 
 type Reporte = Database['public']['Tables']['contingencies']['Row'];
 
