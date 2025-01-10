@@ -1,4 +1,4 @@
-import { supabaseService } from './supabaseService'
+import { supabaseService, authService } from './supabaseService'
 import { Database } from '@/types/supabase'
 
 type Task = Database['public']['Tables']['tasks']['Row']
@@ -9,17 +9,17 @@ export const taskService = {
   // Obtener tareas según el rol del usuario
   async getTasks(): Promise<Task[]> {
     try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
+      const { data: authData, error: authError } = await authService.getUser()
       if (authError) throw authError
       if (!authData?.user) throw new Error('Usuario no autenticado')
 
-      const { data: tasks, error: tasksError } = await supabaseService.db
+      const { data: tasks, error: tasksError } = await supabaseService
         .from('tasks')
         .select('*')
       if (tasksError) throw tasksError
 
       // Filtrar tareas según el rol del usuario
-      const { data: profile, error: profileError } = await supabaseService.db
+      const { data: profile, error: profileError } = await supabaseService
         .from('users')
         .select('role')
         .eq('id', authData.user.id)
@@ -54,15 +54,24 @@ export const taskService = {
         updated_at: new Date().toISOString()
       }
 
-      const { data, error: insertError } = await supabaseService.db
+      const { data: newTaskData, error: createError } = await supabaseService
         .from('tasks')
-        .insert(newTask)
+        .insert([newTask])
         .select()
         .single()
-      if (insertError) throw insertError
-      return data
+      if (createError) throw createError
+
+      // Verificar si se creó correctamente
+      const { data: createdTask, error: verifyError } = await supabaseService
+        .from('tasks')
+        .select('*')
+        .eq('id', newTaskData.id)
+        .single()
+      if (verifyError) throw verifyError
+
+      return createdTask
     } catch (error) {
-      console.error('Error al crear tarea:', error)
+      console.error('Error al crear la tarea:', error)
       throw error
     }
   },
@@ -70,45 +79,17 @@ export const taskService = {
   // Actualizar una tarea existente
   async updateTask(id: string, updates: Partial<TaskUpdate>): Promise<Task> {
     try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
-      if (authError) throw authError
-      if (!authData?.user) throw new Error('Usuario no autenticado')
-
-      // Verificar permisos
-      const { data: profile, error: profileError } = await supabaseService.db
-        .from('users')
-        .select('role')
-        .eq('id', authData.user.id)
-        .single()
-      if (profileError) throw profileError
-
-      if (profile?.role === 'enterprise') {
-        const { data: task, error: taskError } = await supabaseService.db
-          .from('tasks')
-          .select()
-          .eq('id', id)
-          .single()
-        if (taskError) throw taskError
-        if (!task || task.assigned_to !== authData.user.id) {
-          throw new Error('No tienes permiso para modificar esta tarea')
-        }
-      }
-
-      const updatedTask = {
-        ...updates,
-        updated_at: new Date().toISOString()
-      }
-
-      const { data, error: updateError } = await supabaseService.db
+      const { data: updatedTask, error: updateError } = await supabaseService
         .from('tasks')
-        .update(updatedTask)
+        .update(updates)
         .eq('id', id)
         .select()
         .single()
       if (updateError) throw updateError
-      return data
+
+      return updatedTask
     } catch (error) {
-      console.error('Error al actualizar tarea:', error)
+      console.error('Error al actualizar la tarea:', error)
       throw error
     }
   },
@@ -116,30 +97,15 @@ export const taskService = {
   // Eliminar una tarea
   async deleteTask(id: string): Promise<boolean> {
     try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
-      if (authError) throw authError
-      if (!authData?.user) throw new Error('Usuario no autenticado')
-
-      // Verificar permisos
-      const { data: profile, error: profileError } = await supabaseService.db
-        .from('users')
-        .select('role')
-        .eq('id', authData.user.id)
-        .single()
-      if (profileError) throw profileError
-
-      if (profile?.role === 'enterprise') {
-        throw new Error('No tienes permiso para eliminar tareas')
-      }
-
-      const { error: deleteError } = await supabaseService.db
+      const { error: deleteError } = await supabaseService
         .from('tasks')
         .delete()
         .eq('id', id)
       if (deleteError) throw deleteError
+
       return true
     } catch (error) {
-      console.error('Error al eliminar tarea:', error)
+      console.error('Error al eliminar la tarea:', error)
       throw error
     }
   },
@@ -147,35 +113,17 @@ export const taskService = {
   // Asignar una tarea a un usuario
   async assignTask(taskId: string, userId: string): Promise<Task> {
     try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
-      if (authError) throw authError
-      if (!authData?.user) throw new Error('Usuario no autenticado')
-
-      // Verificar permisos
-      const { data: profile, error: profileError } = await supabaseService.db
-        .from('users')
-        .select('role')
-        .eq('id', authData.user.id)
-        .single()
-      if (profileError) throw profileError
-
-      if (profile?.role === 'enterprise') {
-        throw new Error('No tienes permiso para asignar tareas')
-      }
-
-      const { data, error: updateError } = await supabaseService.db
+      const { data: updatedTask, error: updateError } = await supabaseService
         .from('tasks')
-        .update({
-          assigned_to: userId,
-          updated_at: new Date().toISOString()
-        })
+        .update({ assigned_to: userId })
         .eq('id', taskId)
         .select()
         .single()
       if (updateError) throw updateError
-      return data
+
+      return updatedTask
     } catch (error) {
-      console.error('Error al asignar tarea:', error)
+      console.error('Error al asignar la tarea:', error)
       throw error
     }
   }

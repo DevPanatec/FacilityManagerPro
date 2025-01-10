@@ -51,10 +51,10 @@ export const testService = {
       const admins = HARDCODED_USERS.filter(u => u.role === 'admin')
       for (const admin of admins) {
         // 1. Prueba de inicio de sesión como admin
-        const { data: authData, error: loginError } = await supabaseService.auth.login(
-          admin.email,
-          admin.password
-        )
+        const { data: authData, error: loginError } = await supabaseService.auth.signInWithPassword({
+          email: admin.email,
+          password: admin.password
+        })
 
         if (loginError || !authData?.user) {
           results.success = false
@@ -91,17 +91,17 @@ export const testService = {
         results.logs.push(`✓ Asignación de tarea exitosa por ${admin.name}`)
 
         // 4. Cerrar sesión del admin
-        await supabaseService.auth.logout()
+        await supabaseService.auth.signOut()
         results.logs.push(`✓ Logout de ${admin.name} exitoso`)
       }
 
       // Probar con cada superadmin
       const superadmins = HARDCODED_USERS.filter(u => u.role === 'superadmin')
       for (const superadmin of superadmins) {
-        const { data: authData, error: loginError } = await supabaseService.auth.login(
-          superadmin.email,
-          superadmin.password
-        )
+        const { data: authData, error: loginError } = await supabaseService.auth.signInWithPassword({
+          email: superadmin.email,
+          password: superadmin.password
+        })
 
         if (loginError || !authData?.user) {
           results.success = false
@@ -131,16 +131,16 @@ export const testService = {
         results.logs.push(`✓ Creación de tarea exitosa por ${superadmin.name}`)
 
         // Cerrar sesión del superadmin
-        await supabaseService.auth.logout()
+        await supabaseService.auth.signOut()
         results.logs.push(`✓ Logout de ${superadmin.name} exitoso`)
       }
 
       // Probar con enterprise
       const enterpriseUser = HARDCODED_USERS.find(u => u.role === 'enterprise') as User
-      const { data: authData, error: enterpriseLoginError } = await supabaseService.auth.login(
-        enterpriseUser.email,
-        enterpriseUser.password
-      )
+      const { data: authData, error: enterpriseLoginError } = await supabaseService.auth.signInWithPassword({
+        email: enterpriseUser.email,
+        password: enterpriseUser.password
+      })
 
       if (enterpriseLoginError || !authData?.user) {
         results.success = false
@@ -160,7 +160,7 @@ export const testService = {
         results.logs.push('✓ Enterprise puede actualizar sus tareas')
       }
 
-      await supabaseService.auth.logout()
+      await supabaseService.auth.signOut()
       results.logs.push('✓ Logout de enterprise exitoso')
 
     } catch (error: unknown) {
