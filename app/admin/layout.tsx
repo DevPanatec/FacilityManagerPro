@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import Navbar from '../shared/componentes/navbar'
+import Navbar from '@/app/shared/componentes/navbar'
 import ChatWidget from '../shared/componentes/ChatWidget'
 
 export default function AdminLayout({
@@ -13,9 +13,12 @@ export default function AdminLayout({
 }) {
   const [isAdminPrincipal, setIsAdminPrincipal] = useState(false)
   const [currentAdminId, setCurrentAdminId] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
+    let isMounted = true
+
     const checkSession = async () => {
       try {
         // Verificar la sesión
@@ -38,14 +41,20 @@ export default function AdminLayout({
 
         if (userData?.role !== 'admin') {
           router.replace('/auth/login')
+          return
         }
 
-        // Verificar si es admin principal
-        setIsAdminPrincipal(userData?.role === 'admin')
-        setCurrentAdminId(3) // Por defecto Carlos (ID: 3)
+        // Solo actualizar el estado si el componente sigue montado
+        if (isMounted) {
+          setIsAdminPrincipal(userData?.role === 'admin')
+          setCurrentAdminId(3) // Por defecto Carlos (ID: 3)
+          setIsLoading(false)
+        }
       } catch (error) {
         console.error('Error al verificar sesión:', error)
-        router.replace('/auth/login')
+        if (isMounted) {
+          router.replace('/auth/login')
+        }
       }
     }
 
@@ -56,18 +65,29 @@ export default function AdminLayout({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT') {
-        router.replace('/auth/login')
-      } else if (!session) {
+      if (event === 'SIGNED_OUT' || !session) {
         router.replace('/auth/login')
       }
     })
 
-    // Limpiar suscripción al desmontar
+    // Limpiar suscripción y flag al desmontar
     return () => {
+      isMounted = false
       subscription.unsubscribe()
     }
   }, [router])
+
+  // Mostrar un estado de carga mientras se verifica la sesión
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-blue-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-blue-50">

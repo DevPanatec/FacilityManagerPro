@@ -56,4 +56,41 @@ CREATE POLICY "Permitir lectura pública de servicios" ON servicios_principales
 -- Índices para optimización
 CREATE INDEX idx_empresas_nombre ON empresas(nombre);
 CREATE INDEX idx_empresas_estado ON empresas(estado);
-CREATE INDEX idx_estadisticas_tipo ON empresa_estadisticas(tipo); 
+CREATE INDEX idx_estadisticas_tipo ON empresa_estadisticas(tipo);
+
+-- Crear tabla de perfiles
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id),
+  user_id UUID REFERENCES auth.users(id),
+  email TEXT NOT NULL,
+  first_name TEXT,
+  last_name TEXT,
+  avatar_url TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+-- Crear políticas de seguridad para la tabla profiles
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios pueden ver sus propios perfiles"
+  ON public.profiles FOR SELECT
+  USING (auth.uid() = id);
+
+CREATE POLICY "Usuarios pueden actualizar sus propios perfiles"
+  ON public.profiles FOR UPDATE
+  USING (auth.uid() = id);
+
+CREATE POLICY "Los administradores pueden ver todos los perfiles"
+  ON public.profiles FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.users 
+      WHERE users.id = auth.uid() 
+      AND users.role = 'admin'
+    )
+  );
+
+-- Crear índices para optimización
+CREATE INDEX IF NOT EXISTS profiles_user_id_idx ON public.profiles(user_id);
+CREATE INDEX IF NOT EXISTS profiles_email_idx ON public.profiles(email); 

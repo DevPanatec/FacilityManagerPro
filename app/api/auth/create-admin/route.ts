@@ -1,14 +1,14 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createServerSupabaseClient } from '@/lib/supabase/config'
 import { NextResponse } from 'next/server'
-import { Database } from '@/lib/types/database'
+
+export const dynamic = 'force-dynamic'
 
 const adminEmail = 'admin@facilitymanagerpro.com'
 const adminPassword = 'Admin@FMP2024'
 
 export async function GET() {
   try {
-    const supabase = createServerComponentClient<Database>({ cookies })
+    const supabase = createServerSupabaseClient()
     
     // 1. Crear el usuario en auth
     const { data: authData, error: authError } = await supabase.auth.signUp({

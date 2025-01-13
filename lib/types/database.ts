@@ -13,7 +13,11 @@ export interface Database {
         Row: {
           id: string
           email: string
+<<<<<<< Updated upstream
           role: string
+=======
+          role: 'admin' | 'enterprise' | 'user'
+>>>>>>> Stashed changes
           status: string
           first_name: string | null
           last_name: string | null
@@ -21,9 +25,15 @@ export interface Database {
           updated_at: string
         }
         Insert: {
+<<<<<<< Updated upstream
           id?: string
           email: string
           role: string
+=======
+          id: string
+          email: string
+          role?: 'admin' | 'enterprise' | 'user'
+>>>>>>> Stashed changes
           status?: string
           first_name?: string | null
           last_name?: string | null
@@ -33,7 +43,11 @@ export interface Database {
         Update: {
           id?: string
           email?: string
+<<<<<<< Updated upstream
           role?: string
+=======
+          role?: 'admin' | 'enterprise' | 'user'
+>>>>>>> Stashed changes
           status?: string
           first_name?: string | null
           last_name?: string | null
