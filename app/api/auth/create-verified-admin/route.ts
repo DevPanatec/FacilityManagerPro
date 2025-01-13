@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { Database } from '@/lib/types/database'
 
-const adminEmail = 'admin@facilitymanagerpro.com'
-const adminPassword = 'Admin@FMP2024'
+const adminEmail = 'admin@fmanager.com'
+const adminPassword = 'Admin123456!'
 
 // Cliente admin con service_role key para poder crear usuarios verificados
 const supabaseAdmin = createClient<Database>(
@@ -28,12 +28,43 @@ export async function GET() {
 
     if (adminExists) {
       console.log('El usuario admin ya existe:', adminExists.id)
+      
+      // Intentar crear el registro en users si no existe
+      const { data: existingUserData } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', adminExists.id)
+        .single()
+
+      if (!existingUserData) {
+        console.log('Creando registro en tabla users...')
+        const { error: userError } = await supabaseAdmin
+          .from('users')
+          .insert({
+            id: adminExists.id,
+            email: adminEmail,
+            role: 'admin',
+            status: 'active'
+          })
+
+        if (userError) {
+          console.error('Error al crear registro en users:', userError)
+          return NextResponse.json({ 
+            success: false, 
+            error: 'Error al crear registro en users',
+            details: userError
+          })
+        }
+      }
+
       return NextResponse.json({ 
-        success: false, 
-        error: 'El usuario admin ya existe',
+        success: true, 
+        message: 'Usuario admin actualizado',
         user: {
           id: adminExists.id,
-          email: adminEmail
+          email: adminEmail,
+          role: 'admin',
+          verified: true
         }
       })
     }
@@ -103,26 +134,17 @@ export async function GET() {
       .from('profiles')
       .insert({
         id: authData.user.id,
-        user_id: authData.user.id,
         email: adminEmail,
-        full_name: 'Administrador',
-        avatar_url: null
+        full_name: 'Administrador'
       })
 
     if (profileError) {
       console.error('Error al crear perfil:', profileError)
-      return NextResponse.json({ 
-        success: false, 
-        error: profileError.message,
-        details: {
-          code: profileError.code,
-          hint: profileError.hint,
-          details: profileError.details
-        }
-      }, { status: 500 })
+      // Continuamos aunque haya error en el perfil ya que el usuario ya está creado
+      console.log('Continuando aunque hubo error en el perfil...')
     }
 
-    console.log('Perfil creado exitosamente')
+    console.log('Proceso completado')
 
     return NextResponse.json({ 
       success: true, 
