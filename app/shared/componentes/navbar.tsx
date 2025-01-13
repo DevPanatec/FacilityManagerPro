@@ -31,19 +31,26 @@ const NAV_ITEMS = {
   ]
 };
 
-export default function Navbar({ isEnterprise = false }) {
+export default function Navbar({ role = '', isEnterprise = false }) {
   const router = useRouter()
   const pathname = usePathname();
-  const [userRole, setUserRole] = useState('');
+  const [userRole, setUserRole] = useState(role);
 
   useEffect(() => {
-    const role = localStorage.getItem('userRole');
-    if (role) {
-      setUserRole(role);
+    // Si no se proporciona un rol como prop, intentar obtenerlo del localStorage
+    if (!role) {
+      const storedRole = localStorage.getItem('userRole');
+      console.log('Role from localStorage:', storedRole);
+      if (storedRole) {
+        setUserRole(storedRole.toLowerCase());
+      }
     }
-  }, []);
+  }, [role]);
 
+  // Obtener los items de navegación basados en el rol
   const navItems = NAV_ITEMS[userRole] || [];
+  console.log('Current userRole:', userRole);
+  console.log('Available navItems:', navItems);
 
   const handleLogout = () => {
     localStorage.removeItem('userRole');
@@ -84,16 +91,20 @@ export default function Navbar({ isEnterprise = false }) {
         </div>
 
         <nav className="hidden md:flex items-center space-x-3">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center space-x-1.5 px-2.5 py-2 rounded-lg text-sm font-medium
-                ${pathname === item.href ? 'bg-blue-800 text-white' : 'text-blue-100 hover:bg-blue-800/50 hover:text-white'} transition-all duration-200`}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {navItems && navItems.length > 0 ? (
+            navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center space-x-1.5 px-2.5 py-2 rounded-lg text-sm font-medium
+                  ${pathname === item.href ? 'bg-blue-800 text-white' : 'text-blue-100 hover:bg-blue-800/50 hover:text-white'} transition-all duration-200`}
+              >
+                {item.label}
+              </Link>
+            ))
+          ) : (
+            <div className="text-white">No hay elementos de navegación disponibles</div>
+          )}
         </nav>
 
         <div className="flex items-center">

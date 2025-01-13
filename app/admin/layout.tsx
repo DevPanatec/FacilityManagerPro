@@ -14,6 +14,7 @@ export default function AdminLayout({
   const [isAdminPrincipal, setIsAdminPrincipal] = useState(false)
   const [currentAdminId, setCurrentAdminId] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [userRole, setUserRole] = useState('')
   const router = useRouter()
 
   useEffect(() => {
@@ -26,6 +27,7 @@ export default function AdminLayout({
         if (error) throw error
 
         if (!session) {
+          localStorage.removeItem('userRole')
           router.replace('/auth/login')
           return
         }
@@ -40,12 +42,15 @@ export default function AdminLayout({
         if (userError) throw userError
 
         if (userData?.role !== 'admin') {
+          localStorage.removeItem('userRole')
           router.replace('/auth/login')
           return
         }
 
-        // Solo actualizar el estado si el componente sigue montado
+        // Guardar el rol en localStorage y estado
+        localStorage.setItem('userRole', 'admin')
         if (isMounted) {
+          setUserRole('admin')
           setIsAdminPrincipal(userData?.role === 'admin')
           setCurrentAdminId(3) // Por defecto Carlos (ID: 3)
           setIsLoading(false)
@@ -53,6 +58,8 @@ export default function AdminLayout({
       } catch (error) {
         console.error('Error al verificar sesión:', error)
         if (isMounted) {
+          localStorage.removeItem('userRole')
+          setUserRole('')
           router.replace('/auth/login')
         }
       }
@@ -66,6 +73,8 @@ export default function AdminLayout({
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
+        localStorage.removeItem('userRole')
+        setUserRole('')
         router.replace('/auth/login')
       }
     })
@@ -91,7 +100,7 @@ export default function AdminLayout({
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-blue-50">
-      <Navbar />
+      <Navbar role={userRole} />
       <main className="flex-1 container mx-auto px-4 py-6">
         <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-6">
           {children}
