@@ -1,19 +1,34 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { clearSession } from '../../utils/auth/auth'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import Cookies from 'js-cookie'
 
 export default function LogoutButton() {
     const router = useRouter()
+    const supabase = createClientComponentClient()
 
-    const handleLogout = () => {
-        // Limpiar sesión del localStorage y cookies
-        clearSession()
-        Cookies.remove('session', { path: '/' })
-        
-        // Redirigir al login
-        router.push('/auth/login')
+    const handleLogout = async () => {
+        try {
+            // Establecer cookie de logout
+            Cookies.set('logging_out', 'true', { path: '/' })
+            
+            // Cerrar sesión en Supabase
+            const { error } = await supabase.auth.signOut()
+            if (error) throw error
+            
+            // Limpiar cualquier estado local si es necesario
+            if (typeof window !== 'undefined') {
+                localStorage.clear()
+            }
+            
+            // Redirigir al login usando router.replace para evitar problemas con el historial
+            router.replace('/auth/login')
+        } catch (error) {
+            console.error('Error al cerrar sesión:', error)
+            // Eliminar la cookie de logout en caso de error
+            Cookies.remove('logging_out', { path: '/' })
+        }
     }
 
     return (

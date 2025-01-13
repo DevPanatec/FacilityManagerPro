@@ -1,6 +1,8 @@
 'use client'
+
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase/client'
 import Navbar from '../shared/componentes/navbar'
 import ChatWidget from '../shared/componentes/ChatWidget'
 
@@ -14,18 +16,56 @@ export default function AdminLayout({
   const router = useRouter()
 
   useEffect(() => {
-    // Verificar si es admin principal
-    const adminPrincipal = localStorage.getItem('adminPrincipal')
-    setIsAdminPrincipal(!!adminPrincipal)
+    const checkSession = async () => {
+      try {
+        // Verificar la sesión
+        const { data: { session }, error } = await supabase.auth.getSession()
+        if (error) throw error
 
-    // Obtener el ID del admin actual
-    const adminId = localStorage.getItem('adminId')
-    setCurrentAdminId(adminId ? parseInt(adminId) : 3) // Por defecto Carlos (ID: 3)
+        if (!session) {
+          router.replace('/auth/login')
+          return
+        }
 
-    // Verificar el rol
-    const userRole = localStorage.getItem('userRole')
-    if (!userRole || userRole !== 'admin') {
-      router.push('/auth/login')
+        // Verificar el rol de admin
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', session.user.id)
+          .single()
+
+        if (userError) throw userError
+
+        if (userData?.role !== 'admin') {
+          router.replace('/auth/login')
+        }
+
+        // Verificar si es admin principal
+        setIsAdminPrincipal(userData?.role === 'admin')
+        setCurrentAdminId(3) // Por defecto Carlos (ID: 3)
+      } catch (error) {
+        console.error('Error al verificar sesión:', error)
+        router.replace('/auth/login')
+      }
+    }
+
+    // Verificar sesión inicial
+    checkSession()
+
+    // Suscribirse a cambios en la sesión
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT') {
+        router.replace('/auth/login')
+      } else if (!session) {
+        router.replace('/auth/login')
+      }
+    })
+
+    // Limpiar suscripción al desmontar
+    return () => {
+      subscription.unsubscribe()
     }
   }, [router])
 

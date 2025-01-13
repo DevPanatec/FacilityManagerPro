@@ -25,23 +25,13 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(new URL('/auth/login', req.url))
     }
 
-    // Si hay sesión y es una ruta pública, redirigir según el rol
+    // Si hay sesión y es una ruta pública, permitir el acceso
     if (session && isPublicPath) {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', session.user.id)
-        .single()
-
-      if (userData?.role === 'admin') {
-        return NextResponse.redirect(new URL('/admin/dashboard', req.url))
-      } else if (userData?.role === 'enterprise') {
-        return NextResponse.redirect(new URL('/enterprise/dashboard', req.url))
-      }
+      return res
     }
 
     // Proteger rutas según el rol
-    if (session) {
+    if (session && !isPublicPath) {
       const { data: userData } = await supabase
         .from('users')
         .select('role')
