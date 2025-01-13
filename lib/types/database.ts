@@ -1,9 +1,55 @@
-[?25l
-    Select a project:                                                                               
-                                                                                                    
-  >  1. jecxswfoepdstrghyouv [name: WebAppHospital, org: owpjmzewalncfahsxkop, region: us-east-1]   
-    2. wldiefpqmfjxernvuywv [name: FacilityManagerPro, org: owpjmzewalncfahsxkop, region: us-west-1]
-                                                                                                    
-                                                                                                    
-    ↑/k up • ↓/j down • / filter • q quit • ? more                                                  
-                                                                                                    [0D
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export interface Database {
+  public: {
+    Tables: {
+      users: {
+        Row: {
+          id: string
+          email: string
+          role: string
+          status: string
+          first_name: string | null
+          last_name: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          email: string
+          role: string
+          status?: string
+          first_name?: string | null
+          last_name?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          role?: string
+          status?: string
+          first_name?: string | null
+          last_name?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+  }
+}
