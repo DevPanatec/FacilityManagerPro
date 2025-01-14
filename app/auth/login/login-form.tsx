@@ -31,27 +31,27 @@ export default function LoginForm() {
       const password = formState.password
 
       // Login directo con Supabase
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password
       })
 
-      if (error) {
-        console.error('Error en login:', error)
-        toast.error(error.message || 'Error al iniciar sesión')
+      if (authError) {
+        console.error('Error en login:', authError)
+        toast.error(authError.message || 'Error al iniciar sesión')
         return
       }
 
-      if (!data?.user) {
+      if (!authData?.user) {
         toast.error('Credenciales inválidas')
         return
       }
 
-      // Obtener datos del usuario
+      // Obtener datos del usuario usando service_role
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('id, email, role, status, first_name, last_name')
-        .eq('id', data.user.id)
+        .eq('id', authData.user.id)
         .single()
 
       if (userError) {
@@ -62,6 +62,25 @@ export default function LoginForm() {
 
       if (!userData.role) {
         toast.error('El usuario no tiene un rol asignado')
+        return
+      }
+
+      // Actualizar los claims del usuario con su rol
+      const { error: updateError } = await supabase.auth.updateUser({
+        data: { role: userData.role }
+      })
+
+      if (updateError) {
+        console.error('Error al actualizar rol:', updateError)
+        toast.error('Error al actualizar rol del usuario')
+        return
+      }
+
+      // Refrescar la sesión para incluir los nuevos claims
+      const { error: refreshError } = await supabase.auth.refreshSession()
+      if (refreshError) {
+        console.error('Error al refrescar sesión:', refreshError)
+        toast.error('Error al actualizar la sesión')
         return
       }
 

@@ -1,7 +1,9 @@
 'use client'
+
 import { useRouter } from 'next/navigation'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
+import { supabase } from '@/lib/supabase/client'
 import Navbar from '../shared/componentes/navbar'
 import ChatWidget from '../shared/componentes/ChatWidget'
 
@@ -14,10 +16,22 @@ export default function EnterpriseLayout({
   const pathname = usePathname()
 
   useEffect(() => {
-    const userRole = localStorage.getItem('userRole')
-    if (!userRole || userRole !== 'enterprise') {
-      router.push('/auth/login')
+    const checkSession = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (!session) {
+        router.push('/auth/login')
+        return
+      }
+
+      const { data: { user } } = await supabase.auth.getUser()
+      const role = user?.user_metadata?.role
+
+      if (!role || role !== 'enterprise') {
+        router.push('/auth/login')
+      }
     }
+
+    checkSession()
   }, [router])
 
   return (

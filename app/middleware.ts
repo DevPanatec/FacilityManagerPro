@@ -6,7 +6,23 @@ export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const supabase = createMiddlewareClient<Database>({ req, res })
 
-  await supabase.auth.getSession()
+  // Verificar la sesión
+  const { data: { session }, error } = await supabase.auth.getSession()
+
+  // Rutas protegidas de enterprise
+  if (req.nextUrl.pathname.startsWith('/enterprise')) {
+    if (!session) {
+      return NextResponse.redirect(new URL('/auth/login', req.url))
+    }
+
+    // Verificar el rol del usuario
+    const { data: { user } } = await supabase.auth.getUser()
+    const role = user?.user_metadata?.role
+
+    if (role !== 'enterprise') {
+      return NextResponse.redirect(new URL('/auth/login', req.url))
+    }
+  }
 
   return res
 }
