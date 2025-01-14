@@ -22,4 +22,22 @@ export const initLocalStorage = () => {
       refreshInterval: 5000
     }));
   }
+}
+
+export const getTareas = () => {
+  if (typeof window === 'undefined') return null;
+  const tareas = localStorage.getItem('tareas');
+  return tareas ? JSON.parse(tareas) : null;
+}
+
+export const getAreas = () => {
+  if (typeof window === 'undefined') return null;
+  const areas = localStorage.getItem('areas');
+  return areas ? JSON.parse(areas) : null;
+}
+
+export const getPersonal = () => {
+  if (typeof window === 'undefined') return null;
+  const personal = localStorage.getItem('personal');
+  return personal ? JSON.parse(personal) : null;
 } 
