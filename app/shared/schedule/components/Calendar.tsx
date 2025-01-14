@@ -1,28 +1,38 @@
 'use client'
 import { useState, useMemo } from 'react'
-import { ScheduledTask as Task, TaskStatus } from '../../../../lib/types/schedule'
+import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/20/solid'
+import { MonthView } from './MonthView'
+import { WeekView } from './WeekView'
+import { DayView } from './DayView'
 
 interface CalendarProps {
-  tasks: Task[]
-  onTaskClick: (task: Task) => void
+  tasks: ScheduledTask[]
+  onTaskClick: (task: ScheduledTask) => void
   onAddTask: (date: string) => void
   onDeleteTask: (id: string) => void
 }
 
-interface CalendarDay {
-  date: Date;
-  isCurrentMonth: boolean;
-  isWeekend: boolean;
+interface ScheduledTask {
+  id: string
+  title: string
+  description: string
+  date: string
+  startTime: string
+  endTime: string
+  area: string
+  shift: 'A' | 'B' | 'C'
+  status: 'pending' | 'completed' | 'cancelled'
+  assignedTo: string[]
 }
 
 export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [selectedTask, setSelectedTask] = useState<ScheduledTask | null>(null)
   const [showTaskDetails, setShowTaskDetails] = useState(false)
   const [view, setView] = useState<'month' | 'week' | 'day'>('month')
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth())
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear())
-  const [selectedDayTasks, setSelectedDayTasks] = useState<{ date: Date; tasks: Task[] } | null>(null);
+  const [selectedDayTasks, setSelectedDayTasks] = useState<{ date: Date; tasks: ScheduledTask[] } | null>(null);
 
   // Obtener el primer día del mes actual
   const firstDayOfMonth = useMemo(() => {
@@ -37,7 +47,7 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
 
   // Crear array de días del mes con corrección de alineación
   const daysInMonth = useMemo(() => {
-    const days: CalendarDay[] = []
+    const days = []
     const startDay = firstDayOfMonth.getDay()
     
     // Agregar días del mes anterior para completar la primera semana
@@ -79,7 +89,7 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
 
   // Agrupar tareas por fecha
   const tasksByDate = useMemo(() => {
-    const grouped: { [key: string]: Task[] } = {}
+    const grouped: { [key: string]: ScheduledTask[] } = {}
     tasks.forEach(task => {
       if (!grouped[task.date]) {
         grouped[task.date] = []
@@ -93,7 +103,7 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
     return date.toISOString().split('T')[0]
   }
 
-  const handleTaskClick = (task: Task) => {
+  const handleTaskClick = (task: ScheduledTask) => {
     setSelectedTask(task)
     setShowTaskDetails(true)
   }
@@ -142,9 +152,9 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
 
   // Función para obtener los días de la semana actual
   const getWeekDays = () => {
-    const days: Date[] = []
+    const days = []
     const firstDay = new Date(currentDate)
-    firstDay.setDate(firstDay.getDate() - firstDay.getDay())
+    firstDay.setDate(currentDate.getDate() - currentDate.getDay())
     
     for (let i = 0; i < 7; i++) {
       const day = new Date(firstDay)

@@ -26,31 +26,23 @@ const NAV_ITEMS = {
     { label: 'Panel Principal', href: '/enterprise/dashboard' },
     { label: 'Calendario', href: '/shared/schedule' },
     { label: 'Recursos Humanos', href: '/shared/rrhh' },
-    { label: 'Inventario', href: '/shared/inventory' },
-    { label: 'Centro de Datos', href: '/enterprise/data-hub' }
+    { label: 'Inventario', href: '/shared/inventory' }
   ]
 };
 
-export default function Navbar({ role = '', isEnterprise = false }) {
+export default function Navbar({ isEnterprise = false }) {
   const router = useRouter()
   const pathname = usePathname();
-  const [userRole, setUserRole] = useState(role);
+  const [userRole, setUserRole] = useState('');
 
   useEffect(() => {
-    // Si no se proporciona un rol como prop, intentar obtenerlo del localStorage
-    if (!role) {
-      const storedRole = localStorage.getItem('userRole');
-      console.log('Role from localStorage:', storedRole);
-      if (storedRole) {
-        setUserRole(storedRole.toLowerCase());
-      }
+    const role = localStorage.getItem('userRole');
+    if (role) {
+      setUserRole(role);
     }
-  }, [role]);
+  }, []);
 
-  // Obtener los items de navegación basados en el rol
   const navItems = NAV_ITEMS[userRole] || [];
-  console.log('Current userRole:', userRole);
-  console.log('Available navItems:', navItems);
 
   const handleLogout = () => {
     localStorage.removeItem('userRole');
@@ -60,15 +52,15 @@ export default function Navbar({ role = '', isEnterprise = false }) {
 
   return (
     <header className="bg-gradient-to-r from-blue-700 to-blue-500 text-white shadow-lg">
-      <div className="max-w-7xl mx-auto flex items-center justify-between py-4 px-6">
-        <div className="flex items-center space-x-3 w-72">
-          <div className="p-1.5 bg-white rounded-lg shadow-md">
+      <div className="max-w-7xl mx-auto flex items-center justify-between py-2 px-4">
+        <div className="flex items-center space-x-3 w-60">
+          <div className="p-1 bg-white rounded-lg shadow-md">
             {isEnterprise ? (
               <Image
                 src={COMPANY_LOGO}
                 alt="Marpesca Logo"
-                width={160}
-                height={55}
+                width={140}
+                height={45}
                 className="object-contain"
                 priority
               />
@@ -76,46 +68,42 @@ export default function Navbar({ role = '', isEnterprise = false }) {
               <Image
                 src="/logo.jpg"
                 alt="Logo Marpes"
-                width={36}
-                height={36}
+                width={32}
+                height={32}
                 className="object-contain"
                 priority
               />
             )}
           </div>
           {!isEnterprise && (
-            <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">
+            <h1 className="text-lg font-bold tracking-tight whitespace-nowrap">
               Hombres de Blanco
             </h1>
           )}
         </div>
 
-        <nav className="hidden md:flex items-center space-x-3">
-          {navItems && navItems.length > 0 ? (
-            navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center space-x-1.5 px-2.5 py-2 rounded-lg text-sm font-medium
-                  ${pathname === item.href ? 'bg-blue-800 text-white' : 'text-blue-100 hover:bg-blue-800/50 hover:text-white'} transition-all duration-200`}
-              >
-                {item.label}
-              </Link>
-            ))
-          ) : (
-            <div className="text-white">No hay elementos de navegación disponibles</div>
-          )}
+        <nav className="hidden md:flex items-center space-x-2">
+          {navItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center space-x-1.5 px-2 py-1.5 rounded-lg text-sm font-medium
+                ${pathname === item.href ? 'bg-blue-800 text-white' : 'text-blue-100 hover:bg-blue-800/50 hover:text-white'} transition-all duration-200`}
+            >
+              {item.label}
+            </Link>
+          ))}
         </nav>
 
         <div className="flex items-center">
-          <div className="h-6 w-px bg-blue-400/50 mx-4 hidden md:block"></div>
+          <div className="h-5 w-px bg-blue-400/50 mx-3 hidden md:block"></div>
           <button 
             onClick={handleLogout}
-            className="flex items-center space-x-2 px-3 py-2 rounded-lg 
+            className="flex items-center space-x-2 px-2 py-1.5 rounded-lg 
                       text-blue-100 hover:bg-blue-800/50 hover:text-white
                       transition-all duration-200"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path 
                 strokeLinecap="round" 
                 strokeLinejoin="round" 
@@ -131,4 +119,4 @@ export default function Navbar({ role = '', isEnterprise = false }) {
       </div>
     </header>
   )
-} 
+}
