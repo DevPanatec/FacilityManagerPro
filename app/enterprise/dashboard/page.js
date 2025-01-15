@@ -130,28 +130,23 @@ export default function EnterpriseOverviewPage() {
               >
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className="text-xl font-bold text-gray-800">{turno.nombre}</h3>
-                    <p className="text-sm text-gray-500">{turno.horario}</p>
+                    <h3 className="text-xl font-bold text-gray-800">
+                      {turno.shift_type === 'morning' ? 'Turno Matutino' :
+                       turno.shift_type === 'afternoon' ? 'Turno Vespertino' :
+                       turno.shift_type === 'night' ? 'Turno Nocturno' : 'Turno'}
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {new Date(turno.start_time).toLocaleTimeString()} - {new Date(turno.end_time).toLocaleTimeString()}
+                    </p>
                   </div>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                        style={{ backgroundColor: `${turno.color}20`, color: turno.color }}>
-                    {turno.personal_activo} activos
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    {turno.status}
                   </span>
                 </div>
                 
                 <div className="mt-4">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-500">Capacidad</span>
-                    <span className="font-medium">{turno.personal_activo}/{turno.capacidad_total}</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="h-2 rounded-full transition-all duration-300"
-                      style={{
-                        width: `${(turno.personal_activo / turno.capacidad_total) * 100}%`,
-                        backgroundColor: turno.color
-                      }}
-                    />
+                  <div className="text-sm text-gray-500">
+                    {turno.notes}
                   </div>
                 </div>
               </button>

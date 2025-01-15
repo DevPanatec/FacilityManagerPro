@@ -1,18 +1,19 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import Calendar from '@/components/Calendar'
+import Calendar from '@/app/shared/schedule/components/Calendar'
 
 interface Task {
   id: string
   titulo: string
   descripcion: string
-  fecha_inicio: string
-  fecha_fin: string
-  estado: 'pendiente' | 'en_progreso' | 'completada'
-  prioridad: 'baja' | 'media' | 'alta'
-  asignado_a: string
+  fecha: string
+  hora_inicio: string
+  hora_fin: string
+  estado: 'pending' | 'completed' | 'cancelled'
   area: string
+  turno: 'A' | 'B' | 'C'
+  asignado_a: string[]
 }
 
 export default function EnterpriseSchedulePage() {
@@ -27,7 +28,7 @@ export default function EnterpriseSchedulePage() {
         const { data, error } = await supabase
           .from('tareas')
           .select('*')
-          .order('fecha_inicio')
+          .order('fecha')
 
         if (error) throw error
 
@@ -60,6 +61,18 @@ export default function EnterpriseSchedulePage() {
     }
   }, [])
 
+  const handleTaskClick = (task: any) => {
+    console.log('Task clicked:', task)
+  }
+
+  const handleAddTask = (date: string) => {
+    console.log('Add task for date:', date)
+  }
+
+  const handleDeleteTask = (id: string) => {
+    console.log('Delete task:', id)
+  }
+
   if (loading) {
     return <div className="min-h-screen bg-gray-50 p-6">Cargando...</div>
   }
@@ -68,6 +81,19 @@ export default function EnterpriseSchedulePage() {
     return <div className="min-h-screen bg-gray-50 p-6">Error: {error}</div>
   }
 
+  const transformedTasks = tasks.map(task => ({
+    id: task.id,
+    title: task.titulo,
+    description: task.descripcion,
+    date: task.fecha,
+    startTime: task.hora_inicio,
+    endTime: task.hora_fin,
+    status: task.estado,
+    area: task.area,
+    shift: task.turno,
+    assignedTo: task.asignado_a
+  }))
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -75,17 +101,10 @@ export default function EnterpriseSchedulePage() {
         
         <div className="bg-white rounded-lg shadow p-6">
           <Calendar 
-            events={tasks.map(task => ({
-              id: task.id,
-              title: task.titulo,
-              start: new Date(task.fecha_inicio),
-              end: new Date(task.fecha_fin),
-              description: task.descripcion,
-              status: task.estado,
-              priority: task.prioridad,
-              assignedTo: task.asignado_a,
-              area: task.area
-            }))}
+            tasks={transformedTasks}
+            onTaskClick={handleTaskClick}
+            onAddTask={handleAddTask}
+            onDeleteTask={handleDeleteTask}
           />
         </div>
       </div>

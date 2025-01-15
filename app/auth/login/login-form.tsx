@@ -86,6 +86,9 @@ export default function LoginForm() {
 
       toast.success('Iniciando sesión...')
 
+      // Guardar el rol en localStorage
+      localStorage.setItem('userRole', userData.role.toLowerCase())
+
       // Determinar URL de redirección basada en el rol
       let redirectUrl = '/dashboard'
       

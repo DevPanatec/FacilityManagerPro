@@ -74,8 +74,16 @@ export default function RRHHPage() {
         .eq('role', 'employee')
         .order('full_name')
 
-      if (employeesError) throw employeesError
-      console.log('3. Respuesta de empleados:', employeesData)
+      if (employeesError) {
+        console.error('Error al obtener empleados:', employeesError)
+        if (employeesError.code === 'PGRST116') {
+          throw new Error('La tabla de usuarios no existe')
+        } else if (employeesError.code === 'PGRST204') {
+          throw new Error('No tienes permisos para acceder a los datos de empleados')
+        } else {
+          throw new Error('Error al cargar los empleados: ' + employeesError.message)
+        }
+      }
 
       // Obtener usuarios especiales (admin/enterprise)
       console.log('4. Consultando tabla users para usuarios especiales...')
@@ -85,8 +93,16 @@ export default function RRHHPage() {
         .in('role', ['admin', 'enterprise'])
         .order('full_name')
 
-      if (specialError) throw specialError
-      console.log('5. Respuesta de usuarios especiales:', specialData)
+      if (specialError) {
+        console.error('Error al obtener usuarios especiales:', specialError)
+        if (specialError.code === 'PGRST116') {
+          throw new Error('La tabla de usuarios no existe')
+        } else if (specialError.code === 'PGRST204') {
+          throw new Error('No tienes permisos para acceder a los datos de usuarios especiales')
+        } else {
+          throw new Error('Error al cargar los usuarios especiales: ' + specialError.message)
+        }
+      }
 
       // Obtener turnos activos
       console.log('6. Consultando tabla work_shifts para turnos activos...')
@@ -95,11 +111,19 @@ export default function RRHHPage() {
         .select('id')
         .eq('status', 'active')
 
-      if (shiftsError) throw shiftsError
-      console.log('7. Respuesta de turnos:', shiftsData)
+      if (shiftsError) {
+        console.error('Error al obtener turnos:', shiftsError)
+        if (shiftsError.code === 'PGRST116') {
+          throw new Error('La tabla de turnos no existe')
+        } else if (shiftsError.code === 'PGRST204') {
+          throw new Error('No tienes permisos para acceder a los datos de turnos')
+        } else {
+          throw new Error('Error al cargar los turnos: ' + shiftsError.message)
+        }
+      }
 
-      // Transformar datos de empleados
-      const transformedEmployees: Employee[] = employeesData.map(emp => ({
+      // Transformar datos de empleados (usar array vacío si no hay datos)
+      const transformedEmployees: Employee[] = (employeesData || []).map(emp => ({
         id: emp.id,
         nombre: emp.full_name,
         cargo: emp.role,
@@ -112,8 +136,8 @@ export default function RRHHPage() {
         telefono: emp.phone
       }))
 
-      // Transformar datos de usuarios especiales
-      const transformedSpecial: SpecialUser[] = specialData.map(user => ({
+      // Transformar datos de usuarios especiales (usar array vacío si no hay datos)
+      const transformedSpecial: SpecialUser[] = (specialData || []).map(user => ({
         id: user.id,
         nombre: user.full_name,
         rol: user.role,
@@ -123,12 +147,12 @@ export default function RRHHPage() {
 
       setPersonal(transformedEmployees)
       setUsuariosEspeciales(transformedSpecial)
-      setTotalPersonal(employeesData.length)
-      setTurnosActivos(shiftsData.length)
+      setTotalPersonal(employeesData?.length || 0)
+      setTurnosActivos(shiftsData?.length || 0)
 
     } catch (err) {
       console.error('Error fetching data:', err)
-      setError(err instanceof Error ? err.message : 'Error al cargar los datos')
+      setError(err instanceof Error ? err.message : 'Error inesperado al cargar los datos')
     } finally {
       setLoading(false)
     }
@@ -143,9 +167,32 @@ export default function RRHHPage() {
       </div>
 
       {loading ? (
-        <div className="p-6">Cargando...</div>
+        <div className="p-6">
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            <span className="ml-2">Cargando datos...</span>
+          </div>
+        </div>
       ) : error ? (
-        <div className="p-6 text-red-500">Error: {error}</div>
+        <div className="p-6">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              <h3 className="ml-2 text-sm font-medium text-red-800">Error al cargar los datos</h3>
+            </div>
+            <div className="mt-2 text-sm text-red-700">{error}</div>
+            <div className="mt-3">
+              <button
+                onClick={fetchData}
+                className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                Reintentar
+              </button>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="p-6">
           {/* Filters and Actions */}
