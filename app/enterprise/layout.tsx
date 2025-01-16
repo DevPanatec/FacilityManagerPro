@@ -2,10 +2,10 @@
 
 import { useRouter } from 'next/navigation'
 import { usePathname } from 'next/navigation'
-import { useEffect } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
 import Navbar from '../shared/componentes/navbar'
 import ChatWidget from '../shared/componentes/ChatWidget'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 export default function EnterpriseLayout({
   children,
@@ -14,25 +14,46 @@ export default function EnterpriseLayout({
 }) {
   const router = useRouter()
   const pathname = usePathname()
+  const [isLoading, setIsLoading] = useState(true)
+  const supabase = createClientComponentClient()
 
   useEffect(() => {
     const checkSession = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession()
-      if (!session) {
-        router.push('/auth/login')
-        return
-      }
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          router.push('/auth/login')
+          return
+        }
 
-      const { data: { user } } = await supabase.auth.getUser()
-      const role = user?.user_metadata?.role
+        const { data: userData } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', session.user.id)
+          .single()
 
-      if (!role || role !== 'enterprise') {
+        if (!userData || userData.role !== 'enterprise') {
+          router.push('/auth/login')
+          return
+        }
+
+        setIsLoading(false)
+      } catch (error) {
+        console.error('Error verificando sesión:', error)
         router.push('/auth/login')
       }
     }
 
     checkSession()
-  }, [router])
+  }, [router, supabase])
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-blue-50">
