@@ -1,27 +1,33 @@
 'use client';
 import { useState, useEffect } from 'react';
-import type { jsPDF } from 'jspdf';
-import axios from 'axios';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { toast } from 'react-hot-toast';
 
-interface Report {
-  id: number;
-  fecha: string;
+interface ContingencyFile {
+  id: string;
+  report_id: string;
+  name: string;
+  url: string;
+  type: 'imagen' | 'documento';
+  created_at: string;
+}
+
+interface ContingencyReport {
+  id: string;
+  organization_id: string;
+  date: string;
   area: string;
-  tipo: string;
-  descripcion: string;
-  estado: 'Pendiente' | 'Resuelto';
-  archivos: {
-    nombre: string;
-    url: string;
-    tipo: 'imagen' | 'documento';
-  }[];
-  esContingencia: boolean;
+  type: string;
+  description: string | null;
+  status: 'Pendiente' | 'Resuelto';
+  is_contingency: boolean;
+  created_at: string;
+  updated_at: string;
+  archivos: ContingencyFile[];
 }
 
 interface FileWithPreview extends File {
-  preview?: string;
-  type: string;
+  preview: string;
 }
 
 export default function ReportsPage() {
@@ -32,247 +38,225 @@ export default function ReportsPage() {
   const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [showModal, setShowModal] = useState(false);
-  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<ContingencyReport | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Agregar estado para paginación
+  // Estado para paginación
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  const [reportes, setReportes] = useState<Report[]>([
-    {
-      id: 1,
-      fecha: '2024-03-15',
-      area: 'Producción',
-      tipo: 'Tubería rota',
-      descripcion: 'Fuga en el baño principal',
-      estado: 'Pendiente',
-      archivos: [
-        { nombre: 'foto1.jpg', url: '/ejemplo/foto1.jpg', tipo: 'imagen' },
-        { nombre: 'reporte.pdf', url: '/ejemplo/reporte.pdf', tipo: 'documento' }
-      ],
-      esContingencia: true
-    }
-  ]);
+  // Estado para reportes y tipos de contingencia
+  const [reportes, setReportes] = useState<ContingencyReport[]>([]);
+  const [tiposContingencia, setTiposContingencia] = useState<string[]>([]);
+  const [stats, setStats] = useState({ pendientes: 0, resueltos: 0, total: 0 });
 
-  // Agregar array de tipos de contingencia
-  const tiposContingencia = [
-    'Tubería rota',
-    'Falla eléctrica',
-    'Incendio',
-    'Inundación',
-    'Fuga de gas',
-    'Accidente laboral',
-    'Falla de equipos',
-    'Otro'
-  ];
+  const supabase = createClientComponentClient();
 
-  // Agregar estos estados al inicio del componente
-  const [stats, setStats] = useState({
-    total: 1,
-    pendientes: 1,
-    resueltos: 0
-  });
-
-  // Cargar reportes al montar y cuando cambien los filtros
+  // Cargar datos iniciales
   useEffect(() => {
-    fetchReports();
+    loadData();
   }, [timeFilter, page]);
 
-  const fetchReports = async () => {
+  const loadData = async () => {
     try {
       setIsLoading(true);
-      const today = new Date();
+      setError(null);
+
+      // Obtener el usuario actual y su organización
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+
+      const { data: userData, error: orgError } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('user_id', user?.id)
+        .single();
+      if (orgError) throw orgError;
+
+      // Cargar tipos de contingencia
+      const { data: types, error: typesError } = await supabase
+        .from('contingency_types')
+        .select('name')
+        .eq('organization_id', userData.organization_id);
+      if (typesError) throw typesError;
+      setTiposContingencia(types.map(t => t.name));
+
+      // Calcular rango de fechas según el filtro
+      const now = new Date();
       let startDate = new Date();
-      
-      switch(timeFilter) {
-        case 'dia':
-          startDate.setHours(0, 0, 0, 0);
-          break;
-        case 'semana':
-          startDate.setDate(today.getDate() - 7);
-          break;
-        case 'mes':
-          startDate.setMonth(today.getMonth() - 1);
-          break;
+      if (timeFilter === 'dia') {
+        startDate.setHours(0, 0, 0, 0);
+      } else if (timeFilter === 'semana') {
+        startDate.setDate(now.getDate() - 7);
+      } else if (timeFilter === 'mes') {
+        startDate.setMonth(now.getMonth() - 1);
       }
 
-      const response = await axios.get('/api/reports', {
-        params: {
-          startDate: startDate.toISOString(),
-          endDate: today.toISOString(),
-          page,
-          limit: 10
-        }
-      });
-      
-      setReportes(response.data.reports || []);
-      setTotalPages(response.data.totalPages || 1);
-      
-      const reportesActuales = response.data.reports || reportes;
-      const total = reportesActuales.length;
-      const pendientes = reportesActuales.filter(r => r.estado === 'Pendiente').length;
+      // Cargar reportes
+      const { data: reports, error: reportsError, count } = await supabase
+        .from('contingency_reports')
+        .select('*, contingency_files(*)', { count: 'exact' })
+        .eq('organization_id', userData.organization_id)
+        .gte('date', startDate.toISOString())
+        .order('date', { ascending: false })
+        .range((page - 1) * 10, page * 10 - 1);
+      if (reportsError) throw reportsError;
+
+      setReportes(reports as ContingencyReport[]);
+      setTotalPages(Math.ceil((count || 0) / 10));
+
+      // Calcular estadísticas
+      const pendientes = reports?.filter(r => r.status === 'Pendiente').length || 0;
+      const resueltos = reports?.filter(r => r.status === 'Resuelto').length || 0;
       setStats({
-        total,
         pendientes,
-        resueltos: total - pendientes
+        resueltos,
+        total: pendientes + resueltos
       });
-    } catch {
-      // Silenciar el error y mantener el estado actual
-      setReportes([]);
-      setTotalPages(1);
-      setStats({
-        total: 0,
-        pendientes: 0,
-        resueltos: 0
-      });
+
+    } catch (error) {
+      console.error('Error al cargar datos:', error);
+      setError('Error al cargar los datos. Por favor, intente nuevamente.');
+      toast.error('Error al cargar los datos');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Handlers
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    setSelectedFiles(files);
-
-    // Crear URLs para preview
-    const urls = files.map(file => URL.createObjectURL(file));
-    setPreviewUrls(urls);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSaveReport = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-
     try {
-      // Crear el nuevo reporte
-      const newReport: Report = {
-        id: Date.now(),
-        fecha: new Date().toISOString().split('T')[0],
-        area: selectedArea,
-        tipo: contingencyType,
-        descripcion: description,
-        estado: 'Pendiente' as const,
-        esContingencia: true,
-        archivos: selectedFiles.map(file => ({
-          nombre: file.name,
-          url: URL.createObjectURL(file),
-          tipo: file.type.startsWith('image/') ? 'imagen' as const : 'documento' as const
-        }))
-      };
-
-      // Simular llamada al API
-      // const response = await axios.post('/api/reports', newReport);
+      setIsLoading(true);
       
-      // Actualizar el estado local
-      setReportes(prev => [newReport, ...prev]);
-      
-      // Actualizar estadísticas
-      setStats(prev => ({
-        total: prev.total + 1,
-        pendientes: prev.pendientes + 1,
-        resueltos: prev.resueltos
-      }));
+      // Obtener el usuario y su organización
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
 
+      const { data: userData, error: orgError } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('user_id', user?.id)
+        .single();
+      if (orgError) throw orgError;
+
+      // Crear el reporte
+      const { data: report, error: reportError } = await supabase
+        .from('contingency_reports')
+        .insert({
+          organization_id: userData.organization_id,
+          area: selectedArea,
+          type: contingencyType,
+          description,
+          status: 'Pendiente',
+          is_contingency: true
+        })
+        .select()
+        .single();
+      if (reportError) throw reportError;
+
+      // Subir archivos si existen
+      if (selectedFiles.length > 0) {
+        for (const file of selectedFiles) {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${Math.random()}.${fileExt}`;
+          const filePath = `${userData.organization_id}/${report.id}/${fileName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('contingency-files')
+            .upload(filePath, file);
+          if (uploadError) throw uploadError;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('contingency-files')
+            .getPublicUrl(filePath);
+
+          await supabase.from('contingency_files').insert({
+            report_id: report.id,
+            name: file.name,
+            url: publicUrl,
+            type: file.type.startsWith('image/') ? 'imagen' : 'documento'
+          });
+        }
+      }
+
+      toast.success('Reporte creado exitosamente');
       // Limpiar el formulario
       setSelectedArea('');
       setContingencyType('');
       setDescription('');
       setSelectedFiles([]);
       setPreviewUrls([]);
+      
+      // Recargar datos
+      loadData();
 
-      toast.success('Reporte creado exitosamente');
     } catch (error) {
-      toast.error('Error al crear el reporte');
+      console.error('Error al guardar el reporte:', error);
+      toast.error('Error al guardar el reporte');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleViewFiles = (report: Report) => {
+  const handleViewFiles = (report: ContingencyReport) => {
     setSelectedReport(report);
     setShowModal(true);
   };
 
-  const handlePeriodChange = async (period: string) => {
-    setTimeFilter(period);
-    setPage(1); // Reset página al cambiar filtro
-    await fetchReports();
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setSelectedFiles(files.map(file => Object.assign(file, {
+      preview: URL.createObjectURL(file)
+    })));
+    setPreviewUrls(files.map(file => URL.createObjectURL(file)));
   };
 
-  // Agregar función para generar PDF
-  const handleDownloadPDF = async (report: Report) => {
+  const handleDownloadPDF = async (report: ContingencyReport) => {
     try {
-      // Aquí iría la lógica para generar y descargar el PDF
-      toast.success('PDF descargado exitosamente');
-    } catch (error) {
-      toast.error('Error al descargar el PDF');
-    }
-  };
+      // Crear el contenido del PDF
+      const content = `
+        Reporte de Contingencia
+        ----------------------
+        Fecha: ${report.date}
+        Área: ${report.area}
+        Tipo: ${report.type}
+        Estado: ${report.status}
+        Descripción: ${report.description || 'No disponible'}
+      `;
 
-  const handleUpdateStatus = async (id: number, newStatus: 'Pendiente' | 'Resuelto') => {
-    try {
-      // Simular llamada al API
-      // await axios.patch(`/api/reports/${id}`, { estado: newStatus });
-
-      // Actualizar el estado local
-      setReportes(prev => prev.map(report => {
-        if (report.id === id) {
-          return { ...report, estado: newStatus };
-        }
-        return report;
-      }));
-
-      // Actualizar estadísticas correctamente
-      setStats(prev => ({
-        total: prev.total,
-        pendientes: newStatus === 'Pendiente' 
-          ? prev.pendientes + 1 
-          : prev.pendientes - 1,
-        resueltos: newStatus === 'Resuelto' 
-          ? prev.resueltos + 1 
-          : prev.resueltos - 1
-      }));
-
-      toast.success(`Estado actualizado a ${newStatus}`);
-    } catch (error) {
-      toast.error('Error al actualizar el estado');
-    }
-  };
-
-  // Agregar la función handleDeleteReport
-  const handleDeleteReport = async (e: React.MouseEvent, reportId: number) => {
-    e.stopPropagation();
-    
-    if (!window.confirm('¿Estás seguro de que deseas eliminar este reporte?')) {
-      return;
-    }
-
-    try {
-      const reporteEliminado = reportes.find(r => r.id === reportId);
+      // Crear un blob con el contenido
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = window.URL.createObjectURL(blob);
       
-      // Actualizar el estado local
-      setReportes(prev => prev.filter(report => report.id !== reportId));
+      // Crear un enlace temporal y hacer clic en él
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `reporte-${report.id}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
       
-      // Actualizar estadísticas correctamente
-      if (reporteEliminado) {
-        setStats(prev => ({
-          total: Math.max(0, prev.total - 1),
-          pendientes: reporteEliminado.estado === 'Pendiente' 
-            ? Math.max(0, prev.pendientes - 1) 
-            : prev.pendientes,
-          resueltos: reporteEliminado.estado === 'Resuelto' 
-            ? Math.max(0, prev.resueltos - 1) 
-            : prev.resueltos
-        }));
-      }
-
-      toast.success('Reporte eliminado exitosamente');
+      toast.success('Reporte descargado exitosamente');
     } catch (error) {
-      toast.error('Error al eliminar el reporte');
+      console.error('Error al descargar el reporte:', error);
+      toast.error('Error al descargar el reporte');
     }
   };
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
+        <div className="text-red-500 mb-4">{error}</div>
+        <button
+          onClick={() => loadData()}
+          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
@@ -450,27 +434,27 @@ export default function ReportsPage() {
                       onClick={() => handleViewFiles(reporte)}
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{reporte.fecha}</div>
+                        <div className="text-sm text-gray-900">{reporte.date}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{reporte.area}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
-                          ${reporte.esContingencia 
+                          ${reporte.is_contingency 
                             ? 'bg-red-100 text-red-800' 
                             : 'bg-yellow-100 text-yellow-800'}`}
                         >
-                          {reporte.esContingencia ? 'Sí' : 'No'}
+                          {reporte.is_contingency ? 'Sí' : 'No'}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
-                          ${reporte.estado === 'Pendiente'
+                          ${reporte.status === 'Pendiente'
                             ? 'bg-yellow-100 text-yellow-800'
                             : 'bg-green-100 text-green-800'}`}
                         >
-                          {reporte.estado}
+                          {reporte.status}
                         </span>
                       </td>
                     </tr>
@@ -492,7 +476,7 @@ export default function ReportsPage() {
               </div>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <form onSubmit={handleSaveReport} className="p-6 space-y-6">
               <div className="grid grid-cols-1 gap-6">
                 {/* Área */}
                 <div className="group">
@@ -636,7 +620,7 @@ export default function ReportsPage() {
               <div className="grid grid-cols-2 gap-6 mb-6">
                 <div>
                   <p className="text-sm font-medium text-gray-500">Fecha</p>
-                  <p className="mt-1 text-sm text-gray-900">{selectedReport.fecha}</p>
+                  <p className="mt-1 text-sm text-gray-900">{selectedReport.date}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Área</p>
@@ -644,13 +628,13 @@ export default function ReportsPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Tipo de Contingencia</p>
-                  <p className="mt-1 text-sm text-gray-900">{selectedReport.tipo}</p>
+                  <p className="mt-1 text-sm text-gray-900">{selectedReport.type}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Estado</p>
                   <span className={`mt-1 px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
-                    ${selectedReport.estado === 'Pendiente' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                    {selectedReport.estado}
+                    ${selectedReport.status === 'Pendiente' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                    {selectedReport.status}
                   </span>
                 </div>
               </div>
@@ -658,7 +642,7 @@ export default function ReportsPage() {
               <div className="mb-6">
                 <p className="text-sm font-medium text-gray-500 mb-2">Descripción</p>
                 <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-900 shadow-inner">
-                  {selectedReport.descripcion}
+                  {selectedReport.description}
                 </div>
               </div>
 
@@ -668,10 +652,10 @@ export default function ReportsPage() {
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     {selectedReport.archivos.map((archivo, index) => (
                       <div key={index} className="relative group">
-                        {archivo.tipo === 'imagen' ? (
+                        {archivo.type === 'imagen' ? (
                           <img
                             src={archivo.url}
-                            alt={archivo.nombre}
+                            alt={archivo.name}
                             className="w-full h-32 object-cover rounded-lg"
                           />
                         ) : (
@@ -683,7 +667,7 @@ export default function ReportsPage() {
                           </div>
                         )}
                         <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white p-2 text-sm truncate rounded-b-lg">
-                          {archivo.nombre}
+                          {archivo.name}
                         </div>
                       </div>
                     ))}
