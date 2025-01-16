@@ -4,11 +4,27 @@ import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { toast } from 'react-hot-toast';
 
+interface AreaStats {
+  total: number;
+  completadas: number;
+}
+
+interface DashboardData {
+  asignacionesPendientes: number;
+  asignacionesEnProgreso: number;
+  asignacionesCompletadas: number;
+  personalActivo: number;
+  tiempoPromedioTarea: string;
+  tasaCompletitud: number;
+  asignacionesPorArea: [string, AreaStats][];
+  asignacionesPorUsuario: [string, AreaStats][];
+}
+
 export default function Dashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState('mes');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [dashboardData, setDashboardData] = useState({
+  const [error, setError] = useState<string | null>(null);
+  const [dashboardData, setDashboardData] = useState<DashboardData>({
     asignacionesPendientes: 0,
     asignacionesEnProgreso: 0,
     asignacionesCompletadas: 0,
@@ -102,7 +118,7 @@ export default function Dashboard() {
         const totalTime = completedAssignments.reduce((acc, curr) => {
           const start = new Date(curr.start_time);
           const end = new Date(curr.completed_at);
-          return acc + (end - start);
+          return acc + (end.getTime() - start.getTime());
         }, 0);
         const promedioHoras = (totalTime / completedAssignments.length) / (1000 * 60 * 60);
         tiempoPromedio = `${promedioHoras.toFixed(1)}h`;
@@ -140,9 +156,9 @@ export default function Dashboard() {
         asignacionesCompletadas: completadas,
         personalActivo: activeUsers?.length || 0,
         tiempoPromedioTarea: tiempoPromedio,
-        tasaCompletitud: total > 0 ? ((completadas / total) * 100).toFixed(1) : 0,
-        asignacionesPorArea: Object.entries(asignacionesPorArea || {}),
-        asignacionesPorUsuario: Object.entries(asignacionesPorUsuario || {})
+        tasaCompletitud: total > 0 ? Number(((completadas / total) * 100).toFixed(1)) : 0,
+        asignacionesPorArea: Object.entries(asignacionesPorArea || {}) as [string, AreaStats][],
+        asignacionesPorUsuario: Object.entries(asignacionesPorUsuario || {}) as [string, AreaStats][]
       });
 
     } catch (error) {

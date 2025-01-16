@@ -1,35 +1,80 @@
 'use client'
-
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { toast } from 'react-hot-toast'
 import InventoryModal from './components/InventoryModal'
 
 interface InventoryItem {
-  id: number
+  id: string
   name: string
   category: string
-  stock: number
-  stock_min: number
-  location: string
-  status: string
-  last_updated: string
+  quantity: number
   unit: string
+  min_stock: number
+  location: string
+  status: 'available' | 'low' | 'out_of_stock'
+  last_updated: string
+  last_used: string
+  estimated_duration: number
+  organization_id: string
+}
+
+interface UsageRecord {
+  id: string
+  quantity: number
+  date: string
+  user_id: string
+}
+
+interface RestockRecord {
+  id: string
+  quantity: number
+  date: string
+  supplier: string
+}
+
+interface InventoryFormData {
+  name: string
+  category: string
+  quantity: number
+  unit: string
+  min_stock: number
+  location: string
   estimated_duration: number
 }
 
+const getCategoryLabel = (category: string) => {
+  switch (category) {
+    case 'cleaning': return 'Limpieza'
+    case 'safety': return 'Seguridad'
+    case 'tools': return 'Herramientas'
+    default: return category
+  }
+}
+
 export default function InventoryPage() {
+  const [sortConfig, setSortConfig] = useState<{
+    key: keyof InventoryItem;
+    direction: 'asc' | 'desc';
+  }>({ key: 'name', direction: 'asc' });
+
+  const [filters, setFilters] = useState({
+    category: 'all',
+    status: 'all'
+  })
+
   const [items, setItems] = useState<InventoryItem[]>([])
-  const [searchTerm, setSearchTerm] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('Todas las categorías')
-  const [statusFilter, setStatusFilter] = useState('Todos los estados')
-  const [modalOpen, setModalOpen] = useState(false)
-  const [modalMode, setModalMode] = useState<'create' | 'edit' | 'restock' | 'use'>('create')
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | undefined>()
+  const [search, setSearch] = useState('')
+  const [modalMode, setModalMode] = useState<'edit' | 'use' | 'restock' | 'create'>('edit')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [showAlerts, setShowAlerts] = useState(true)
 
   const supabase = createClientComponentClient()
 
-  // Cargar items del inventario
+  // Cargar datos del inventario
   useEffect(() => {
     loadInventoryItems()
   }, [])
@@ -37,402 +82,591 @@ export default function InventoryPage() {
   const loadInventoryItems = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      setError(null)
+      const { data: items, error } = await supabase
         .from('inventory')
         .select('*')
         .order('name')
-
+      
       if (error) throw error
-
-      setItems(data || [])
+      
+      setItems(items || [])
     } catch (error) {
-      console.error('Error loading inventory items:', error)
+      console.error('Error loading inventory:', error)
+      setError('Error al cargar el inventario')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleOpenModal = (mode: 'create' | 'edit' | 'restock' | 'use', item?: InventoryItem) => {
-    setModalMode(mode)
-    setSelectedItem(item || null)
-    setModalOpen(true)
-  }
-
-  const handleCloseModal = () => {
-    setModalOpen(false)
-    setSelectedItem(null)
-  }
-
-  const handleSubmitModal = async (formData: any) => {
+  // Función para actualizar items
+  const updateInventoryItem = async (item: InventoryItem) => {
     try {
-      switch (modalMode) {
-        case 'create':
-          console.log('Intentando crear item:', formData)
-          const { data: newItem, error: createError } = await supabase
-            .from('inventory')
-            .insert([{
-              name: formData.name,
-              category: formData.category,
-              stock: 0,
-              stock_min: formData.stock_min,
-              location: formData.location,
-              status: 'Sin Stock',
-              unit: formData.unit,
-              estimated_duration: formData.estimated_duration,
-              last_updated: new Date().toISOString()
-            }])
-            .select()
-            .single()
+      const { error } = await supabase
+        .from('inventory')
+        .update({
+          name: item.name,
+          category: item.category,
+          quantity: item.quantity,
+          unit: item.unit,
+          min_stock: item.min_stock,
+          location: item.location,
+          status: item.status,
+          last_updated: new Date().toISOString(),
+          estimated_duration: item.estimated_duration
+        })
+        .eq('id', item.id)
 
-          if (createError) {
-            console.error('Error detallado:', createError)
-            throw createError
-          }
+      if (error) throw error
 
-          console.log('Item creado:', newItem)
-          setItems([...items, newItem])
-          break
-
-        case 'edit':
-          if (!selectedItem) return
-
-          const { error: updateError } = await supabase
-            .from('inventory')
-            .update({
-              name: formData.name,
-              category: formData.category,
-              stock_min: formData.stock_min,
-              location: formData.location,
-              unit: formData.unit,
-              estimated_duration: formData.estimated_duration,
-              last_updated: new Date().toISOString()
-            })
-            .eq('id', selectedItem.id)
-
-          if (updateError) throw updateError
-          await loadInventoryItems()
-          break
-
-        case 'restock':
-          if (!selectedItem) return
-
-          const newStock = selectedItem.stock + formData.quantity
-          const newStatus = newStock > selectedItem.stock_min ? 'Disponible' : 
-                          newStock === 0 ? 'Sin Stock' : 'Bajo Stock'
-
-          const { error: restockError } = await supabase
-            .from('inventory')
-            .update({
-              stock: newStock,
-              status: newStatus,
-              last_updated: new Date().toISOString()
-            })
-            .eq('id', selectedItem.id)
-
-          if (restockError) throw restockError
-          await loadInventoryItems()
-          break
-
-        case 'use':
-          if (!selectedItem) return
-
-          const remainingStock = selectedItem.stock - formData.quantity
-          if (remainingStock < 0) {
-            alert('No hay suficiente stock disponible')
-            return
-          }
-
-          const status = remainingStock > selectedItem.stock_min ? 'Disponible' : 
-                        remainingStock === 0 ? 'Sin Stock' : 'Bajo Stock'
-
-          const { error: useError } = await supabase
-            .from('inventory')
-            .update({
-              stock: remainingStock,
-              status: status,
-              last_updated: new Date().toISOString()
-            })
-            .eq('id', selectedItem.id)
-
-          if (useError) throw useError
-          await loadInventoryItems()
-          break
-      }
-
-      handleCloseModal()
+      await loadInventoryItems()
+      toast.success('Item actualizado correctamente')
     } catch (error) {
-      console.error('Error handling inventory operation:', error)
-      alert('Ocurrió un error al procesar la operación')
+      console.error('Error updating item:', error)
+      toast.error('Error al actualizar el item')
     }
   }
 
-  // Filtrar items
-  const filteredItems = items.filter(item => {
-    const matchesSearch = 
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.location.toLowerCase().includes(searchTerm.toLowerCase())
+  // Función para crear nuevo item
+  const createInventoryItem = async (item: Omit<InventoryItem, 'id' | 'organization_id'>) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('No autorizado')
 
-    const matchesCategory = 
-      categoryFilter === 'Todas las categorías' || 
-      item.category === categoryFilter
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('user_id', user.id)
+        .single()
 
-    const matchesStatus = 
-      statusFilter === 'Todos los estados' || 
-      item.status === statusFilter
+      if (!userProfile) throw new Error('Perfil no encontrado')
 
-    return matchesSearch && matchesCategory && matchesStatus
-  })
+      const { error } = await supabase
+        .from('inventory')
+        .insert([{
+          ...item,
+          organization_id: userProfile.organization_id,
+          status: item.quantity > item.min_stock ? 'available' : 
+                 item.quantity === 0 ? 'out_of_stock' : 'low'
+        }])
 
-  // Calcular estadísticas
-  const stats = {
-    totalItems: items.length,
-    criticalItems: items.filter(item => item.stock <= item.stock_min).length,
-    locations: new Set(items.map(item => item.location)).size
+      if (error) throw error
+
+      await loadInventoryItems()
+      toast.success('Item creado correctamente')
+    } catch (error) {
+      console.error('Error creating item:', error)
+      toast.error('Error al crear el item')
+    }
   }
 
-  // Obtener items críticos
-  const criticalItems = items
-    .filter(item => item.stock <= item.stock_min)
-    .map(item => ({
-      name: item.name,
-      quantity: item.stock,
-      unit: item.unit,
-      minStock: item.stock_min
-    }))
+  // Función para registrar uso de item
+  const registerItemUsage = async (itemId: string, quantity: number) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('No autorizado')
+
+      // Registrar uso
+      const { error: usageError } = await supabase
+        .from('inventory_usage')
+        .insert([{
+          inventory_id: itemId,
+          quantity,
+          user_id: user.id
+        }])
+
+      if (usageError) throw usageError
+
+      // Actualizar cantidad en inventario
+      const item = items.find(i => i.id === itemId)
+      if (!item) throw new Error('Item no encontrado')
+
+      const newQuantity = item.quantity - quantity
+      const newStatus = newQuantity > item.min_stock ? 'available' : 
+                       newQuantity === 0 ? 'out_of_stock' : 'low'
+
+      await updateInventoryItem({
+        ...item,
+        quantity: newQuantity,
+        status: newStatus
+      })
+
+      toast.success('Uso registrado correctamente')
+    } catch (error) {
+      console.error('Error registering usage:', error)
+      toast.error('Error al registrar el uso')
+    }
+  }
+
+  // Función para registrar reposición de item
+  const registerItemRestock = async (itemId: string, quantity: number, supplier: string) => {
+    try {
+      // Registrar reposición
+      const { error: restockError } = await supabase
+        .from('inventory_restock')
+        .insert([{
+          inventory_id: itemId,
+          quantity,
+          supplier
+        }])
+
+      if (restockError) throw restockError
+
+      // Actualizar cantidad en inventario
+      const item = items.find(i => i.id === itemId)
+      if (!item) throw new Error('Item no encontrado')
+
+      const newQuantity = item.quantity + quantity
+      const newStatus = newQuantity > item.min_stock ? 'available' : 
+                       newQuantity === 0 ? 'out_of_stock' : 'low'
+
+      await updateInventoryItem({
+        ...item,
+        quantity: newQuantity,
+        status: newStatus
+      })
+
+      toast.success('Reposición registrada correctamente')
+    } catch (error) {
+      console.error('Error registering restock:', error)
+      toast.error('Error al registrar la reposición')
+    }
+  }
+
+  // Función para eliminar item
+  const deleteInventoryItem = async (itemId: string) => {
+    try {
+      const { error } = await supabase
+        .from('inventory')
+        .delete()
+        .eq('id', itemId)
+
+      if (error) throw error
+
+      await loadInventoryItems()
+      toast.success('Item eliminado correctamente')
+    } catch (error) {
+      console.error('Error deleting item:', error)
+      toast.error('Error al eliminar el item')
+    }
+  }
+
+  // Filtrar y ordenar items
+  const filteredItems = useMemo(() => {
+    let result = [...items]
+
+    // Aplicar filtros
+    if (filters.category !== 'all') {
+      result = result.filter(item => item.category === filters.category)
+    }
+    if (filters.status !== 'all') {
+      result = result.filter(item => item.status === filters.status)
+    }
+
+    // Aplicar búsqueda
+    if (search) {
+      const searchLower = search.toLowerCase()
+      result = result.filter(item =>
+        item.name.toLowerCase().includes(searchLower) ||
+        item.category.toLowerCase().includes(searchLower) ||
+        item.location.toLowerCase().includes(searchLower)
+      )
+    }
+
+    return result
+  }, [items, filters, search])
+
+  // Estadísticas generales
+  const stats = useMemo(() => {
+    const total = items.length
+    const lowStock = items.filter(item => item.status === 'low').length
+    const locations = new Set(items.map(item => item.location)).size
+
+    return { total, lowStock, locations }
+  }, [items])
+
+  // Estado para controlar el modal de creación
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Obtener items con stock bajo
+  const lowStockItems = useMemo(() => {
+    return items.filter(item => item.quantity <= item.min_stock)
+  }, [items])
+
+  const handleModalSubmit = async (formData: any) => {
+    try {
+      if (modalMode === 'use' && selectedItem) {
+        await registerItemUsage(selectedItem.id, formData.quantity)
+      } else if (modalMode === 'restock' && selectedItem) {
+        await registerItemRestock(selectedItem.id, formData.quantity, formData.supplier)
+      } else if (selectedItem) {
+        await updateInventoryItem({
+          ...selectedItem,
+          ...formData
+        })
+      } else {
+        await createInventoryItem(formData)
+      }
+      setIsModalOpen(false)
+      setModalMode('edit')
+      loadInventoryItems() // Refresh the list after changes
+    } catch (error) {
+      console.error('Error in modal submit:', error)
+      toast.error('Error al procesar la operación')
+    }
+  }
+
+  const handleItemClick = (item: InventoryItem) => {
+    setSelectedItem(item)
+    setModalMode('use')
+    setIsModalOpen(true)
+  }
+
+  const handleRestockClick = (item: InventoryItem) => {
+    setSelectedItem(item)
+    setModalMode('restock')
+    setIsModalOpen(true)
+  }
+
+  const handleEditClick = (item: InventoryItem) => {
+    setSelectedItem(item)
+    setModalMode('edit')
+    setIsModalOpen(true)
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center justify-center">
+        <div className="text-red-500 text-xl font-semibold mb-4">{error}</div>
+        <button
+          onClick={loadInventoryItems}
+          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+        >
+          Reintentar
+        </button>
+      </div>
+    )
+  }
 
   return (
-    <div className="p-6">
+    <div className="min-h-screen bg-gray-50 p-6">
+      {/* Header con botón de crear */}
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Inventario</h1>
-        <button 
-          onClick={() => handleOpenModal('create')}
-          className="bg-[#4263eb] hover:bg-[#364fc7] text-white px-4 py-2 rounded-lg flex items-center gap-2"
+        <h1 className="text-2xl font-bold text-gray-900">Inventario</h1>
+        <button
+          onClick={() => {
+            setSelectedItem(undefined)
+            setModalMode('create')
+            setIsModalOpen(true)
+          }}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700
+                   transition-colors duration-200 flex items-center gap-2"
         >
-          <span>+</span>
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+          </svg>
           Agregar Item
         </button>
       </div>
 
-      {/* Alerta de Stock Crítico */}
-      {criticalItems.length > 0 && (
-        <div className="bg-[#fff9db] border border-[#f08c00] rounded-lg p-4 mb-6">
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              <svg className="h-6 w-6 text-[#f08c00]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div className="ml-3 flex-1">
-              <h3 className="text-[#f08c00] font-medium">
-                Hay {criticalItems.length} items con stock crítico
-              </h3>
-              <div className="mt-2">
-                {criticalItems.map((item, index) => (
-                  <div key={index} className="flex justify-between items-center text-[#f08c00] mb-1">
-                    <span>{item.name}: {item.quantity} {item.unit} (Crítico: {item.minStock})</span>
-                    <button 
-                      onClick={() => {
-                        const fullItem = items.find(i => i.name === item.name)
-                        if (fullItem) handleOpenModal('restock', fullItem)
-                      }}
-                      className="text-[#4263eb] hover:text-[#364fc7] font-medium"
-                    >
-                      Reponer
-                    </button>
-                  </div>
-                ))}
+      {/* Alertas de stock bajo */}
+      {showAlerts && lowStockItems.length > 0 && (
+        <div className="bg-yellow-50 border-b border-yellow-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+            <div className="flex items-center justify-between">
+              <div className="flex-1 flex items-center">
+                <span className="flex p-1">
+                  ⚠️
+                </span>
+                <div className="ml-2 font-medium text-yellow-800 text-sm">
+                  <span className="md:hidden">Stock crítico en {lowStockItems.length} items</span>
+                  <span className="hidden md:inline">
+                    Hay {lowStockItems.length} {lowStockItems.length === 1 ? 'item' : 'items'} con stock crítico
+                  </span>
+                </div>
+              </div>
+              <div className="flex-shrink-0">
+                <button
+                  onClick={() => setShowAlerts(false)}
+                  className="flex p-1 rounded-md hover:bg-yellow-100"
+                >
+                  <span className="sr-only">Cerrar</span>
+                  <svg className="h-4 w-4 text-yellow-800" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
               </div>
             </div>
-            <button className="ml-4 text-gray-400 hover:text-gray-500">
-              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
+            {/* Lista detallada de items con stock bajo */}
+            <div className="mt-1 space-y-1">
+              {lowStockItems.map(item => (
+                <div key={item.id} className="text-xs text-yellow-800 flex justify-between items-center">
+                  <span>{item.name}: {item.quantity} {item.unit} (Crítico: {item.min_stock})</span>
+                  <button
+                    onClick={() => {
+                      setSelectedItem(item)
+                      setModalMode('restock')
+                      setIsModalOpen(true)
+                    }}
+                    className="ml-2 px-2 py-0.5 text-xs font-medium text-yellow-800 hover:bg-yellow-100 rounded"
+                  >
+                    Reponer
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Cards de Resumen */}
-      <div className="grid grid-cols-3 gap-6 mb-6">
-        <div className="bg-white rounded-lg p-6 shadow-sm">
-          <h3 className="text-sm font-medium text-gray-500">Total Items</h3>
-          <p className="mt-2 text-3xl font-semibold text-[#4263eb]">{stats.totalItems}</p>
-        </div>
-        <div className="bg-white rounded-lg p-6 shadow-sm">
-          <h3 className="text-sm font-medium text-gray-500">Items en Estado Crítico</h3>
-          <p className="mt-2 text-3xl font-semibold text-[#f08c00]">{stats.criticalItems}</p>
-        </div>
-        <div className="bg-white rounded-lg p-6 shadow-sm">
-          <h3 className="text-sm font-medium text-gray-500">Ubicaciones</h3>
-          <p className="mt-2 text-3xl font-semibold text-[#2f9e44]">{stats.locations}</p>
+      {/* Header con estadísticas */}
+      <div className="bg-white border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex flex-col gap-4">
+            <h1 className="text-3xl font-bold text-gray-900">Gestión de Inventario</h1>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="text-sm font-medium text-blue-600">Total Items</h3>
+                <p className="text-2xl font-bold text-blue-900">{stats.total}</p>
+              </div>
+              <div className="bg-yellow-50 p-4 rounded-lg">
+                <h3 className="text-sm font-medium text-yellow-600">Items en Estado Crítico</h3>
+                <p className="text-2xl font-bold text-yellow-900">{stats.lowStock}</p>
+              </div>
+              <div className="bg-green-50 p-4 rounded-lg">
+                <h3 className="text-sm font-medium text-green-600">Ubicaciones</h3>
+                <p className="text-2xl font-bold text-green-900">{stats.locations}</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Tabla de Inventario */}
-      <div className="bg-white rounded-lg shadow-sm">
-        <div className="p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Gestión de Inventario</h2>
-          
-          <div className="flex justify-between items-center mb-6">
-            <div className="relative flex-1 max-w-md">
-              <input
-                type="text"
-                placeholder="Buscar por nombre, categoría o ubicación"
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#4263eb]"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center">
-                <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+          {/* Barra de herramientas */}
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4 w-full md:w-auto">
+                <div className="relative flex-1 min-w-[300px]">
+                  <input
+                    type="text"
+                    placeholder="Buscar por nombre, categoría o ubicación..."
+                    className="w-full px-10 py-2.5 
+                             border border-gray-200 rounded-lg
+                             text-gray-600 text-base
+                             placeholder-gray-400
+                             bg-white
+                             shadow-sm
+                             focus:ring-2 focus:ring-blue-100 
+                             focus:border-blue-400
+                             transition-all duration-200"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </span>
+                </div>
 
-            <div className="flex items-center space-x-2">
-              <button 
-                onClick={() => handleOpenModal('create')}
-                className="bg-[#4263eb] text-white px-4 py-2 rounded-lg hover:bg-[#364fc7]"
-              >
-                Nuevo Item
-              </button>
-              <select
-                className="border border-gray-300 rounded-lg px-4 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#4263eb]"
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-              >
-                <option>Todas las categorías</option>
-                <option>Limpieza</option>
-                <option>Seguridad</option>
-                <option>Herramientas</option>
-                <option>Químicos</option>
-              </select>
-              <select
-                className="border border-gray-300 rounded-lg px-4 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-[#4263eb]"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option>Todos los estados</option>
-                <option>Disponible</option>
-                <option>Bajo Stock</option>
-                <option>Sin Stock</option>
-              </select>
+                <button 
+                  className="flex items-center gap-2 px-4 py-2.5
+                           bg-blue-500 hover:bg-blue-600
+                           text-white font-medium
+                           rounded-lg shadow-sm
+                           transition-colors duration-200"
+                  onClick={() => {
+                    setSelectedItem(undefined)
+                    setModalMode('edit')
+                    setIsModalOpen(true)
+                  }}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Nuevo Item</span>
+                </button>
+              </div>
+
+              {/* Filtros */}
+              <div className="flex items-center gap-4">
+                <select
+                  className="select select-bordered"
+                  value={filters.category}
+                  onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
+                >
+                  <option value="all">Todas las categorías</option>
+                  <option value="cleaning">Limpieza</option>
+                  <option value="safety">Seguridad</option>
+                  <option value="tools">Herramientas</option>
+                </select>
+
+                <select
+                  className="select select-bordered"
+                  value={filters.status}
+                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                >
+                  <option value="all">Todos los estados</option>
+                  <option value="available">Disponible</option>
+                  <option value="low">Bajo stock</option>
+                  <option value="out_of_stock">Sin stock</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nombre ↑
+          {/* Tabla */}
+          <div className="overflow-x-auto bg-white rounded-lg shadow">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  {[
+                    { key: 'name', label: 'Nombre' },
+                    { key: 'category', label: 'Categoría' },
+                    { key: 'quantity', label: 'Stock' },
+                    { key: 'min_stock', label: 'Stock Mínimo' },
+                    { key: 'location', label: 'Ubicación' },
+                    { key: 'status', label: 'Estado' },
+                    { key: 'last_updated', label: 'Última Actualización' }
+                  ].map(({ key, label }) => (
+                    <th
+                      key={key}
+                      onClick={() => setSortConfig(current => ({
+                        key: key as keyof InventoryItem,
+                        direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+                      }))}
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
+                    >
+                      <div className="flex items-center gap-2">
+                        {label}
+                        <span className={`transition-opacity ${
+                          sortConfig.key === key ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'
+                        }`}>
+                          {sortConfig.key === key && sortConfig.direction === 'asc' ? '↑' : '↓'}
+                        </span>
+                      </div>
+                    </th>
+                  ))}
+                  <th className="relative px-6 py-3">
+                    <span className="sr-only">Acciones</span>
                   </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Categoría
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Stock
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Stock Mínimo
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Ubicación
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Última Actualización
-                  </th>
-                  <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
-                {loading ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-4 text-gray-500">
-                      Cargando...
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredItems.map(item => (
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                      </div>
                     </td>
-                  </tr>
-                ) : filteredItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-4 text-gray-500">
-                      No se encontraron items
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        {getCategoryLabel(item.category)}
+                      </span>
                     </td>
-                  </tr>
-                ) : (
-                  filteredItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="py-3 px-4 text-sm text-gray-900">{item.name}</td>
-                      <td className="py-3 px-4">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {item.category}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <span className={`mr-2 h-2 w-2 rounded-full ${
+                          item.quantity > item.min_stock ? 'bg-green-400' :
+                          item.quantity === 0 ? 'bg-red-400' : 'bg-yellow-400'
+                        }`}></span>
+                        <span className="text-sm text-gray-500">
+                          {item.quantity} {item.unit}
                         </span>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-500">
-                        {item.stock} {item.unit}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-500">
-                        {item.stock_min} {item.unit}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-500">{item.location}</td>
-                      <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          item.status === 'Disponible' ? 'bg-green-100 text-green-800' :
-                          item.status === 'Bajo Stock' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {item.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-500">
-                        {new Date(item.last_updated).toLocaleString('es-ES')}
-                      </td>
-                      <td className="py-3 px-4 text-right space-x-3">
-                        <button 
-                          onClick={() => handleOpenModal('edit', item)}
-                          className="text-gray-400 hover:text-gray-500"
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {item.min_stock} {item.unit}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {item.location}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        item.status === 'available' ? 'bg-green-100 text-green-800' :
+                        item.status === 'low' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {item.status === 'available' ? '✓ Disponible' :
+                         item.status === 'low' ? '⚠️ Bajo Stock' :
+                         ' Sin Stock'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(item.last_updated).toLocaleDateString('es-ES', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          className="text-blue-600 hover:text-blue-900 p-1 hover:bg-blue-50 rounded"
+                          onClick={() => handleItemClick(item)}
+                          title="Gestionar Stock"
                         >
-                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                        <button 
-                          onClick={() => handleOpenModal('use', item)}
-                          className="text-gray-400 hover:text-gray-500"
-                        >
-                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                           </svg>
                         </button>
-                        <button 
-                          onClick={() => handleOpenModal('restock', item)}
-                          className="text-gray-400 hover:text-gray-500"
+                        <button
+                          className="text-indigo-600 hover:text-indigo-900 p-1 hover:bg-indigo-50 rounded"
+                          onClick={() => handleEditClick(item)}
+                          title="Editar"
                         >
-                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                           </svg>
                         </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                        <button
+                          className="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded"
+                          onClick={() => {
+                            if (confirm('¿Estás seguro de eliminar este item?')) {
+                              deleteInventoryItem(item.id)
+                            }
+                          }}
+                          title="Eliminar"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </div>
       </div>
 
-      {/* Modal */}
-      <InventoryModal
-        isOpen={modalOpen}
-        onClose={handleCloseModal}
-        onSubmit={handleSubmitModal}
-        mode={modalMode}
+      <InventoryModal 
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false)
+          setModalMode('edit')
+        }}
+        onSubmit={handleModalSubmit}
         item={selectedItem}
+        mode={modalMode}
       />
     </div>
   )
-} 
+}

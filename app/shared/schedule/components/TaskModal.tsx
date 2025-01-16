@@ -1,51 +1,83 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { ScheduledTask, ShiftType, TaskStatus } from '../../../../lib/types/schedule'
+import { Database } from '@/lib/types/database'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+
+type Task = Database['public']['Tables']['tasks']['Row']
 
 interface TaskModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (task: Omit<ScheduledTask, 'id'>) => void
-  task?: ScheduledTask
+  onSave: (task: Partial<Task>) => Promise<void>
+  task?: Task | null
 }
 
 export function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
-  const initialFormData: Omit<ScheduledTask, 'id'> = {
+  const initialFormData: Partial<Task> = {
     title: '',
     description: '',
-    date: new Date().toISOString().split('T')[0],
-    startTime: '09:00',
-    endTime: '17:00',
-    area: '',
-    shift: 'A',
+    due_date: new Date().toISOString(),
+    priority: 'medium',
     status: 'pending',
-    assignedTo: []
+    area_id: '',
+    assigned_to: null
   }
 
-  const [formData, setFormData] = useState<Omit<ScheduledTask, 'id'>>(initialFormData)
+  const [formData, setFormData] = useState<Partial<Task>>(initialFormData)
+  const [areas, setAreas] = useState<any[]>([])
+  const [users, setUsers] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const supabase = createClientComponentClient<Database>()
 
   useEffect(() => {
     if (task) {
       setFormData({
         title: task.title,
         description: task.description,
-        date: task.date,
-        startTime: task.startTime,
-        endTime: task.endTime,
-        area: task.area,
-        shift: task.shift,
+        due_date: task.due_date,
+        priority: task.priority,
         status: task.status,
-        assignedTo: task.assignedTo
+        area_id: task.area_id,
+        assigned_to: task.assigned_to
       })
     } else {
       setFormData(initialFormData)
     }
   }, [task])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    loadAreasAndUsers()
+  }, [])
+
+  const loadAreasAndUsers = async () => {
+    try {
+      const [areasResponse, usersResponse] = await Promise.all([
+        supabase.from('areas').select('id, name'),
+        supabase.from('users').select('id, first_name, last_name')
+      ])
+
+      if (areasResponse.error) throw areasResponse.error
+      if (usersResponse.error) throw usersResponse.error
+
+      setAreas(areasResponse.data || [])
+      setUsers(usersResponse.data || [])
+    } catch (error) {
+      console.error('Error loading areas and users:', error)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    onSave(formData)
-    onClose()
+    setLoading(true)
+    try {
+      await onSave(formData)
+      onClose()
+    } catch (error) {
+      console.error('Error saving task:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (!isOpen) return null
@@ -56,13 +88,13 @@ export function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
         <h2 className="text-xl font-bold mb-4">
           {task ? 'Editar Tarea' : 'Nueva Tarea'}
         </h2>
-
+        
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Título</label>
             <input
               type="text"
-              value={formData.title}
+              value={formData.title || ''}
               onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
               className="w-full border rounded p-2"
               required
@@ -72,7 +104,7 @@ export function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
           <div>
             <label className="block text-sm font-medium mb-1">Descripción</label>
             <textarea
-              value={formData.description}
+              value={formData.description || ''}
               onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
               className="w-full border rounded p-2"
               rows={3}
@@ -83,9 +115,9 @@ export function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
             <div>
               <label className="block text-sm font-medium mb-1">Fecha</label>
               <input
-                type="date"
-                value={formData.date}
-                onChange={e => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                type="datetime-local"
+                value={formData.due_date ? new Date(formData.due_date).toISOString().slice(0, 16) : ''}
+                onChange={e => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
                 className="w-full border rounded p-2"
                 required
               />
@@ -93,60 +125,41 @@ export function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
 
             <div>
               <label className="block text-sm font-medium mb-1">Área</label>
-              <input
-                type="text"
-                value={formData.area}
-                onChange={e => setFormData(prev => ({ ...prev, area: e.target.value }))}
-                className="w-full border rounded p-2"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Hora Inicio</label>
-              <input
-                type="time"
-                value={formData.startTime}
-                onChange={e => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
-                className="w-full border rounded p-2"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Hora Fin</label>
-              <input
-                type="time"
-                value={formData.endTime}
-                onChange={e => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
-                className="w-full border rounded p-2"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Turno</label>
               <select
-                value={formData.shift}
-                onChange={e => setFormData(prev => ({ ...prev, shift: e.target.value as ShiftType }))}
+                value={formData.area_id || ''}
+                onChange={e => setFormData(prev => ({ ...prev, area_id: e.target.value }))}
                 className="w-full border rounded p-2"
                 required
               >
-                <option value="A">Turno A</option>
-                <option value="B">Turno B</option>
-                <option value="C">Turno C</option>
+                <option value="">Seleccionar área</option>
+                {areas.map(area => (
+                  <option key={area.id} value={area.id}>
+                    {area.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Prioridad</label>
+              <select
+                value={formData.priority || 'medium'}
+                onChange={e => setFormData(prev => ({ ...prev, priority: e.target.value as Task['priority'] }))}
+                className="w-full border rounded p-2"
+              >
+                <option value="low">Baja</option>
+                <option value="medium">Media</option>
+                <option value="high">Alta</option>
               </select>
             </div>
 
             <div>
               <label className="block text-sm font-medium mb-1">Estado</label>
               <select
-                value={formData.status}
-                onChange={e => setFormData(prev => ({ ...prev, status: e.target.value as TaskStatus }))}
+                value={formData.status || 'pending'}
+                onChange={e => setFormData(prev => ({ ...prev, status: e.target.value as Task['status'] }))}
                 className="w-full border rounded p-2"
                 required
               >
@@ -158,19 +171,37 @@ export function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
             </div>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium mb-1">Asignado a</label>
+            <select
+              value={formData.assigned_to || ''}
+              onChange={e => setFormData(prev => ({ ...prev, assigned_to: e.target.value }))}
+              className="w-full border rounded p-2"
+            >
+              <option value="">Sin asignar</option>
+              {users.map(user => (
+                <option key={user.id} value={user.id}>
+                  {`${user.first_name} ${user.last_name}`}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex justify-end space-x-2 mt-6">
             <button
               type="button"
               onClick={onClose}
               className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              disabled={loading}
             >
               Cancelar
             </button>
             <button
               type="submit"
               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              disabled={loading}
             >
-              {task ? 'Actualizar' : 'Crear'}
+              {loading ? 'Guardando...' : task ? 'Actualizar' : 'Crear'}
             </button>
           </div>
         </form>

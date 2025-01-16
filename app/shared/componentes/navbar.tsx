@@ -87,11 +87,6 @@ const NAV_ITEMS = {
       label: 'Inventario',
       href: '/shared/inventory',
       icon: 'M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4'
-    },
-    { 
-      label: 'Centro de Datos',
-      href: '/enterprise/data-hub',
-      icon: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4'
     }
   ]
 };
@@ -120,16 +115,16 @@ export default function Navbar({ role = '', isEnterprise = false }) {
 
   return (
     <header className="bg-gradient-to-r from-blue-700 to-blue-500 text-white shadow-lg">
-      <div className="max-w-7xl mx-auto flex items-center justify-between py-3 px-4">
+      <div className="max-w-7xl mx-auto flex items-center justify-between py-1 px-3">
         {/* Logo y nombre */}
-        <div className="flex items-center space-x-3">
-          <div className="p-1.5 bg-white rounded-lg shadow-md">
+        <div className="flex items-center space-x-2">
+          <div className="p-0.5 bg-white rounded-lg shadow-md">
             {isEnterprise ? (
               <Image
                 src={COMPANY_LOGO}
                 alt="Marpesca Logo"
-                width={160}
-                height={55}
+                width={100}
+                height={32}
                 className="object-contain"
                 priority
               />
@@ -137,30 +132,30 @@ export default function Navbar({ role = '', isEnterprise = false }) {
               <Image
                 src="/logo.jpg"
                 alt="Logo Marpes"
-                width={36}
-                height={36}
+                width={24}
+                height={24}
                 className="object-contain"
                 priority
               />
             )}
           </div>
           {!isEnterprise && (
-            <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">
+            <h1 className="text-base font-bold tracking-tight whitespace-nowrap">
               Hombres de Blanco
             </h1>
           )}
         </div>
 
         {/* Navegación principal */}
-        <nav className="hidden lg:flex flex-1 justify-center px-8">
-          <div className="flex items-center space-x-1">
+        <nav className="hidden lg:flex flex-1 justify-center px-6">
+          <div className="flex items-center space-x-0.5">
             {navItems && navItems.length > 0 ? (
               navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={`
-                    flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium
+                    flex items-center space-x-1.5 px-2 py-1 rounded-lg text-sm font-medium
                     transition-all duration-200 group
                     ${pathname === item.href 
                       ? 'bg-blue-800 text-white' 
@@ -169,7 +164,7 @@ export default function Navbar({ role = '', isEnterprise = false }) {
                   `}
                 >
                   <svg 
-                    className={`w-5 h-5 ${pathname === item.href ? 'text-white' : 'text-blue-200 group-hover:text-white'}`}
+                    className={`w-3.5 h-3.5 ${pathname === item.href ? 'text-white' : 'text-blue-200 group-hover:text-white'}`}
                     fill="none" 
                     stroke="currentColor" 
                     viewBox="0 0 24 24"
@@ -194,12 +189,12 @@ export default function Navbar({ role = '', isEnterprise = false }) {
         <div className="flex items-center">
           <button 
             onClick={handleLogout}
-            className="flex items-center space-x-2 px-3 py-2 rounded-lg 
+            className="flex items-center space-x-1.5 px-2 py-1 rounded-lg 
                       text-blue-100 hover:bg-blue-800/50 hover:text-white
                       transition-all duration-200"
             title="Cerrar Sesión"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path 
                 strokeLinecap="round" 
                 strokeLinejoin="round" 
