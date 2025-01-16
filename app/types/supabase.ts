@@ -511,6 +511,35 @@ export type Database = {
           last_inventory_date: string | null
         }>
       }
+      assignments: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string
+          area_id: string
+          start_time: string
+          end_time: string
+          status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          organization_id: string
+          user_id: string
+          area_id: string
+          start_time: string
+          end_time: string
+          status?: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+        }
+        Update: Partial<{
+          organization_id: string
+          user_id: string
+          area_id: string
+          start_time: string
+          end_time: string
+          status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+        }>
+      }
     }
   }
 } 
