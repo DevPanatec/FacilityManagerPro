@@ -37,7 +37,14 @@ export default function EnterpriseLayout({
         // Obtener datos del usuario
         const { data: userData, error } = await supabase
           .from('users')
-          .select('role')
+          .select(`
+            role,
+            organization_id,
+            organizations (
+              id,
+              name
+            )
+          `)
           .eq('id', session.user.id)
           .single()
 
@@ -48,37 +55,35 @@ export default function EnterpriseLayout({
         }
 
         if (!userData || userData.role !== 'enterprise') {
-          console.log('Usuario no autorizado:', userData)
+          console.error('Usuario no autorizado')
           router.push('/auth/login')
           return
         }
 
-        localStorage.setItem('userRole', 'enterprise')
+        // Guardar/actualizar datos importantes en localStorage
+        localStorage.setItem('userRole', userData.role)
+        localStorage.setItem('organizationId', userData.organization_id)
+        localStorage.setItem('organizationName', userData.organizations.name)
+
         setIsLoading(false)
       } catch (error) {
-        console.error('Error verificando sesión:', error)
+        console.error('Error al verificar sesión:', error)
         router.push('/auth/login')
       }
     }
 
     checkSession()
-  }, [router, supabase])
+  }, [router, pathname])
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    )
+    return <div>Cargando...</div>
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-blue-50">
-      <Navbar role="enterprise" isEnterprise={true} />
-      <main className="flex-1 container mx-auto px-4 py-6">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          {children}
-        </div>
+    <div className="min-h-screen bg-gray-100">
+      <Navbar />
+      <main className="container mx-auto px-4 py-8">
+        {children}
       </main>
       <ChatWidget />
     </div>

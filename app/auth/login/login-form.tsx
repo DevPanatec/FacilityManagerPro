@@ -47,10 +47,17 @@ export default function LoginForm() {
         return
       }
 
-      // Obtener datos del usuario usando service_role
+      // Obtener datos del usuario y su organización
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('id, email, role, status, first_name, last_name')
+        .select(`
+          role,
+          organization_id,
+          organizations:organization_id (
+            id,
+            name
+          )
+        `)
         .eq('id', authData.user.id)
         .single()
 
@@ -60,55 +67,33 @@ export default function LoginForm() {
         return
       }
 
-      if (!userData.role) {
-        toast.error('El usuario no tiene un rol asignado')
+      if (!userData) {
+        toast.error('Usuario no encontrado')
         return
       }
 
-      // Actualizar los claims del usuario con su rol
-      const { error: updateError } = await supabase.auth.updateUser({
-        data: { role: userData.role }
-      })
-
-      if (updateError) {
-        console.error('Error al actualizar rol:', updateError)
-        toast.error('Error al actualizar rol del usuario')
+      // Validar rol y redireccionar según corresponda
+      if (userData.role === 'enterprise') {
+        localStorage.setItem('userRole', userData.role)
+        localStorage.setItem('organizationId', userData.organization_id)
+        localStorage.setItem('organizationName', userData.organizations?.name || '')
+        router.push('/enterprise/dashboard')
+      } else if (userData.role === 'admin') {
+        localStorage.setItem('userRole', userData.role)
+        localStorage.setItem('organizationId', userData.organization_id)
+        localStorage.setItem('organizationName', userData.organizations?.name || '')
+        router.push('/admin/dashboard')
+      } else {
+        toast.error('Acceso no autorizado')
+        await supabase.auth.signOut()
         return
       }
 
-      // Refrescar la sesión para incluir los nuevos claims
-      const { error: refreshError } = await supabase.auth.refreshSession()
-      if (refreshError) {
-        console.error('Error al refrescar sesión:', refreshError)
-        toast.error('Error al actualizar la sesión')
-        return
-      }
+      toast.success('Bienvenido')
 
-      toast.success('Iniciando sesión...')
-
-      // Determinar URL de redirección basada en el rol
-      let redirectUrl = '/dashboard'
-      
-      switch (userData.role.toLowerCase()) {
-        case 'admin':
-          redirectUrl = '/admin/dashboard'
-          break
-        case 'enterprise':
-          redirectUrl = '/enterprise/dashboard'
-          break
-        default:
-          redirectUrl = '/dashboard'
-      }
-
-      // Esperar un momento antes de redirigir para que se muestre el toast
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // Forzar la redirección usando replace
-      window.location.href = redirectUrl
-
-    } catch (error: any) {
-      console.error('Error en login:', error)
-      toast.error('Error inesperado al iniciar sesión')
+    } catch (error) {
+      console.error('Error en el proceso de login:', error)
+      toast.error('Error al iniciar sesión')
     } finally {
       setIsLoading(false)
     }

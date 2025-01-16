@@ -1,136 +1,91 @@
 'use client'
-import { useState, useEffect } from 'react'
+
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
-import Navbar from '@/app/shared/componentes/navbar'
+import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import Navbar from '../shared/componentes/navbar'
 import ChatWidget from '../shared/componentes/ChatWidget'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const [isAdminPrincipal, setIsAdminPrincipal] = useState(false)
-  const [currentAdminId, setCurrentAdminId] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
-  const [userRole, setUserRole] = useState('')
   const router = useRouter()
+  const pathname = usePathname()
+  const [isLoading, setIsLoading] = useState(true)
+  const supabase = createClientComponentClient()
 
   useEffect(() => {
-    let isMounted = true
-
     const checkSession = async () => {
       try {
-        // Verificar la sesión
-        const { data: { session }, error } = await supabase.auth.getSession()
-        if (error) throw error
-
-        if (!session) {
-          localStorage.removeItem('userRole')
-          router.replace('/auth/login')
+        // Verificar si ya hay un rol guardado
+        const storedRole = localStorage.getItem('userRole')
+        if (storedRole === 'admin') {
+          setIsLoading(false)
           return
         }
 
-        // Verificar el rol de admin
-        const { data: userData, error: userError } = await supabase
+        // Verificar sesión de Supabase
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          router.push('/auth/login')
+          return
+        }
+
+        // Obtener datos del usuario
+        const { data: userData, error } = await supabase
           .from('users')
-          .select('role')
+          .select(`
+            role,
+            organization_id,
+            organizations:organization_id (
+              id,
+              name
+            )
+          `)
           .eq('id', session.user.id)
           .single()
 
-        if (userError) throw userError
-
-        if (userData?.role !== 'admin') {
-          localStorage.removeItem('userRole')
-          router.replace('/auth/login')
+        if (error) {
+          console.error('Error al obtener datos del usuario:', error)
+          router.push('/auth/login')
           return
         }
 
-        // Guardar el rol en localStorage y estado
-        localStorage.setItem('userRole', 'admin')
-        if (isMounted) {
-          setUserRole('admin')
-          setIsAdminPrincipal(userData?.role === 'admin')
-          setCurrentAdminId(3) // Por defecto Carlos (ID: 3)
-          setIsLoading(false)
+        if (!userData || userData.role !== 'admin') {
+          console.error('Usuario no autorizado')
+          router.push('/auth/login')
+          return
         }
+
+        // Guardar/actualizar datos importantes en localStorage
+        localStorage.setItem('userRole', userData.role)
+        localStorage.setItem('organizationId', userData.organization_id)
+        localStorage.setItem('organizationName', userData.organizations?.name || '')
+
+        setIsLoading(false)
       } catch (error) {
         console.error('Error al verificar sesión:', error)
-        if (isMounted) {
-          localStorage.removeItem('userRole')
-          setUserRole('')
-          router.replace('/auth/login')
-        }
+        router.push('/auth/login')
       }
     }
 
-    // Verificar sesión inicial
     checkSession()
+  }, [router, pathname])
 
-    // Suscribirse a cambios en la sesión
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        localStorage.removeItem('userRole')
-        setUserRole('')
-        router.replace('/auth/login')
-      }
-    })
-
-    // Limpiar suscripción y flag al desmontar
-    return () => {
-      isMounted = false
-      subscription.unsubscribe()
-    }
-  }, [router])
-
-  // Mostrar un estado de carga mientras se verifica la sesión
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-blue-50">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando...</p>
-        </div>
-      </div>
-    )
+    return <div>Cargando...</div>
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-blue-50">
-      <Navbar role={userRole} />
-      <main className="flex-1 container mx-auto px-4 py-6">
-        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-sm p-6">
-          {children}
-        </div>
+    <div className="min-h-screen bg-gray-100">
+      <Navbar />
+      <main className="container mx-auto px-4 py-8">
+        {children}
       </main>
-      
-      <ChatWidget 
-        isAdmin={true}
-        isAdminPrincipal={isAdminPrincipal}
-        adminList={[
-          { 
-            id: 1, 
-            nombre: "Juan Pérez", 
-            cargo: "Admin Principal",
-            role: 'admin_principal'
-          },
-          { 
-            id: 2, 
-            nombre: "María García", 
-            cargo: "Admin Soporte",
-            role: 'admin'
-          },
-          { 
-            id: 3, 
-            nombre: "Carlos López", 
-            cargo: "Admin Sistema",
-            role: 'admin'
-          }
-        ]}
-        currentAdminId={currentAdminId}
-      />
+      <ChatWidget />
     </div>
   )
 }
