@@ -20,23 +20,40 @@ export default function EnterpriseLayout({
   useEffect(() => {
     const checkSession = async () => {
       try {
+        // Verificar si ya hay un rol guardado
+        const storedRole = localStorage.getItem('userRole')
+        if (storedRole === 'enterprise') {
+          setIsLoading(false)
+          return
+        }
+
+        // Verificar sesión de Supabase
         const { data: { session } } = await supabase.auth.getSession()
         if (!session) {
           router.push('/auth/login')
           return
         }
 
-        const { data: userData } = await supabase
+        // Obtener datos del usuario
+        const { data: userData, error } = await supabase
           .from('users')
           .select('role')
           .eq('id', session.user.id)
           .single()
 
-        if (!userData || userData.role !== 'enterprise') {
+        if (error) {
+          console.error('Error al obtener datos del usuario:', error)
           router.push('/auth/login')
           return
         }
 
+        if (!userData || userData.role !== 'enterprise') {
+          console.log('Usuario no autorizado:', userData)
+          router.push('/auth/login')
+          return
+        }
+
+        localStorage.setItem('userRole', 'enterprise')
         setIsLoading(false)
       } catch (error) {
         console.error('Error verificando sesión:', error)
@@ -57,16 +74,13 @@ export default function EnterpriseLayout({
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-blue-50">
-      <Navbar isEnterprise={true} />
+      <Navbar role="enterprise" isEnterprise={true} />
       <main className="flex-1 container mx-auto px-4 py-6">
         <div className="bg-white rounded-lg shadow-sm p-6">
           {children}
         </div>
       </main>
-      <ChatWidget 
-        isAdmin={false}
-        isAdminPrincipal={false}
-      />
+      <ChatWidget />
     </div>
   )
 }

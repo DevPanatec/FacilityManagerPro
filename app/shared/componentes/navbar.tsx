@@ -94,18 +94,20 @@ const NAV_ITEMS = {
 export default function Navbar({ role = '', isEnterprise = false }) {
   const router = useRouter()
   const pathname = usePathname();
-  const [userRole, setUserRole] = useState(role);
+  const [userRole, setUserRole] = useState(role || 'enterprise');
 
   useEffect(() => {
-    if (!role) {
-      const storedRole = localStorage.getItem('userRole');
-      if (storedRole) {
-        setUserRole(storedRole.toLowerCase());
-      }
+    const storedRole = localStorage.getItem('userRole');
+    if (storedRole) {
+      setUserRole(storedRole.toLowerCase());
+    } else if (isEnterprise) {
+      setUserRole('enterprise');
     }
-  }, [role]);
+  }, [role, isEnterprise]);
 
-  const navItems = NAV_ITEMS[userRole] || [];
+  // Si isEnterprise es true, forzamos el rol enterprise
+  const effectiveRole = isEnterprise ? 'enterprise' : userRole;
+  const navItems = NAV_ITEMS[effectiveRole] || [];
 
   const handleLogout = () => {
     localStorage.removeItem('userRole');
@@ -115,15 +117,15 @@ export default function Navbar({ role = '', isEnterprise = false }) {
 
   return (
     <header className="bg-gradient-to-r from-blue-700 to-blue-500 text-white shadow-lg">
-      <div className="max-w-7xl mx-auto flex items-center justify-between py-1 px-3">
+      <div className="max-w-7xl mx-auto flex items-center justify-between py-1 px-4">
         {/* Logo y nombre */}
-        <div className="flex items-center space-x-2">
-          <div className="p-0.5 bg-white rounded-lg shadow-md">
+        <div className="flex items-center space-x-3">
+          <div className="p-1 bg-white rounded-lg shadow-md">
             {isEnterprise ? (
               <Image
                 src={COMPANY_LOGO}
                 alt="Marpesca Logo"
-                width={100}
+                width={32}
                 height={32}
                 className="object-contain"
                 priority
@@ -132,30 +134,30 @@ export default function Navbar({ role = '', isEnterprise = false }) {
               <Image
                 src="/logo.jpg"
                 alt="Logo Marpes"
-                width={24}
-                height={24}
+                width={32}
+                height={32}
                 className="object-contain"
                 priority
               />
             )}
           </div>
           {!isEnterprise && (
-            <h1 className="text-base font-bold tracking-tight whitespace-nowrap">
+            <h1 className="text-lg font-bold tracking-tight whitespace-nowrap">
               Hombres de Blanco
             </h1>
           )}
         </div>
 
         {/* Navegación principal */}
-        <nav className="hidden lg:flex flex-1 justify-center px-6">
-          <div className="flex items-center space-x-0.5">
+        <nav className="hidden lg:flex flex-1 justify-center px-10">
+          <div className="flex items-center space-x-3">
             {navItems && navItems.length > 0 ? (
               navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={`
-                    flex items-center space-x-1.5 px-2 py-1 rounded-lg text-sm font-medium
+                    flex items-center space-x-2 px-3 py-1.5 rounded-lg text-sm font-medium
                     transition-all duration-200 group
                     ${pathname === item.href 
                       ? 'bg-blue-800 text-white' 
@@ -164,7 +166,7 @@ export default function Navbar({ role = '', isEnterprise = false }) {
                   `}
                 >
                   <svg 
-                    className={`w-3.5 h-3.5 ${pathname === item.href ? 'text-white' : 'text-blue-200 group-hover:text-white'}`}
+                    className={`w-4 h-4 ${pathname === item.href ? 'text-white' : 'text-blue-200 group-hover:text-white'}`}
                     fill="none" 
                     stroke="currentColor" 
                     viewBox="0 0 24 24"
@@ -189,12 +191,12 @@ export default function Navbar({ role = '', isEnterprise = false }) {
         <div className="flex items-center">
           <button 
             onClick={handleLogout}
-            className="flex items-center space-x-1.5 px-2 py-1 rounded-lg 
+            className="flex items-center space-x-2 px-3 py-1.5 rounded-lg 
                       text-blue-100 hover:bg-blue-800/50 hover:text-white
                       transition-all duration-200"
             title="Cerrar Sesión"
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path 
                 strokeLinecap="round" 
                 strokeLinejoin="round" 
