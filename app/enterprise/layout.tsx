@@ -63,7 +63,7 @@ export default function EnterpriseLayout({
         // Guardar/actualizar datos importantes en localStorage
         localStorage.setItem('userRole', userData.role)
         localStorage.setItem('organizationId', userData.organization_id)
-        localStorage.setItem('organizationName', userData.organizations.name)
+        localStorage.setItem('organizationName', userData.organizations?.[0]?.name || '')
 
         setIsLoading(false)
       } catch (error) {

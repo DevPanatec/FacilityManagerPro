@@ -7,6 +7,17 @@ import Navbar from '../shared/componentes/navbar'
 import ChatWidget from '../shared/componentes/ChatWidget'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
+interface Organization {
+  id: string
+  name: string
+}
+
+interface UserData {
+  role: string
+  organization_id: string
+  organizations: Organization[]
+}
+
 export default function AdminLayout({
   children,
 }: {
@@ -63,7 +74,7 @@ export default function AdminLayout({
         // Guardar/actualizar datos importantes en localStorage
         localStorage.setItem('userRole', userData.role)
         localStorage.setItem('organizationId', userData.organization_id)
-        localStorage.setItem('organizationName', userData.organizations?.name || '')
+        localStorage.setItem('organizationName', userData.organizations?.[0]?.name || '')
 
         setIsLoading(false)
       } catch (error) {

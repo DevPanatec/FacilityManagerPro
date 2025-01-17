@@ -85,13 +85,14 @@ export default function EnterpriseSchedulePage() {
     id: task.id,
     title: task.titulo,
     description: task.descripcion,
-    date: task.fecha,
-    startTime: task.hora_inicio,
-    endTime: task.hora_fin,
-    status: task.estado,
-    area: task.area,
-    shift: task.turno,
-    assignedTo: task.asignado_a
+    area_id: task.area,
+    assigned_to: task.asignado_a?.[0] || null,
+    priority: 'medium' as 'low' | 'medium' | 'high',
+    status: task.estado as 'pending' | 'in_progress' | 'completed' | 'cancelled',
+    due_date: task.fecha || null,
+    created_by: task.asignado_a?.[0] || '',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   }))
 
   return (
