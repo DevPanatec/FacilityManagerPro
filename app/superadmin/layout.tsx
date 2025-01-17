@@ -7,7 +7,7 @@ import Navbar from '../shared/componentes/navbar'
 import ChatWidget from '../shared/componentes/ChatWidget'
 import type { Database } from '@/lib/types/database'
 
-export default function SharedLayout({
+export default function SuperAdminLayout({
   children,
 }: {
   children: React.ReactNode
@@ -24,7 +24,16 @@ export default function SharedLayout({
           return
         }
 
-        // Solo verificamos que exista la sesión
+        // Verificar permisos a través de la API
+        const response = await fetch('/api/auth')
+        const data = await response.json()
+
+        if (!response.ok || data.user?.role !== 'superadmin') {
+          console.error('Error de permisos:', data.error)
+          setIsLoading(false)
+          return
+        }
+
         setIsLoading(false)
       } catch (error) {
         console.error('Error al verificar sesión:', error)
@@ -52,4 +61,4 @@ export default function SharedLayout({
       <ChatWidget />
     </div>
   )
-}
+} 

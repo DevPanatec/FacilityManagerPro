@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "check-roles": "node scripts/check-roles.js",
+    "check-superadmin": "node scripts/check-superadmin.js",
+    "reset-superadmin": "node scripts/reset-superadmin-password.js"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.17",
