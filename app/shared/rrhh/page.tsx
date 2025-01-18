@@ -6,14 +6,15 @@ import toast from 'react-hot-toast';
 
 interface Employee {
   id: string;
-  first_name: string;
-  last_name: string;
+  first_name: string | null;
+  last_name: string | null;
   position: string;
   department: string;
   work_shift: string;
   status: string;
   hire_date: string;
   role: string;
+  email: string;
   contact_info: {
     email: string;
     phone: string;
@@ -65,20 +66,33 @@ export default function RRHHPage() {
       setError(null);
 
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No se encontró usuario autenticado');
+      if (!user) throw new Error('No autorizado');
 
       const { data: userData } = await supabase
         .from('users')
-        .select('organization_id')
+        .select('role, organization_id')
         .eq('id', user.id)
         .single();
 
-      if (!userData?.organization_id) throw new Error('No se encontró organización');
+      if (!userData) throw new Error('Usuario no encontrado');
 
-      const { data: employeesData, error: employeesError } = await supabase
-        .from('employees')
-        .select('*')
-        .eq('organization_id', userData.organization_id);
+      let query = supabase
+        .from('users')
+        .select(`
+          *,
+          organization:organizations(name)
+        `)
+        .neq('role', 'superadmin') // No mostrar superadmins en la lista
+
+      // Si no es superadmin, filtrar por organization_id
+      if (userData.role !== 'superadmin') {
+        if (!userData.organization_id) {
+          throw new Error('Usuario no tiene organización asignada')
+        }
+        query = query.eq('organization_id', userData.organization_id)
+      }
+
+      const { data: employeesData, error: employeesError } = await query;
 
       if (employeesError) throw employeesError;
 
@@ -452,13 +466,15 @@ export default function RRHHPage() {
                         <div className="flex-shrink-0 h-10 w-10">
                           <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
                             <span className="text-blue-600 font-medium">
-                              {employee.first_name.charAt(0)}
+                              {(employee.first_name || employee.email || 'U').charAt(0).toUpperCase()}
                             </span>
                           </div>
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">
-                            {`${employee.first_name} ${employee.last_name}`}
+                            {employee.first_name && employee.last_name 
+                              ? `${employee.first_name} ${employee.last_name}`
+                              : employee.email || 'Usuario sin nombre'}
                           </div>
                           <div className="text-sm text-gray-500">ID: {employee.id}</div>
                         </div>
@@ -515,13 +531,15 @@ export default function RRHHPage() {
                     <div className="flex-shrink-0 h-12 w-12">
                       <div className="h-12 w-12 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
                         <span className="text-white font-medium text-lg">
-                          {employee.first_name.charAt(0)}
+                          {(employee.first_name || employee.email || 'U').charAt(0).toUpperCase()}
                         </span>
                       </div>
                     </div>
                     <div className="ml-4">
                       <div className="text-sm font-medium text-gray-900">
-                        {`${employee.first_name} ${employee.last_name}`}
+                        {employee.first_name && employee.last_name 
+                          ? `${employee.first_name} ${employee.last_name}`
+                          : employee.email || 'Usuario sin nombre'}
                       </div>
                       <div className="text-sm text-cyan-600">
                         {employee.position}

@@ -30,22 +30,52 @@ export default function SchedulePage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No autorizado')
 
-      const { data: userProfile } = await supabase
-        .from('profiles')
-        .select('organization_id')
-        .eq('user_id', user.id)
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role, organization_id')
+        .eq('id', user.id)
         .single()
 
-      if (!userProfile) throw new Error('Perfil no encontrado')
+      if (!userData) throw new Error('Usuario no encontrado')
 
-      const { data: tasks, error } = await supabase
+      let query = supabase
         .from('tasks')
-        .select('*')
-        .eq('organization_id', userProfile.organization_id)
+        .select(`
+          id,
+          title,
+          description,
+          organization_id,
+          area_id,
+          status,
+          priority,
+          assigned_to,
+          due_date,
+          created_by,
+          created_at,
+          updated_at,
+          assignee:assigned_to(
+            first_name,
+            last_name
+          ),
+          organization:organizations(
+            id,
+            name
+          )
+        `)
         .order('due_date', { ascending: true })
 
-      if (error) throw error
+      // Si no es superadmin, filtrar por organization_id
+      if (userData.role !== 'superadmin') {
+        if (!userData.organization_id) {
+          throw new Error('Usuario no tiene organización asignada')
+        }
+        query = query.eq('organization_id', userData.organization_id)
+      }
 
+      const { data: tasks, error } = await query
+      
+      if (error) throw error
+      
       setTasks(tasks || [])
     } catch (error) {
       console.error('Error loading tasks:', error)
@@ -62,12 +92,12 @@ export default function SchedulePage() {
       if (!user) throw new Error('No autorizado')
 
       const { data: userProfile } = await supabase
-        .from('profiles')
+        .from('users')
         .select('organization_id')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single()
 
-      if (!userProfile) throw new Error('Perfil no encontrado')
+      if (!userProfile) throw new Error('Usuario no encontrado')
 
       if (selectedTask) {
         // Actualizar tarea existente

@@ -35,12 +35,12 @@ export default function Dashboard() {
       if (!user) throw new Error('No autorizado');
 
       const { data: userProfile } = await supabase
-        .from('profiles')
+        .from('users')
         .select('organization_id')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single();
 
-      if (!userProfile) throw new Error('Perfil no encontrado');
+      if (!userProfile) throw new Error('Usuario no encontrado');
 
       // Calcular la fecha inicial según el periodo seleccionado
       const now = new Date();
@@ -79,7 +79,7 @@ export default function Dashboard() {
 
       // Obtener usuarios activos
       const { data: activeUsers, error: usersError } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*')
         .eq('organization_id', userProfile.organization_id)
         .eq('status', 'active');

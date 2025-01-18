@@ -51,12 +51,12 @@ export default function AdminTasksPage() {
       if (!user) throw new Error('No autorizado');
 
       const { data: userProfile } = await supabase
-        .from('profiles')
+        .from('users')
         .select('organization_id')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single();
 
-      if (!userProfile) throw new Error('Perfil no encontrado');
+      if (!userProfile) throw new Error('Usuario no encontrado');
 
       const { data: assignments, error } = await supabase
         .from('assignments')

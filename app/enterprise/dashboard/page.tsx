@@ -9,6 +9,33 @@ import {
 import { FaClock, FaRegCalendarCheck } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 
+interface User {
+  first_name: string
+  last_name: string
+}
+
+interface WorkShiftArea {
+  name: string
+}
+
+interface WorkShift {
+  id: string
+  organization_id: string
+  area_id: string | null
+  user_id: string | null
+  replacement_user_id: string | null
+  start_time: string
+  end_time: string
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+  break_time: number | null
+  overtime_minutes: number | null
+  shift_type: 'morning' | 'afternoon' | 'night' | 'custom' | null
+  notes: string | null
+  main_user: User | null
+  replacement_user: User | null
+  area: WorkShiftArea | null
+}
+
 interface Shift {
   id: string
   name: string
@@ -16,6 +43,10 @@ interface Shift {
   total_capacity: number
   active_count: number
   color: string
+  area_name: string
+  replacement: string | null
+  duration: string
+  overtime: string | null
 }
 
 interface Area {
@@ -25,30 +56,60 @@ interface Area {
   staff_count: number
 }
 
-interface Task {
+interface TaskData {
   id: string
-  description: string
-  assigned_to: string
-  assigned_name?: string
-  status: 'pending' | 'in_progress' | 'completed'
-  priority: 'low' | 'medium' | 'high'
-  start_time: string | null
-  end_time: string | null
+  organization_id: string
+  area_id: string | null
+  title: string
+  description: string | null
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  priority: 'low' | 'medium' | 'high' | 'urgent'
+  assigned_to: string | null
+  due_date: string | null
+  created_by: string | null
+  created_at: string | null
+  updated_at: string | null
+  parent_task_id: string | null
+  estimated_hours: number | null
+  actual_hours: number | null
+  complexity: 'low' | 'medium' | 'high' | null
+  attachments: any[] | null
+  completion_notes: string | null
+  assignee: User | null
+}
+
+interface FormattedTask extends TaskData {
+  assigned_name: string
 }
 
 interface AreaWithTasks extends Area {
-  tasks: Task[]
+  tasks: FormattedTask[]
 }
 
-interface Staff {
+interface Employee {
   id: string
+  organization_id: string
   user_id: string
-  name: string
-  area_id: string
-  area_name: string
-  shift_id: string
-  role: string
+  work_shift_id: string | null
+  first_name: string
+  last_name: string
+  position: string
+  department: string
   status: string
+  hire_date: string
+  role: string
+  contact_info: any
+  created_at: string | null
+  updated_at: string | null
+}
+
+interface FormattedEmployee extends Employee {
+  name: string
+  area_name: string
+}
+
+interface Staff extends Employee {
+  area_name: string | null
 }
 
 export default function EnterpriseOverviewPage() {
@@ -81,23 +142,140 @@ export default function EnterpriseOverviewPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No autorizado');
 
-      const { data: userProfile } = await supabase
-        .from('profiles')
-        .select('organization_id')
-        .eq('user_id', user.id)
+      const { data: userProfile, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
         .single();
 
-      if (!userProfile) throw new Error('Perfil no encontrado');
+      if (profileError) {
+        console.log('Error al obtener perfil:', profileError);
+        throw profileError;
+      }
+
+      if (!userProfile) throw new Error('Usuario no encontrado');
+
+      // Verificar permisos del usuario
+      console.log('Perfil de usuario:', {
+        id: userProfile.id,
+        email: userProfile.email,
+        role: userProfile.role,
+        organization_id: userProfile.organization_id
+      });
+
+      // Intentar una consulta simple a employees primero
+      const { data: testAccess, error: testError } = await supabase
+        .from('employees')
+        .select('count')
+        .eq('organization_id', userProfile.organization_id)
+        .single();
+
+      if (testError) {
+        console.log('Error de prueba de acceso:', testError);
+      } else {
+        console.log('Acceso exitoso a employees, conteo:', testAccess);
+      }
+
+      // Cargar personal desde la tabla users
+      const { data: staffData, error: staffError } = await supabase
+        .from('users')
+        .select(`
+          id,
+          organization_id,
+          first_name,
+          last_name,
+          role,
+          status
+        `)
+        .eq('organization_id', userProfile.organization_id)
+        .not('role', 'eq', 'superadmin')
+        .limit(10);
+
+      if (staffError) {
+        console.log('Error detallado del personal:', staffError);
+        throw staffError;
+      }
+
+      const formattedStaff = (staffData || []).map(member => ({
+        id: member.id,
+        organization_id: member.organization_id,
+        user_id: member.id,
+        work_shift_id: null,
+        first_name: member.first_name,
+        last_name: member.last_name,
+        position: 'No especificado',
+        department: 'General',
+        status: member.status || 'Activo',
+        hire_date: new Date().toISOString(),
+        role: member.role,
+        contact_info: {},
+        created_at: null,
+        updated_at: null,
+        name: `${member.first_name} ${member.last_name}`,
+        area_name: 'General'
+      }));
+
+      setStaff(formattedStaff as FormattedEmployee[]);
 
       // Cargar turnos
       const { data: shiftsData, error: shiftsError } = await supabase
-        .from('shifts')
-        .select('*')
+        .from('work_shifts')
+        .select(`
+          id,
+          organization_id,
+          area_id,
+          user_id,
+          replacement_user_id,
+          start_time,
+          end_time,
+          status,
+          break_time,
+          overtime_minutes,
+          shift_type,
+          notes,
+          main_user:user_id(
+            first_name,
+            last_name
+          ),
+          replacement_user:replacement_user_id(
+            first_name,
+            last_name
+          ),
+          area:area_id(
+            name
+          )
+        `)
         .eq('organization_id', userProfile.organization_id)
-        .order('name');
+        .order('start_time');
 
       if (shiftsError) throw shiftsError;
-      setShifts(shiftsData || []);
+      
+      const formattedShifts = (shiftsData as unknown as WorkShift[])?.map(shift => ({
+        ...shift,
+        name: shift.shift_type ? 
+          `Turno ${shift.shift_type === 'morning' ? 'Mañana' : 
+                  shift.shift_type === 'afternoon' ? 'Tarde' : 
+                  shift.shift_type === 'night' ? 'Noche' : 'Personalizado'}` :
+          `${shift.main_user?.first_name} ${shift.main_user?.last_name}`,
+        schedule: `${new Date(shift.start_time).toLocaleTimeString()} - ${new Date(shift.end_time).toLocaleTimeString()}`,
+        total_capacity: shift.shift_type ? 
+          (shift.shift_type === 'morning' ? 10 : 
+           shift.shift_type === 'afternoon' ? 8 : 
+           shift.shift_type === 'night' ? 6 : 4) : 1,
+        active_count: shift.status === 'in_progress' ? 1 : 0,
+        color: shift.status === 'completed' ? '#22c55e' : 
+               shift.status === 'in_progress' ? '#3b82f6' : 
+               shift.status === 'cancelled' ? '#ef4444' : '#f59e0b',
+        area_name: shift.area?.name || 'Sin área',
+        replacement: shift.replacement_user ? 
+          `${shift.replacement_user.first_name} ${shift.replacement_user.last_name}` : null,
+        duration: shift.break_time ? 
+          `${Math.floor((new Date(shift.end_time).getTime() - new Date(shift.start_time).getTime()) / (1000 * 60) - shift.break_time)} min (${shift.break_time} min descanso)` :
+          `${Math.floor((new Date(shift.end_time).getTime() - new Date(shift.start_time).getTime()) / (1000 * 60))} min`,
+        overtime: shift.overtime_minutes ? `${shift.overtime_minutes} min extra` : null
+      })) || [];
+
+      setShifts(formattedShifts);
 
       // Cargar áreas
       const { data: areasData, error: areasError } = await supabase
@@ -113,9 +291,22 @@ export default function EnterpriseOverviewPage() {
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
         .select(`
-          *,
-          users (
-            name
+          id,
+          organization_id,
+          area_id,
+          title,
+          description,
+          status,
+          priority,
+          assigned_to,
+          due_date,
+          created_at,
+          estimated_hours,
+          actual_hours,
+          complexity,
+          assignee:assigned_to(
+            first_name,
+            last_name
           )
         `)
         .eq('organization_id', userProfile.organization_id);
@@ -125,37 +316,25 @@ export default function EnterpriseOverviewPage() {
       // Agrupar tareas por área
       const areasWithTasks = areasData?.map(area => ({
         ...area,
-        tasks: tasksData?.filter(task => task.area_id === area.id).map(task => ({
-          ...task,
-          assigned_name: task.users?.name
+        tasks: (tasksData as unknown as TaskData[])?.filter(task => task.area_id === area.id).map(task => ({
+          id: task.id,
+          organization_id: task.organization_id,
+          area_id: task.area_id,
+          title: task.title,
+          description: task.description,
+          status: task.status,
+          priority: task.priority,
+          assigned_to: task.assigned_to,
+          due_date: task.due_date,
+          estimated_hours: task.estimated_hours,
+          actual_hours: task.actual_hours,
+          complexity: task.complexity,
+          assignee: task.assignee,
+          assigned_name: task.assignee ? `${task.assignee.first_name} ${task.assignee.last_name}` : 'Sin asignar'
         })) || []
       })) || [];
 
       setAreasTasks(areasWithTasks);
-
-      // Cargar personal
-      const { data: staffData, error: staffError } = await supabase
-        .from('staff')
-        .select(`
-          *,
-          users (
-            name
-          ),
-          areas (
-            name
-          )
-        `)
-        .eq('organization_id', userProfile.organization_id);
-
-      if (staffError) throw staffError;
-
-      const formattedStaff = staffData?.map(member => ({
-        ...member,
-        name: member.users?.name,
-        area_name: member.areas?.name
-      })) || [];
-
-      setStaff(formattedStaff);
 
     } catch (error) {
       console.error('Error loading dashboard:', error);
@@ -366,16 +545,33 @@ export default function EnterpriseOverviewPage() {
                 <div className="space-y-4">
                   {area.tasks.map((task) => (
                     <div key={task.id} className="p-4 bg-gray-50 rounded-lg space-y-2">
-                      <h4 className="text-sm font-medium text-gray-900">
-                        {task.description}
-                      </h4>
-                      <div className="flex items-center text-xs text-gray-500">
-                        <span>Asignado a {task.assigned_name}</span>
+                      <div className="flex flex-col space-y-1">
+                        <span className="font-medium">{task.title}</span>
+                        <span className="text-sm text-gray-600">{task.description}</span>
+                        <span className="text-sm text-gray-500">
+                          Asignado a: {task.assigned_name}
+                        </span>
+                        <span className="text-sm text-gray-500">
+                          Estado: {task.status === 'pending' ? 'Pendiente' : 
+                                  task.status === 'in_progress' ? 'En progreso' : 
+                                  task.status === 'completed' ? 'Completada' : 'Cancelada'}
+                        </span>
+                        <span className={`text-sm ${
+                          task.priority === 'urgent' ? 'text-red-600' :
+                          task.priority === 'high' ? 'text-red-500' :
+                          task.priority === 'medium' ? 'text-yellow-500' : 'text-green-500'
+                        }`}>
+                          Prioridad: {
+                            task.priority === 'urgent' ? 'Urgente' :
+                            task.priority === 'high' ? 'Alta' :
+                            task.priority === 'medium' ? 'Media' : 'Baja'
+                          }
+                        </span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-gray-500">
                         <FaClock className="w-3 h-3" />
                         <span>
-                          {task.start_time ? new Date(task.start_time).toLocaleString() : 'No iniciada'}
+                          {task.due_date ? `Vence: ${new Date(task.due_date).toLocaleString()}` : 'Sin fecha límite'}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -392,20 +588,6 @@ export default function EnterpriseOverviewPage() {
                         <span className="text-xs font-medium" style={{ color: area.color }}>
                           {task.status === 'completed' ? '100%' : 
                            task.status === 'in_progress' ? '50%' : '0%'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium
-                          ${task.priority === 'high' ? 'bg-red-100 text-red-800' : 
-                            task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' : 
-                            'bg-green-100 text-green-800'}`}>
-                          {task.priority}
-                        </span>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium
-                          ${task.status === 'completed' ? 'bg-green-100 text-green-800' : 
-                            task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' : 
-                            'bg-gray-100 text-gray-800'}`}>
-                          {task.status.replace('_', ' ')}
                         </span>
                       </div>
                     </div>

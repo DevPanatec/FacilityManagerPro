@@ -14,16 +14,21 @@ interface ContingencyFile {
 
 interface ContingencyReport {
   id: string;
-  organization_id: string;
+  title: string;
+  description: string;
   date: string;
-  area: string;
+  status: string;
   type: string;
-  description: string | null;
-  status: 'Pendiente' | 'Resuelto';
-  is_contingency: boolean;
-  created_at: string;
-  updated_at: string;
-  archivos: ContingencyFile[];
+  area: string;
+  creator: {
+    id: string;
+    first_name: string;
+    last_name: string;
+  } | null;
+  organization: {
+    id: string;
+    name: string;
+  };
 }
 
 interface FileWithPreview extends File {
@@ -35,12 +40,11 @@ export default function ReportsPage() {
   const [selectedArea, setSelectedArea] = useState('');
   const [contingencyType, setContingencyType] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([]);
-  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<ContingencyReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [userData, setUserData] = useState<{ role: string; organization_id: string | null } | null>(null);
 
   // Estado para paginación
   const [page, setPage] = useState(1);
@@ -48,39 +52,57 @@ export default function ReportsPage() {
 
   // Estado para reportes y tipos de contingencia
   const [reportes, setReportes] = useState<ContingencyReport[]>([]);
-  const [tiposContingencia, setTiposContingencia] = useState<string[]>([]);
+  const tiposContingencia = [
+    'Falla de Equipo',
+    'Accidente Laboral',
+    'Problema de Infraestructura',
+    'Falla Eléctrica',
+    'Fuga o Derrame',
+    'Problema de Seguridad',
+    'Emergencia Médica',
+    'Otro'
+  ];
   const [stats, setStats] = useState({ pendientes: 0, resueltos: 0, total: 0 });
 
   const supabase = createClientComponentClient();
 
-  // Cargar datos iniciales
+  // Cargar datos del usuario
   useEffect(() => {
-    loadData();
-  }, [timeFilter, page]);
+    const loadUserData = async () => {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+
+        const { data: userData, error: orgError } = await supabase
+          .from('users')
+          .select('role, organization_id')
+          .eq('id', user?.id)
+          .single();
+        if (orgError) throw orgError;
+
+        setUserData(userData);
+      } catch (error) {
+        console.error('Error al cargar datos del usuario:', error);
+        setError(error instanceof Error ? error.message : 'Error al cargar datos del usuario');
+      }
+    };
+
+    loadUserData();
+  }, []);
+
+  // Cargar datos de reportes cuando cambie el filtro o la página
+  useEffect(() => {
+    if (userData) {
+      loadData();
+    }
+  }, [timeFilter, page, userData]);
 
   const loadData = async () => {
+    if (!userData) return; // Si no hay datos del usuario, no cargar nada
+
     try {
       setIsLoading(true);
       setError(null);
-
-      // Obtener el usuario actual y su organización
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-
-      const { data: userData, error: orgError } = await supabase
-        .from('users')
-        .select('organization_id')
-        .eq('user_id', user?.id)
-        .single();
-      if (orgError) throw orgError;
-
-      // Cargar tipos de contingencia
-      const { data: types, error: typesError } = await supabase
-        .from('contingency_types')
-        .select('name')
-        .eq('organization_id', userData.organization_id);
-      if (typesError) throw typesError;
-      setTiposContingencia(types.map(t => t.name));
 
       // Calcular rango de fechas según el filtro
       const now = new Date();
@@ -94,21 +116,68 @@ export default function ReportsPage() {
       }
 
       // Cargar reportes
-      const { data: reports, error: reportsError, count } = await supabase
-        .from('contingency_reports')
-        .select('*, contingency_files(*)', { count: 'exact' })
-        .eq('organization_id', userData.organization_id)
-        .gte('date', startDate.toISOString())
-        .order('date', { ascending: false })
+      let reportsQuery = supabase
+        .from('tasks')
+        .select(`
+          *,
+          creator:users!tasks_created_by_fkey(id, first_name, last_name),
+          area:areas(id, name)
+        `, { count: 'exact' })
+        .eq('priority', 'urgent')  // Usamos las contingencias como tareas urgentes
+        .gte('created_at', startDate.toISOString())
+        .order('created_at', { ascending: false })
         .range((page - 1) * 10, page * 10 - 1);
+
+      // Si no es superadmin, filtrar por organization_id
+      if (userData.role !== 'superadmin') {
+        if (!userData.organization_id) {
+          throw new Error('Usuario no tiene organización asignada');
+        }
+        reportsQuery = reportsQuery.eq('organization_id', userData.organization_id);
+      }
+
+      const { data: reports, error: reportsError, count } = await reportsQuery;
       if (reportsError) throw reportsError;
 
-      setReportes(reports as ContingencyReport[]);
+      // Obtener todas las organizaciones (usuarios enterprise)
+      const { data: organizations, error: orgsError } = await supabase
+        .from('users')
+        .select('id, organization_id, first_name, last_name')
+        .eq('role', 'enterprise')
+        .not('organization_id', 'is', null);
+
+      if (orgsError) throw orgsError;
+
+      // Crear un mapa de organizaciones para acceso más rápido
+      const organizationsMap = new Map(
+        organizations.map(org => [org.organization_id, {
+          id: org.organization_id,
+          name: `${org.first_name} ${org.last_name || ''}`.trim()
+        }])
+      );
+
+      // Mapear los reportes con la información de la organización
+      const reportsWithOrgs = reports?.map(report => ({
+        id: report.id,
+        title: report.title,
+        description: report.description || '',
+        date: report.created_at,
+        status: report.status === 'completed' ? 'Completada' : 'Pendiente',
+        type: contingencyType || 'No especificado',
+        area: report.area?.name || 'No especificada',
+        creator: report.creator,
+        organization: organizationsMap.get(report.organization_id) || {
+          id: report.organization_id,
+          name: 'Organización Desconocida'
+        }
+      }));
+
+      setReportes(reportsWithOrgs as ContingencyReport[]);
       setTotalPages(Math.ceil((count || 0) / 10));
 
       // Calcular estadísticas
-      const pendientes = reports?.filter(r => r.status === 'Pendiente').length || 0;
-      const resueltos = reports?.filter(r => r.status === 'Resuelto').length || 0;
+      const pendientes = reports?.filter(r => r.status !== 'completed').length || 0;
+      const resueltos = reports?.filter(r => r.status === 'completed').length || 0;
       setStats({
         pendientes,
         resueltos,
@@ -117,8 +186,10 @@ export default function ReportsPage() {
 
     } catch (error) {
       console.error('Error al cargar datos:', error);
-      setError('Error al cargar los datos. Por favor, intente nuevamente.');
-      toast.error('Error al cargar los datos');
+      setError(error instanceof Error ? error.message : 
+        typeof error === 'object' && error !== null ? JSON.stringify(error, null, 2) : 
+        'Error desconocido al cargar los datos');
+      toast.error('Error al cargar los datos. Revisa la consola para más detalles.');
     } finally {
       setIsLoading(false);
     }
@@ -127,121 +198,213 @@ export default function ReportsPage() {
   const handleSaveReport = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      setIsLoading(true);
-      
-      // Obtener el usuario y su organización
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-
-      const { data: userData, error: orgError } = await supabase
-        .from('users')
-        .select('organization_id')
-        .eq('user_id', user?.id)
-        .single();
-      if (orgError) throw orgError;
-
-      // Crear el reporte
-      const { data: report, error: reportError } = await supabase
-        .from('contingency_reports')
-        .insert({
-          organization_id: userData.organization_id,
-          area: selectedArea,
-          type: contingencyType,
-          description,
-          status: 'Pendiente',
-          is_contingency: true
-        })
-        .select()
-        .single();
-      if (reportError) throw reportError;
-
-      // Subir archivos si existen
-      if (selectedFiles.length > 0) {
-        for (const file of selectedFiles) {
-          const fileExt = file.name.split('.').pop();
-          const fileName = `${Math.random()}.${fileExt}`;
-          const filePath = `${userData.organization_id}/${report.id}/${fileName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('contingency-files')
-            .upload(filePath, file);
-          if (uploadError) throw uploadError;
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('contingency-files')
-            .getPublicUrl(filePath);
-
-          await supabase.from('contingency_files').insert({
-            report_id: report.id,
-            name: file.name,
-            url: publicUrl,
-            type: file.type.startsWith('image/') ? 'imagen' : 'documento'
-          });
-        }
+      if (!userData?.organization_id) {
+        throw new Error('Usuario no tiene organización asignada');
       }
 
-      toast.success('Reporte creado exitosamente');
-      // Limpiar el formulario
-      setSelectedArea('');
-      setContingencyType('');
-      setDescription('');
-      setSelectedFiles([]);
-      setPreviewUrls([]);
-      
-      // Recargar datos
-      loadData();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) throw userError || new Error('No se pudo obtener el usuario');
 
+      const newReport = {
+        title: `Reporte de Contingencia - ${contingencyType}`,
+        description: description,
+        priority: 'urgent',  // Las contingencias son siempre urgentes
+        status: 'pending',
+        area_id: selectedArea,
+        organization_id: userData.organization_id,
+        created_by: user.id
+      };
+
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert([newReport])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Actualizar la lista de reportes
+      await loadData();
+      
+      // Limpiar el formulario
+      setContingencyType('');
+      setSelectedArea('');
+      setDescription('');
+
+      toast.success('Reporte creado exitosamente');
     } catch (error) {
       console.error('Error al guardar el reporte:', error);
       toast.error('Error al guardar el reporte');
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  const handleViewFiles = (report: ContingencyReport) => {
-    setSelectedReport(report);
-    setShowModal(true);
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    setSelectedFiles(files.map(file => Object.assign(file, {
-      preview: URL.createObjectURL(file)
-    })));
-    setPreviewUrls(files.map(file => URL.createObjectURL(file)));
-  };
-
-  const handleDownloadPDF = async (report: ContingencyReport) => {
+  const handleUpdateStatus = async (reportId: string, newStatus: string) => {
     try {
-      // Crear el contenido del PDF
-      const content = `
-        Reporte de Contingencia
-        ----------------------
-        Fecha: ${report.date}
-        Área: ${report.area}
-        Tipo: ${report.type}
-        Estado: ${report.status}
-        Descripción: ${report.description || 'No disponible'}
-      `;
+      const { error } = await supabase
+        .from('tasks')
+        .update({ status: newStatus === 'Completada' ? 'completed' : 'pending' })
+        .eq('id', reportId);
 
-      // Crear un blob con el contenido
-      const blob = new Blob([content], { type: 'text/plain' });
-      const url = window.URL.createObjectURL(blob);
-      
-      // Crear un enlace temporal y hacer clic en él
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `reporte-${report.id}.txt`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      toast.success('Reporte descargado exitosamente');
+      if (error) throw error;
+
+      await loadData();
+      toast.success('Estado actualizado exitosamente');
     } catch (error) {
-      console.error('Error al descargar el reporte:', error);
-      toast.error('Error al descargar el reporte');
+      console.error('Error al actualizar el estado:', error);
+      toast.error('Error al actualizar el estado');
     }
+  };
+
+  const renderReportModal = () => {
+    if (!selectedReport) return null;
+
+    return (
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full">
+        <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+          <div className="mt-3">
+            <h3 className="text-lg font-medium text-gray-900">Detalles del Reporte</h3>
+            <div className="mt-2 space-y-4">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Fecha</p>
+                <p className="mt-1 text-sm text-gray-900">
+                  {new Date(selectedReport.date).toLocaleDateString()}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Organización</p>
+                <p className="mt-1 text-sm text-gray-900">{selectedReport.organization.name}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Área</p>
+                <p className="mt-1 text-sm text-gray-900">{selectedReport.area}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Tipo</p>
+                <p className="mt-1 text-sm text-gray-900">{selectedReport.type}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Descripción</p>
+                <p className="mt-1 text-sm text-gray-900">{selectedReport.description}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Estado</p>
+                <p className="mt-1 text-sm text-gray-900">{selectedReport.status}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500">Creado por</p>
+                <p className="mt-1 text-sm text-gray-900">
+                  {selectedReport.creator ? 
+                    `${selectedReport.creator.first_name} ${selectedReport.creator.last_name}` : 
+                    'Usuario desconocido'}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <button
+                onClick={() => setShowModal(false)}
+                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderReportList = () => {
+    if (isLoading) {
+      return <div>Cargando...</div>;
+    }
+
+    if (error) {
+      return <div>Error: {error}</div>;
+    }
+
+    if (!reportes.length) {
+      return <div>No hay reportes para mostrar</div>;
+    }
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Fecha
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Organización
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Área
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Tipo
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Estado
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Acciones
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {reportes.map((report) => (
+              <tr key={report.id}>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {new Date(report.date).toLocaleDateString()}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {report.organization.name}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {report.area}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {report.type}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    report.status === 'Pendiente' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+                  }`}>
+                    {report.status}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  <button
+                    onClick={() => {
+                      setSelectedReport(report);
+                      setShowModal(true);
+                    }}
+                    className="text-indigo-600 hover:text-indigo-900 mr-4"
+                  >
+                    Ver detalles
+                  </button>
+                  {report.status === 'Pendiente' ? (
+                    <button
+                      onClick={() => handleUpdateStatus(report.id, 'Completada')}
+                      className="text-green-600 hover:text-green-900"
+                    >
+                      Marcar como resuelto
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleUpdateStatus(report.id, 'Pendiente')}
+                      className="text-yellow-600 hover:text-yellow-900"
+                    >
+                      Reabrir
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
   };
 
   if (error) {
@@ -388,80 +551,7 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <div className="flex items-center space-x-2">
-                        <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <span>Fecha</span>
-                      </div>
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <div className="flex items-center space-x-2">
-                        <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                        </svg>
-                        <span>Área</span>
-                      </div>
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <div className="flex items-center space-x-2">
-                        <svg className="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>¿Contingencia?</span>
-                      </div>
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <div className="flex items-center space-x-2">
-                        <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>Estado</span>
-                      </div>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {reportes.map((reporte) => (
-                    <tr 
-                      key={reporte.id}
-                      className="hover:bg-blue-50 transition-colors duration-150 ease-in-out cursor-pointer"
-                      onClick={() => handleViewFiles(reporte)}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{reporte.date}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{reporte.area}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
-                          ${reporte.is_contingency 
-                            ? 'bg-red-100 text-red-800' 
-                            : 'bg-yellow-100 text-yellow-800'}`}
-                        >
-                          {reporte.is_contingency ? 'Sí' : 'No'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
-                          ${reporte.status === 'Pendiente'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-green-100 text-green-800'}`}
-                        >
-                          {reporte.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {renderReportList()}
           </div>
 
           {/* Formulario con diseño mejorado */}
@@ -549,25 +639,6 @@ export default function ReportsPage() {
                     required
                   />
                 </div>
-
-                {/* Archivos */}
-                <div className="group">
-                  <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-2">
-                    <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                    </svg>
-                    <span>Archivos Adjuntos</span>
-                  </label>
-                  <input
-                    type="file"
-                    multiple
-                    onChange={handleFileChange}
-                    className="block w-full rounded-xl border-2 border-gray-200 shadow-sm 
-                             focus:border-green-500 focus:ring-green-500 transition-all duration-200
-                             group-hover:border-green-200"
-                  />
-                </div>
               </div>
 
               {/* Botón de envío mejorado */}
@@ -623,6 +694,10 @@ export default function ReportsPage() {
                   <p className="mt-1 text-sm text-gray-900">{selectedReport.date}</p>
                 </div>
                 <div>
+                  <p className="text-sm font-medium text-gray-500">Organización</p>
+                  <p className="mt-1 text-sm text-gray-900">{selectedReport.organization?.name || 'N/A'}</p>
+                </div>
+                <div>
                   <p className="text-sm font-medium text-gray-500">Área</p>
                   <p className="mt-1 text-sm text-gray-900">{selectedReport.area}</p>
                 </div>
@@ -646,47 +721,12 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {selectedReport.archivos.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-2">Archivos Adjuntos</p>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {selectedReport.archivos.map((archivo, index) => (
-                      <div key={index} className="relative group">
-                        {archivo.type === 'imagen' ? (
-                          <img
-                            src={archivo.url}
-                            alt={archivo.name}
-                            className="w-full h-32 object-cover rounded-lg"
-                          />
-                        ) : (
-                          <div className="w-full h-32 flex items-center justify-center bg-gray-100 rounded-lg">
-                            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                        )}
-                        <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white p-2 text-sm truncate rounded-b-lg">
-                          {archivo.name}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={() => setShowModal(false)}
                   className="mr-3 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
                 >
                   Cerrar
-                </button>
-                <button
-                  onClick={() => handleDownloadPDF(selectedReport)}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-                >
-                  Descargar PDF
                 </button>
               </div>
             </div>

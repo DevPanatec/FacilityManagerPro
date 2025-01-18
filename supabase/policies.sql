@@ -170,4 +170,18 @@ CREATE POLICY "allow_admin_manage_webhook_logs"
 ON webhook_logs
 FOR ALL
 TO authenticated
-USING (is_admin()); 
+USING (is_admin());
+
+-- Agregar política para permitir insertar usuarios
+CREATE POLICY "allow_insert_users"
+ON users
+FOR INSERT
+TO authenticated
+WITH CHECK (true);
+
+-- También es buena idea agregar una política para usuarios anónimos si estás usando registro
+CREATE POLICY "allow_insert_users_anon"
+ON users
+FOR INSERT
+TO anon
+WITH CHECK (true); 

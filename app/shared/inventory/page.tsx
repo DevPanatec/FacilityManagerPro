@@ -17,6 +17,10 @@ interface InventoryItem {
   last_used: string
   estimated_duration: number
   organization_id: string
+  organization?: {
+    id: string
+    name: string
+  }
 }
 
 interface UsageRecord {
@@ -41,6 +45,7 @@ interface InventoryFormData {
   min_stock: number
   location: string
   estimated_duration: number
+  organization_id?: string  // Opcional, usado solo por superadmin
 }
 
 const getCategoryLabel = (category: string) => {
@@ -83,17 +88,45 @@ export default function InventoryPage() {
     try {
       setLoading(true)
       setError(null)
-      const { data: items, error } = await supabase
-        .from('inventory')
-        .select('*')
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('No autorizado')
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role, organization_id')
+        .eq('id', user.id)
+        .single()
+
+      if (!userData) throw new Error('Usuario no encontrado')
+
+      let query = supabase
+        .from('inventory_items')
+        .select(`
+          *,
+          organization:organizations(
+            id,
+            name
+          )
+        `)
         .order('name')
+
+      // Si no es superadmin, filtrar por organization_id
+      if (userData.role !== 'superadmin') {
+        if (!userData.organization_id) {
+          throw new Error('Usuario no tiene organización asignada')
+        }
+        query = query.eq('organization_id', userData.organization_id)
+      }
+
+      const { data: items, error } = await query
       
       if (error) throw error
       
       setItems(items || [])
     } catch (error) {
       console.error('Error loading inventory:', error)
-      setError('Error al cargar el inventario')
+      setError(error instanceof Error ? error.message : 'Error al cargar el inventario')
     } finally {
       setLoading(false)
     }
@@ -103,7 +136,7 @@ export default function InventoryPage() {
   const updateInventoryItem = async (item: InventoryItem) => {
     try {
       const { error } = await supabase
-        .from('inventory')
+        .from('inventory_items')
         .update({
           name: item.name,
           category: item.category,
@@ -128,24 +161,33 @@ export default function InventoryPage() {
   }
 
   // Función para crear nuevo item
-  const createInventoryItem = async (item: Omit<InventoryItem, 'id' | 'organization_id'>) => {
+  const createInventoryItem = async (item: InventoryFormData) => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No autorizado')
 
-      const { data: userProfile } = await supabase
-        .from('profiles')
-        .select('organization_id')
-        .eq('user_id', user.id)
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role, organization_id')
+        .eq('id', user.id)
         .single()
 
-      if (!userProfile) throw new Error('Perfil no encontrado')
+      if (!userData) throw new Error('Usuario no encontrado')
+
+      // Si es superadmin y no se especificó organization_id, lanzar error
+      if (userData.role === 'superadmin' && !item.organization_id) {
+        throw new Error('Debe especificar una organización para el item')
+      }
+
+      const organization_id = userData.role === 'superadmin' 
+        ? item.organization_id 
+        : userData.organization_id
 
       const { error } = await supabase
-        .from('inventory')
+        .from('inventory_items')
         .insert([{
           ...item,
-          organization_id: userProfile.organization_id,
+          organization_id,
           status: item.quantity > item.min_stock ? 'available' : 
                  item.quantity === 0 ? 'out_of_stock' : 'low'
         }])
@@ -168,9 +210,9 @@ export default function InventoryPage() {
 
       // Registrar uso
       const { error: usageError } = await supabase
-        .from('inventory_usage')
+        .from('inventory_items_usage')
         .insert([{
-          inventory_id: itemId,
+          inventory_item_id: itemId,
           quantity,
           user_id: user.id
         }])
@@ -203,9 +245,9 @@ export default function InventoryPage() {
     try {
       // Registrar reposición
       const { error: restockError } = await supabase
-        .from('inventory_restock')
+        .from('inventory_items_restock')
         .insert([{
-          inventory_id: itemId,
+          inventory_item_id: itemId,
           quantity,
           supplier
         }])
@@ -237,7 +279,7 @@ export default function InventoryPage() {
   const deleteInventoryItem = async (itemId: string) => {
     try {
       const { error } = await supabase
-        .from('inventory')
+        .from('inventory_items')
         .delete()
         .eq('id', itemId)
 
@@ -538,6 +580,7 @@ export default function InventoryPage() {
                     { key: 'min_stock', label: 'Stock Mínimo' },
                     { key: 'location', label: 'Ubicación' },
                     { key: 'status', label: 'Estado' },
+                    { key: 'organization', label: 'Organización' },
                     { key: 'last_updated', label: 'Última Actualización' }
                   ].map(({ key, label }) => (
                     <th
@@ -603,6 +646,9 @@ export default function InventoryPage() {
                          item.status === 'low' ? '⚠️ Bajo Stock' :
                          ' Sin Stock'}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {item.organization?.name || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(item.last_updated).toLocaleDateString('es-ES', {

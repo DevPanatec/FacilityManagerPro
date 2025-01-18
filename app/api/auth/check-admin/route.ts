@@ -40,34 +40,12 @@ export async function GET() {
       }, { status: 500 })
     }
 
-    // 3. Verificar en tabla profiles
-    const { data: profileData, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('email', adminEmail)
-      .single()
-
-    if (profileError && profileError.code !== 'PGRST116') { // Ignorar error de no encontrado
-      console.error('Error al buscar perfil:', profileError)
-      return NextResponse.json({ 
-        success: false, 
-        error: profileError.message 
-      }, { status: 500 })
-    }
-
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Estado del usuario admin',
-      status: {
-        auth: authUser ? {
-          id: authUser.id,
-          email: authUser.email,
-          emailConfirmed: authUser.email_confirmed_at !== null,
-          lastSignIn: authUser.last_sign_in_at,
-          metadata: authUser.user_metadata
-        } : null,
-        user: userData,
-        profile: profileData
+    // Devolver el resultado
+    return NextResponse.json({
+      success: true,
+      exists: {
+        inAuth: !!authUser,
+        inUsers: !!userData
       }
     })
     

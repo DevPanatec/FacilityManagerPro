@@ -2,7 +2,16 @@
 import { useState, useMemo } from 'react'
 import { Database } from '@/lib/types/database'
 
-type Task = Database['public']['Tables']['tasks']['Row']
+type Task = Database['public']['Tables']['tasks']['Row'] & {
+  organization?: {
+    id: string
+    name: string
+  }
+  assignee?: {
+    first_name: string
+    last_name: string
+  }
+}
 
 interface CalendarProps {
   tasks: Task[]
@@ -132,6 +141,35 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
             <p className="mt-1 truncate">{task.title}</p>
           </div>
         ))}
+      </div>
+    )
+  }
+
+  const renderTask = (task: Task) => {
+    const statusColors = {
+      pending: 'bg-yellow-100 border-yellow-200',
+      in_progress: 'bg-blue-100 border-blue-200',
+      completed: 'bg-green-100 border-green-200',
+      cancelled: 'bg-red-100 border-red-200'
+    }
+
+    return (
+      <div
+        key={task.id}
+        className={`p-2 mb-1 rounded-lg border cursor-pointer ${statusColors[task.status] || 'bg-gray-100 border-gray-200'}`}
+        onClick={() => onTaskClick(task)}
+      >
+        <div className="font-medium text-sm truncate">{task.title}</div>
+        {task.organization && (
+          <div className="text-xs text-gray-500 truncate">
+            {task.organization.name}
+          </div>
+        )}
+        {task.assignee && (
+          <div className="text-xs text-gray-500 truncate">
+            Asignado a: {task.assignee.first_name} {task.assignee.last_name}
+          </div>
+        )}
       </div>
     )
   }

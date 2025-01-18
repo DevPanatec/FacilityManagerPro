@@ -57,9 +57,9 @@ export const usersService = {
   async getProfile(userId: string) {
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*')
-        .eq('user_id', userId)
+        .eq('id', userId)
         .single()
       
       if (error) throw error
@@ -73,9 +73,9 @@ export const usersService = {
   async updateProfile(userId: string, updates: any) {
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('users')
         .update(updates)
-        .eq('user_id', userId)
+        .eq('id', userId)
         .select()
         .single()
       
