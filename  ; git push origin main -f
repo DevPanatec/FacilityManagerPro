@@ -1,0 +1,5 @@
+[33mc7b936e[m[33m ([m[1;31morigin/main[m[33m)[m fix: corregir errores de compilación en archivos TypeScript
+[33m362cb33[m fix: actualizar credenciales de Supabase para producción
+[33me17a10c[m fix: actualizar configuraciones para producción
+[33me908d04[m fix: corregir errores de tipos y build exitoso
+[33ma36004c[m feat: Implementación de permisos y layouts para superadmin y rutas compartidas
