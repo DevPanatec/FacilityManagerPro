@@ -184,4 +184,93 @@ CREATE POLICY "allow_insert_users_anon"
 ON users
 FOR INSERT
 TO anon
-WITH CHECK (true); 
+WITH CHECK (true);
+
+-- Enable RLS
+ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
+
+-- Policies for employees table
+CREATE POLICY "Enable read access for users in same organization" ON employees
+    FOR SELECT
+    USING (
+        auth.uid() IN (
+            SELECT id FROM users 
+            WHERE organization_id = employees.organization_id
+            AND role IN ('admin', 'enterprise')
+        )
+    );
+
+CREATE POLICY "Enable insert for users in same organization" ON employees
+    FOR INSERT
+    WITH CHECK (
+        auth.uid() IN (
+            SELECT id FROM users 
+            WHERE organization_id = employees.organization_id
+            AND role IN ('admin', 'enterprise')
+        )
+    );
+
+CREATE POLICY "Enable update for users in same organization" ON employees
+    FOR UPDATE
+    USING (
+        auth.uid() IN (
+            SELECT id FROM users 
+            WHERE organization_id = employees.organization_id
+            AND role IN ('admin', 'enterprise')
+        )
+    );
+
+-- Políticas para inventory_items
+CREATE POLICY IF NOT EXISTS "Enable read access for users in same organization" ON inventory_items
+    FOR SELECT
+    USING (
+        auth.uid() IN (
+            SELECT id FROM users 
+            WHERE organization_id = inventory_items.organization_id
+            AND role IN ('admin', 'enterprise')
+        )
+    );
+
+-- Políticas para work_shifts
+CREATE POLICY IF NOT EXISTS "Enable read access for users in same organization" ON work_shifts
+    FOR SELECT
+    USING (
+        auth.uid() IN (
+            SELECT id FROM users 
+            WHERE organization_id = work_shifts.organization_id
+            AND role IN ('admin', 'enterprise')
+        )
+    );
+
+-- Políticas para areas
+CREATE POLICY IF NOT EXISTS "Enable read access for users in same organization" ON areas
+    FOR SELECT
+    USING (
+        auth.uid() IN (
+            SELECT id FROM users 
+            WHERE organization_id = areas.organization_id
+            AND role IN ('admin', 'enterprise')
+        )
+    );
+
+-- Políticas para tasks
+CREATE POLICY IF NOT EXISTS "Enable read access for users in same organization" ON tasks
+    FOR SELECT
+    USING (
+        auth.uid() IN (
+            SELECT id FROM users 
+            WHERE organization_id = tasks.organization_id
+            AND role IN ('admin', 'enterprise')
+        )
+    );
+
+-- Políticas para users (solo lectura para miembros de la misma organización)
+CREATE POLICY IF NOT EXISTS "Enable read access for users in same organization" ON users
+    FOR SELECT
+    USING (
+        auth.uid() IN (
+            SELECT id FROM users 
+            WHERE organization_id = users.organization_id
+            AND role IN ('admin', 'enterprise')
+        )
+    ); 

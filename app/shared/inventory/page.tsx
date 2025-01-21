@@ -6,17 +6,17 @@ import InventoryModal from './components/InventoryModal'
 
 interface InventoryItem {
   id: string
+  organization_id: string
   name: string
+  description: string | null
   category: string
   quantity: number
   unit: string
   min_stock: number
   location: string
   status: 'available' | 'low' | 'out_of_stock'
-  last_updated: string
-  last_used: string
-  estimated_duration: number
-  organization_id: string
+  created_at: string
+  updated_at: string
   organization?: {
     id: string
     name: string
@@ -25,27 +25,33 @@ interface InventoryItem {
 
 interface UsageRecord {
   id: string
+  inventory_id: string
   quantity: number
   date: string
   user_id: string
+  created_at: string
+  updated_at: string
 }
 
 interface RestockRecord {
   id: string
+  inventory_id: string
   quantity: number
   date: string
   supplier: string
+  created_at: string
+  updated_at: string
 }
 
 interface InventoryFormData {
   name: string
+  description?: string
   category: string
   quantity: number
   unit: string
   min_stock: number
   location: string
-  estimated_duration: number
-  organization_id?: string  // Opcional, usado solo por superadmin
+  organization_id?: string
 }
 
 const getCategoryLabel = (category: string) => {
@@ -100,6 +106,8 @@ export default function InventoryPage() {
 
       if (!userData) throw new Error('Usuario no encontrado')
 
+      console.log('User role:', userData.role); // Debug log
+
       let query = supabase
         .from('inventory_items')
         .select(`
@@ -109,7 +117,6 @@ export default function InventoryPage() {
             name
           )
         `)
-        .order('name')
 
       // Si no es superadmin, filtrar por organization_id
       if (userData.role !== 'superadmin') {
@@ -120,6 +127,8 @@ export default function InventoryPage() {
       }
 
       const { data: items, error } = await query
+      
+      console.log('Query result:', { items, error }); // Debug log
       
       if (error) throw error
       
@@ -139,14 +148,14 @@ export default function InventoryPage() {
         .from('inventory_items')
         .update({
           name: item.name,
+          description: item.description,
           category: item.category,
           quantity: item.quantity,
           unit: item.unit,
           min_stock: item.min_stock,
           location: item.location,
           status: item.status,
-          last_updated: new Date().toISOString(),
-          estimated_duration: item.estimated_duration
+          updated_at: new Date().toISOString()
         })
         .eq('id', item.id)
 
@@ -189,7 +198,9 @@ export default function InventoryPage() {
           ...item,
           organization_id,
           status: item.quantity > item.min_stock ? 'available' : 
-                 item.quantity === 0 ? 'out_of_stock' : 'low'
+                 item.quantity === 0 ? 'out_of_stock' : 'low',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         }])
 
       if (error) throw error
@@ -214,7 +225,9 @@ export default function InventoryPage() {
         .insert([{
           inventory_item_id: itemId,
           quantity,
-          user_id: user.id
+          user_id: user.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         }])
 
       if (usageError) throw usageError
@@ -249,7 +262,9 @@ export default function InventoryPage() {
         .insert([{
           inventory_item_id: itemId,
           quantity,
-          supplier
+          supplier,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         }])
 
       if (restockError) throw restockError
@@ -295,14 +310,23 @@ export default function InventoryPage() {
 
   // Filtrar y ordenar items
   const filteredItems = useMemo(() => {
+    console.log('Filtering items:', { items, filters, search }); // Debug log
+    
     let result = [...items]
 
     // Aplicar filtros
     if (filters.category !== 'all') {
       result = result.filter(item => item.category === filters.category)
     }
+
+    // Actualizar el filtro de estado para usar la lógica de quantity vs min_stock
     if (filters.status !== 'all') {
-      result = result.filter(item => item.status === filters.status)
+      result = result.filter(item => {
+        if (filters.status === 'available') return item.quantity > item.min_stock
+        if (filters.status === 'low') return item.quantity <= item.min_stock && item.quantity > 0
+        if (filters.status === 'out_of_stock') return item.quantity === 0
+        return true
+      })
     }
 
     // Aplicar búsqueda
@@ -310,13 +334,34 @@ export default function InventoryPage() {
       const searchLower = search.toLowerCase()
       result = result.filter(item =>
         item.name.toLowerCase().includes(searchLower) ||
-        item.category.toLowerCase().includes(searchLower) ||
-        item.location.toLowerCase().includes(searchLower)
+        item.location?.toLowerCase().includes(searchLower) ||
+        getCategoryLabel(item.category).toLowerCase().includes(searchLower) ||
+        item.organization?.name?.toLowerCase().includes(searchLower)
       )
     }
 
+    // Ordenar
+    if (sortConfig.key === 'organization') {
+      result.sort((a, b) => {
+        const aName = a.organization?.name || ''
+        const bName = b.organization?.name || ''
+        return sortConfig.direction === 'asc' 
+          ? aName.localeCompare(bName)
+          : bName.localeCompare(aName)
+      })
+    } else {
+      result.sort((a, b) => {
+        const aValue = a[sortConfig.key]
+        const bValue = b[sortConfig.key]
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1
+        return 0
+      })
+    }
+
+    console.log('Filtered result:', result); // Debug log
     return result
-  }, [items, filters, search])
+  }, [items, sortConfig, filters, search])
 
   // Estadísticas generales
   const stats = useMemo(() => {
@@ -569,136 +614,105 @@ export default function InventoryPage() {
           </div>
 
           {/* Tabla */}
-          <div className="overflow-x-auto bg-white rounded-lg shadow">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  {[
-                    { key: 'name', label: 'Nombre' },
-                    { key: 'category', label: 'Categoría' },
-                    { key: 'quantity', label: 'Stock' },
-                    { key: 'min_stock', label: 'Stock Mínimo' },
-                    { key: 'location', label: 'Ubicación' },
-                    { key: 'status', label: 'Estado' },
-                    { key: 'organization', label: 'Organización' },
-                    { key: 'last_updated', label: 'Última Actualización' }
-                  ].map(({ key, label }) => (
-                    <th
-                      key={key}
-                      onClick={() => setSortConfig(current => ({
-                        key: key as keyof InventoryItem,
-                        direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
-                      }))}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
-                    >
-                      <div className="flex items-center gap-2">
-                        {label}
-                        <span className={`transition-opacity ${
-                          sortConfig.key === key ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'
-                        }`}>
-                          {sortConfig.key === key && sortConfig.direction === 'asc' ? '↑' : '↓'}
-                        </span>
-                      </div>
-                    </th>
-                  ))}
-                  <th className="relative px-6 py-3">
-                    <span className="sr-only">Acciones</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredItems.map(item => (
-                  <tr key={item.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="text-sm font-medium text-gray-900">{item.name}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {getCategoryLabel(item.category)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <span className={`mr-2 h-2 w-2 rounded-full ${
-                          item.quantity > item.min_stock ? 'bg-green-400' :
-                          item.quantity === 0 ? 'bg-red-400' : 'bg-yellow-400'
-                        }`}></span>
-                        <span className="text-sm text-gray-500">
-                          {item.quantity} {item.unit}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {item.min_stock} {item.unit}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {item.location}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        item.status === 'available' ? 'bg-green-100 text-green-800' :
-                        item.status === 'low' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {item.status === 'available' ? '✓ Disponible' :
-                         item.status === 'low' ? '⚠️ Bajo Stock' :
-                         ' Sin Stock'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {item.organization?.name || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(item.last_updated).toLocaleDateString('es-ES', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          className="text-blue-600 hover:text-blue-900 p-1 hover:bg-blue-50 rounded"
-                          onClick={() => handleItemClick(item)}
-                          title="Gestionar Stock"
+          <div className="overflow-hidden bg-white rounded-lg shadow">
+            <div className="overflow-x-auto">
+              <div className="overflow-y-auto max-h-[600px]">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                      {[
+                        { key: 'name', label: 'Nombre' },
+                        { key: 'category', label: 'Categoría' },
+                        { key: 'quantity', label: 'Stock' },
+                        { key: 'min_stock', label: 'Stock Mínimo' },
+                        { key: 'location', label: 'Ubicación' },
+                        { key: 'status', label: 'Estado' },
+                        { key: 'organization', label: 'Organización' },
+                        { key: 'last_updated', label: 'Última Actualización' }
+                      ].map(({ key, label }) => (
+                        <th
+                          key={key}
+                          onClick={() => setSortConfig(current => ({
+                            key: key as keyof InventoryItem,
+                            direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+                          }))}
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group bg-gray-50"
                         >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                          </svg>
-                        </button>
-                        <button
-                          className="text-indigo-600 hover:text-indigo-900 p-1 hover:bg-indigo-50 rounded"
-                          onClick={() => handleEditClick(item)}
-                          title="Editar"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                        </button>
-                        <button
-                          className="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded"
-                          onClick={() => {
-                            if (confirm('¿Estás seguro de eliminar este item?')) {
-                              deleteInventoryItem(item.id)
-                            }
-                          }}
-                          title="Eliminar"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          <div className="flex items-center gap-2">
+                            {label}
+                            <span className={`transition-opacity ${
+                              sortConfig.key === key ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'
+                            }`}>
+                              {sortConfig.key === key && sortConfig.direction === 'asc' ? '↑' : '↓'}
+                            </span>
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredItems.map(item => (
+                      <tr key={item.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {getCategoryLabel(item.category)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <span className={`mr-2 h-2 w-2 rounded-full ${
+                              item.quantity > item.min_stock ? 'bg-green-400' :
+                              item.quantity === 0 ? 'bg-red-400' : 'bg-yellow-400'
+                            }`}></span>
+                            <span className="text-sm text-gray-500">
+                              {item.quantity} {item.unit}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {item.min_stock}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {item.location}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            item.quantity > item.min_stock ? 'bg-green-100 text-green-800' :
+                            item.quantity === 0 ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {item.quantity > item.min_stock ? 'Disponible' :
+                             item.quantity === 0 ? 'Sin Stock' : 'Stock Bajo'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {item.organization?.name || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(item.updated_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <button
+                            onClick={() => handleEditClick(item)}
+                            className="text-blue-600 hover:text-blue-900 mr-4"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => handleRestockClick(item)}
+                            className="text-green-600 hover:text-green-900"
+                          >
+                            Reposición
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>

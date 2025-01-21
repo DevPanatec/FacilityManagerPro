@@ -47,6 +47,8 @@ interface Shift {
   replacement: string | null
   duration: string
   overtime: string | null
+  shift_type: 'morning' | 'afternoon' | 'night' | 'custom' | null
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
 }
 
 interface Area {
@@ -103,6 +105,26 @@ interface Employee {
   updated_at: string | null
 }
 
+interface InventoryItem {
+  id: string
+  organization_id: string
+  area_id: string | null
+  name: string
+  description: string | null
+  category: string | null
+  quantity: number
+  minimum_quantity: number
+  status: 'active' | 'inactive' | 'discontinued'
+  created_at: string | null
+  updated_at: string | null
+  supplier_info: any
+  cost_history: any[]
+  location_data: any
+  barcode: string | null
+  reorder_point: number | null
+  unit_of_measure: string | null
+}
+
 interface FormattedEmployee extends Employee {
   name: string
   area_name: string
@@ -123,6 +145,7 @@ export default function EnterpriseOverviewPage() {
   const [areas, setAreas] = useState<Area[]>([]);
   const [areasTasks, setAreasTasks] = useState<AreaWithTasks[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -165,7 +188,7 @@ export default function EnterpriseOverviewPage() {
 
       // Intentar una consulta simple a employees primero
       const { data: testAccess, error: testError } = await supabase
-        .from('employees')
+        .from('users')
         .select('count')
         .eq('organization_id', userProfile.organization_id)
         .single();
@@ -173,7 +196,7 @@ export default function EnterpriseOverviewPage() {
       if (testError) {
         console.log('Error de prueba de acceso:', testError);
       } else {
-        console.log('Acceso exitoso a employees, conteo:', testAccess);
+        console.log('Acceso exitoso a usuarios, conteo:', testAccess);
       }
 
       // Cargar personal desde la tabla users
@@ -188,8 +211,7 @@ export default function EnterpriseOverviewPage() {
           status
         `)
         .eq('organization_id', userProfile.organization_id)
-        .not('role', 'eq', 'superadmin')
-        .limit(10);
+        .not('role', 'eq', 'superadmin');
 
       if (staffError) {
         console.log('Error detallado del personal:', staffError);
@@ -203,19 +225,19 @@ export default function EnterpriseOverviewPage() {
         work_shift_id: null,
         first_name: member.first_name,
         last_name: member.last_name,
-        position: 'No especificado',
-        department: 'General',
-        status: member.status || 'Activo',
+        position: member.role || 'No especificado',
+        department: 'General',  // Por defecto asignamos a General
+        status: member.status || 'active',
         hire_date: new Date().toISOString(),
         role: member.role,
         contact_info: {},
         created_at: null,
         updated_at: null,
         name: `${member.first_name} ${member.last_name}`,
-        area_name: 'General'
+        area_name: 'General'  // Por defecto asignamos a General
       }));
 
-      setStaff(formattedStaff as FormattedEmployee[]);
+      setStaff(formattedStaff);
 
       // Cargar turnos
       const { data: shiftsData, error: shiftsError } = await supabase
@@ -272,7 +294,9 @@ export default function EnterpriseOverviewPage() {
         duration: shift.break_time ? 
           `${Math.floor((new Date(shift.end_time).getTime() - new Date(shift.start_time).getTime()) / (1000 * 60) - shift.break_time)} min (${shift.break_time} min descanso)` :
           `${Math.floor((new Date(shift.end_time).getTime() - new Date(shift.start_time).getTime()) / (1000 * 60))} min`,
-        overtime: shift.overtime_minutes ? `${shift.overtime_minutes} min extra` : null
+        overtime: shift.overtime_minutes ? `${shift.overtime_minutes} min extra` : null,
+        shift_type: shift.shift_type,
+        status: shift.status
       })) || [];
 
       setShifts(formattedShifts);
@@ -336,6 +360,18 @@ export default function EnterpriseOverviewPage() {
 
       setAreasTasks(areasWithTasks);
 
+      // Cargar inventario (mostrar solo 3 items)
+      const { data: inventoryData, error: inventoryError } = await supabase
+        .from('inventory_items')
+        .select('*')
+        .eq('organization_id', userProfile.organization_id)
+        .eq('status', 'active')
+        .order('quantity', { ascending: true })
+        .limit(3);
+
+      if (inventoryError) throw inventoryError;
+      setInventory(inventoryData || []);
+
     } catch (error) {
       console.error('Error loading dashboard:', error);
       setError('Error al cargar el dashboard');
@@ -378,59 +414,128 @@ export default function EnterpriseOverviewPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      <div className="flex justify-between items-center mb-6">
+        <button className="text-blue-600 hover:text-blue-700 flex items-center gap-2">
+          <span>Ver Todo el Personal ({staff.length})</span>
+        </button>
+        <button className="text-blue-600 hover:text-blue-700 flex items-center gap-2">
+          <span>Exportar Datos</span>
+        </button>
+      </div>
+
       {/* Grid Principal */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Columna Izquierda - Turnos */}
+        {/* Columna Izquierda y Central - Turnos y Áreas */}
         <div className="lg:col-span-2 space-y-6">
           <h2 className="text-2xl font-bold text-gray-800">Turnos Activos</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {shifts.map((shift) => (
-              <button
-                key={shift.id}
-                onClick={() => {
-                  setSelectedShift(shift);
-                  setShowShiftModal(true);
-                }}
-                className="bg-white rounded-xl shadow-lg p-6 transform transition-all 
-                         hover:scale-105 hover:shadow-xl focus:outline-none"
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-800">{shift.name}</h3>
-                    <p className="text-sm text-gray-500">{shift.schedule}</p>
-                  </div>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                        style={{ backgroundColor: `${shift.color}20`, color: shift.color }}>
-                    {shift.active_count} activos
+            {/* Turno Mañana */}
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <div className="mb-4">
+                <h3 className="text-xl font-semibold text-gray-800">Mañana</h3>
+                <p className="text-sm text-gray-500">6:00 - 14:00</p>
+              </div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                  {shifts.filter(s => s.shift_type === 'morning' && s.status === 'in_progress').length} activos
+                </span>
+              </div>
+              <div className="mt-2">
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-500">Capacidad</span>
+                  <span className="font-medium">
+                    {shifts.filter(s => s.shift_type === 'morning' && s.status === 'in_progress').length}/15
                   </span>
                 </div>
-                
-                <div className="mt-4">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-500">Capacidad</span>
-                    <span className="font-medium">{shift.active_count}/{shift.total_capacity}</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="h-2 rounded-full transition-all duration-300"
-                      style={{
-                        width: `${(shift.active_count / shift.total_capacity) * 100}%`,
-                        backgroundColor: shift.color
-                      }}
-                    />
-                  </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="h-2 rounded-full bg-blue-500" 
+                    style={{ 
+                      width: `${(shifts.filter(s => s.shift_type === 'morning' && s.status === 'in_progress').length / 15) * 100}%` 
+                    }} 
+                  />
                 </div>
-              </button>
-            ))}
+              </div>
+            </div>
+
+            {/* Turno Tarde */}
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <div className="mb-4">
+                <h3 className="text-xl font-semibold text-gray-800">Tarde</h3>
+                <p className="text-sm text-gray-500">14:00 - 22:00</p>
+              </div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                  {shifts.filter(s => s.shift_type === 'afternoon' && s.status === 'in_progress').length} activos
+                </span>
+              </div>
+              <div className="mt-2">
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-500">Capacidad</span>
+                  <span className="font-medium">
+                    {shifts.filter(s => s.shift_type === 'afternoon' && s.status === 'in_progress').length}/12
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="h-2 rounded-full bg-green-500" 
+                    style={{ 
+                      width: `${(shifts.filter(s => s.shift_type === 'afternoon' && s.status === 'in_progress').length / 12) * 100}%` 
+                    }} 
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Turno Noche */}
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <div className="mb-4">
+                <h3 className="text-xl font-semibold text-gray-800">Noche</h3>
+                <p className="text-sm text-gray-500">22:00 - 6:00</p>
+              </div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
+                  {shifts.filter(s => s.shift_type === 'night' && s.status === 'in_progress').length} activos
+                </span>
+              </div>
+              <div className="mt-2">
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-500">Capacidad</span>
+                  <span className="font-medium">
+                    {shifts.filter(s => s.shift_type === 'night' && s.status === 'in_progress').length}/8
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="h-2 rounded-full bg-purple-500" 
+                    style={{ 
+                      width: `${(shifts.filter(s => s.shift_type === 'night' && s.status === 'in_progress').length / 8) * 100}%` 
+                    }} 
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Gráfico de Distribución */}
+          {/* Distribución por Áreas */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-semibold text-gray-800">
+              <h3 className="text-xl font-semibold text-gray-800">
                 Distribución por Áreas
               </h3>
+              <div className="flex gap-2">
+                <button className="p-2 rounded hover:bg-gray-100">
+                  <svg className="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-2V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  </svg>
+                </button>
+                <button className="p-2 rounded hover:bg-gray-100">
+                  <svg className="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -439,165 +544,329 @@ export default function EnterpriseOverviewPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={areas}
+                      data={areas.map(area => ({
+                        name: area.name,
+                        value: staff.filter(s => s.area_name === area.name).length || 1,
+                        color: getAreaColor(area.name)
+                      }))}
                       cx="50%"
                       cy="50%"
                       innerRadius={60}
                       outerRadius={80}
                       paddingAngle={5}
-                      dataKey="staff_count"
+                      dataKey="value"
                     >
                       {areas.map((entry, index) => (
-                        <Cell 
-                          key={`cell-${index}`} 
-                          fill={entry.color}
-                          stroke="none"
-                        />
+                        <Cell key={`cell-${index}`} fill={getAreaColor(entry.name)} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const data = payload[0].payload;
-                          return (
-                            <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-100">
-                              <p className="font-medium" style={{ color: data.color }}>
-                                {data.name}
-                              </p>
-                              <p className="text-sm text-gray-600">
-                                Personal: {data.staff_count}
-                              </p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
+                    <Tooltip />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
 
               {/* Lista de Áreas */}
-              <div className="space-y-3">
-                {areas.map((area) => (
-                  <div 
-                    key={area.id}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div 
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: area.color }}
-                      />
-                      <span className="font-medium text-gray-700">
-                        {area.name}
-                      </span>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                {areas.map(area => {
+                  const areaStaff = staff.filter(s => s.area_name === area.name).length;
+                  const percentage = Math.round((areaStaff / staff.length) * 100);
+                  const areaColor = getAreaColor(area.name);
+                  
+                  return (
+                    <div key={area.id} className="flex items-center justify-between py-2 px-4 hover:bg-gray-50 rounded-lg transition-colors duration-150">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: areaColor }} />
+                        <span className="text-gray-700">{area.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-gray-500">{areaStaff} personal</span>
+                        <span 
+                          className="text-sm font-medium px-2 py-0.5 rounded" 
+                          style={{ 
+                            backgroundColor: `${areaColor}15`,
+                            color: areaColor 
+                          }}
+                        >
+                          {percentage}%
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-500">
-                        {area.staff_count} personal
-                      </span>
-                      <span className="text-sm font-medium" style={{ color: area.color }}>
-                        {`${Math.round((area.staff_count / areas.reduce((acc, curr) => acc + curr.staff_count, 0)) * 100)}%`}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Columna Derecha - Inventario Crítico */}
+        {/* Columna Derecha - Inventario */}
         <div className="lg:col-span-1">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">Inventario Crítico</h2>
-          <div className="bg-white rounded-xl shadow-lg p-6" style={{ height: '464px' }}>
-            {/* Este componente ya está conectado a Supabase a través del componente InventoryPage */}
-            <button 
-              onClick={() => router.push('/shared/inventory')}
-              className="mt-6 w-full bg-blue-50 text-blue-600 py-2 px-4 rounded-lg
-                       hover:bg-blue-100 transition-colors duration-200 text-sm font-medium"
-            >
-              Ver Inventario Completo
-            </button>
+          <div className="sticky top-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Inventario</h2>
+              <button 
+                onClick={() => router.push('/shared/inventory')}
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-2"
+              >
+                Ver Todo
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+            <div className="bg-white rounded-xl shadow-lg p-4" style={{ height: '628px' }}>
+              <div className="space-y-3">
+                {inventory.map(item => {
+                  const stockPercentage = (item.quantity / (item.minimum_quantity || 1)) * 100;
+                  const status = stockPercentage <= 25 ? 'critical' : 
+                               stockPercentage <= 50 ? 'low' : 
+                               stockPercentage <= 75 ? 'medium' : 'good';
+                  const statusColors = {
+                    critical: 'text-red-500 bg-red-50',
+                    low: 'text-orange-500 bg-orange-50',
+                    medium: 'text-yellow-500 bg-yellow-50',
+                    good: 'text-green-500 bg-green-50'
+                  };
+                  
+                  return (
+                    <div key={item.id} className="p-3 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">{item.name}</h4>
+                          <p className="text-sm text-gray-500">{item.category || 'Sin categoría'}</p>
+                        </div>
+                        <span className={`px-2 py-1 rounded-full text-sm font-medium ${statusColors[status]}`}>
+                          {item.quantity} {item.unit_of_measure || 'unidades'}
+                        </span>
+                      </div>
+                      <div className="relative pt-1">
+                        <div className="flex mb-1 items-center justify-between">
+                          <div>
+                            <span className="text-xs font-semibold inline-block text-gray-600">
+                              Stock mínimo: {item.minimum_quantity || 0}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-xs font-semibold inline-block text-gray-600">
+                              {stockPercentage.toFixed(0)}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex h-2 overflow-hidden bg-gray-100 rounded">
+                          <div 
+                            className={`h-2 rounded transition-all ${
+                              status === 'critical' ? 'bg-red-500' : 
+                              status === 'low' ? 'bg-orange-500' : 
+                              status === 'medium' ? 'bg-yellow-500' : 
+                              'bg-green-500'
+                            }`}
+                            style={{ width: `${stockPercentage}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Sección de Tareas por Área */}
+      {/* Tareas por Área - ahora fuera del grid principal */}
       <div className="mt-8">
         <h2 className="text-2xl font-bold text-gray-800 mb-6">Tareas por Área</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {areasTasks.map((area) => (
-            <div 
-              key={area.id}
-              className="bg-white rounded-xl shadow-lg overflow-hidden"
-            >
-              <div className="p-6 border-l-4" style={{ borderColor: area.color }}>
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold" style={{ color: area.color }}>
-                    {area.name}
-                  </h3>
-                  <span className="text-sm text-gray-500">
-                    {area.tasks.length} tareas
-                  </span>
-                </div>
-                <div className="space-y-4">
-                  {area.tasks.map((task) => (
-                    <div key={task.id} className="p-4 bg-gray-50 rounded-lg space-y-2">
-                      <div className="flex flex-col space-y-1">
-                        <span className="font-medium">{task.title}</span>
-                        <span className="text-sm text-gray-600">{task.description}</span>
-                        <span className="text-sm text-gray-500">
-                          Asignado a: {task.assigned_name}
-                        </span>
-                        <span className="text-sm text-gray-500">
-                          Estado: {task.status === 'pending' ? 'Pendiente' : 
-                                  task.status === 'in_progress' ? 'En progreso' : 
-                                  task.status === 'completed' ? 'Completada' : 'Cancelada'}
-                        </span>
-                        <span className={`text-sm ${
-                          task.priority === 'urgent' ? 'text-red-600' :
-                          task.priority === 'high' ? 'text-red-500' :
-                          task.priority === 'medium' ? 'text-yellow-500' : 'text-green-500'
-                        }`}>
-                          Prioridad: {
-                            task.priority === 'urgent' ? 'Urgente' :
-                            task.priority === 'high' ? 'Alta' :
-                            task.priority === 'medium' ? 'Media' : 'Baja'
-                          }
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <FaClock className="w-3 h-3" />
-                        <span>
-                          {task.due_date ? `Vence: ${new Date(task.due_date).toLocaleString()}` : 'Sin fecha límite'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-grow h-1.5 bg-gray-200 rounded-full">
-                          <div 
-                            className="h-1.5 rounded-full transition-all duration-300"
-                            style={{
-                              width: task.status === 'completed' ? '100%' : 
-                                    task.status === 'in_progress' ? '50%' : '0%',
-                              backgroundColor: area.color
-                            }}
-                          />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {areasTasks.map(area => {
+            const completedTasks = area.tasks.filter(t => t.status === 'completed').length;
+            const progress = `${completedTasks}/${area.tasks.length}`;
+            const progressPercentage = (completedTasks / area.tasks.length) * 100;
+            const areaColor = getAreaColor(area.name);
+
+            return (
+              <div key={area.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div className="p-6 border-l-4" style={{ borderColor: areaColor }}>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold" style={{ color: areaColor }}>{area.name}</h3>
+                    <span className="text-sm text-gray-500">{area.tasks.length} tareas</span>
+                  </div>
+                  <div className="space-y-4">
+                    {area.tasks.map(task => (
+                      <div key={task.id} className="p-4 bg-gray-50 rounded-lg">
+                        <h4 className="font-medium">{task.title}</h4>
+                        <div className="mt-2 space-y-2">
+                          <p className="text-sm text-gray-600">Asignado a: {task.assigned_name}</p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>Inicio: {new Date(task.created_at || '').toLocaleString()}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>Finalización: {task.status === 'completed' ? 'Completado' : 'En progreso'}</span>
+                          </div>
                         </div>
-                        <span className="text-xs font-medium" style={{ color: area.color }}>
-                          {task.status === 'completed' ? '100%' : 
-                           task.status === 'in_progress' ? '50%' : '0%'}
-                        </span>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-sm text-gray-500">Progreso</span>
+                    <span className="text-sm" style={{ color: areaColor }}>{progress}</span>
+                  </div>
+                  <div className="mt-2 h-1 bg-gray-200 rounded-full">
+                    <div 
+                      className="h-1 rounded-full" 
+                      style={{ 
+                        width: `${progressPercentage}%`,
+                        backgroundColor: areaColor
+                      }}
+                    ></div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
+
+const getAreaColor = (areaName: string): string => {
+  // Normalizar el nombre del área (quitar acentos y convertir a minúsculas)
+  const normalizedName = areaName.toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  const colorMap: { [key: string]: string } = {
+    // Áreas de recepción y espera
+    'area de recepcion': '#3b82f6',
+    'area recepcion': '#3b82f6',
+    'recepcion': '#3b82f6',
+    'sala de espera': '#0ea5e9',
+
+    // Áreas médicas y procedimientos
+    'consultorio de oncologia': '#22c55e',
+    'consultorio oncologia': '#22c55e',
+    'oncologia': '#22c55e',
+    'sala de procedimientos': '#f43f5e',
+    'procedimientos': '#f43f5e',
+    'sala de reanimacion': '#ef4444',
+    'reanimacion': '#ef4444',
+    'triage': '#22c55e',
+
+    // Áreas de servicio y almacenamiento
+    'bano publico medicina': '#ef4444',
+    'banos': '#ef4444',
+    'cto septico': '#f59e0b',
+    'cuarto septico': '#f59e0b',
+    'cuarto de aseo': '#8b5cf6',
+    'aseo': '#8b5cf6',
+    'cuarto de urgencias': '#10b981',
+    'urgencias': '#10b981',
+    'cuarto de descanso': '#0891b2',
+    'descanso': '#0891b2',
+    'cuarto de medicamento': '#6366f1',
+    'medicamento': '#6366f1',
+    'cuarto de ropa limpia': '#22c55e',
+    'ropa limpia': '#22c55e',
+    'cuarto de ropa sucia': '#f43f5e',
+    'ropa sucia': '#f43f5e',
+
+    // Depósitos y almacenes
+    'deposito': '#6366f1',
+    'deposito de medicamentos': '#6366f1',
+    'medicamentos': '#6366f1',
+    'deposito de residuos': '#f43f5e',
+    'residuos': '#f43f5e',
+
+    // Áreas administrativas y de personal
+    'estar de enfermeria': '#0ea5e9',
+    'enfermeria': '#0ea5e9',
+    'estacion de enfermeria': '#0ea5e9',
+    'oficina de jefe de enfermeria': '#3b82f6',
+    'jefe enfermeria': '#3b82f6',
+    'oficina del jefe del servicio': '#8b5cf6',
+    'jefe servicio': '#8b5cf6',
+    'sala de reuniones': '#f97316',
+    'reuniones': '#f97316',
+
+    // Áreas de circulación
+    'pasillo de acceso entrada': '#64748b',
+    'pasillo entrada': '#64748b',
+    'escalera de emergencia': '#ef4444',
+    'escalera emergencia': '#ef4444',
+
+    // Salas de hospitalización
+    'sala de hospitalizacion': '#14b8a6',
+    'sala de hospitalizacion 1': '#14b8a6',
+    'sala de hospitalizacion 2': '#a855f7',
+    'sala de hospitalizacion 4': '#06b6d4',
+    'sala de hospitalizacion 5': '#8b5cf6',
+    'sala de hospitalizacion 6': '#f97316',
+    'sala hospitalizacion 1, 2, 4, 5, 6': '#14b8a6',
+
+    // Habitaciones (1-20)
+    'habitacion 1': '#14b8a6',
+    'habitacion1': '#14b8a6',
+    'hab 1': '#14b8a6',
+    'habitacion 2': '#a855f7',
+    'habitacion2': '#a855f7',
+    'hab 2': '#a855f7',
+    'habitacion 3': '#ec4899',
+    'habitacion3': '#ec4899',
+    'hab 3': '#ec4899',
+    'habitacion 4': '#06b6d4',
+    'habitacion4': '#06b6d4',
+    'hab 4': '#06b6d4',
+    'habitacion 5': '#8b5cf6',
+    'habitacion5': '#8b5cf6',
+    'hab 5': '#8b5cf6',
+    'habitacion 6': '#f97316',
+    'habitacion6': '#f97316',
+    'hab 6': '#f97316',
+    'habitacion 7': '#84cc16',
+    'habitacion7': '#84cc16',
+    'hab 7': '#84cc16',
+    'habitacion 8': '#6366f1',
+    'habitacion8': '#6366f1',
+    'hab 8': '#6366f1',
+    'habitacion 9': '#14b8a6',
+    'habitacion9': '#14b8a6',
+    'hab 9': '#14b8a6',
+    'habitacion 10': '#0ea5e9',
+    'habitacion10': '#0ea5e9',
+    'hab 10': '#0ea5e9',
+    'habitacion 11': '#a855f7',
+    'habitacion11': '#a855f7',
+    'hab 11': '#a855f7',
+    'habitacion 12': '#f43f5e',
+    'habitacion12': '#f43f5e',
+    'hab 12': '#f43f5e',
+    'habitacion 13': '#22c55e',
+    'habitacion13': '#22c55e',
+    'hab 13': '#22c55e',
+    'habitacion 14': '#f97316',
+    'habitacion14': '#f97316',
+    'hab 14': '#f97316',
+    'habitacion 15': '#3b82f6',
+    'habitacion15': '#3b82f6',
+    'hab 15': '#3b82f6',
+    'habitacion 16': '#8b5cf6',
+    'habitacion16': '#8b5cf6',
+    'hab 16': '#8b5cf6',
+    'habitacion 17': '#ef4444',
+    'habitacion17': '#ef4444',
+    'hab 17': '#ef4444',
+    'habitacion 18': '#06b6d4',
+    'habitacion18': '#06b6d4',
+    'hab 18': '#06b6d4',
+    'habitacion 19': '#84cc16',
+    'habitacion19': '#84cc16',
+    'hab 19': '#84cc16',
+    'habitacion 20': '#6366f1',
+    'habitacion20': '#6366f1',
+    'hab 20': '#6366f1',
+
+    // Área general
+    'general': '#64748b'
+  };
+
+  return colorMap[normalizedName] || '#64748b'; // Color por defecto gris si no se encuentra el área
+};
