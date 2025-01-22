@@ -30,13 +30,16 @@ interface Tarea {
 }
 
 interface Area {
-  nombre: string;
-  color: string;
-  tareas: Tarea[];
-  progreso: {
-    completadas: number;
-    total: number;
-  };
+  id: string;
+  name: string;
+  tasks: {
+    id: string;
+    title: string;
+    status: string;
+    assigned_to: string | null;
+    created_at: string | null;
+    due_date: string | null;
+  }[];
 }
 
 interface WorkShiftData {
@@ -86,6 +89,18 @@ interface SupabaseUser extends User {
   organization_id: string;
 }
 
+interface Sala {
+  id: string;
+  nombre: string;
+  color: string;
+  tareas: Tarea[];
+  progreso: {
+    completadas: number;
+    total: number;
+  };
+  areas: Area[];
+}
+
 export default function AssignmentsPage() {
   const [loading, setLoading] = useState(true);
   const [turnos, setTurnos] = useState<Turno[]>([]);
@@ -100,6 +115,10 @@ export default function AssignmentsPage() {
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [selectedTurno, setSelectedTurno] = useState('');
   const [selectedShiftUser, setSelectedShiftUser] = useState('');
+  const [tasks, setTasks] = useState<{id: string, title: string}[]>([]);
+  const [selectedTask, setSelectedTask] = useState('');
+  const [salas, setSalas] = useState<Sala[]>([]);
+  const [userMap, setUserMap] = useState<Record<string, string>>({});
 
   const supabase = createClientComponentClient();
 
@@ -156,29 +175,41 @@ export default function AssignmentsPage() {
 
       if (usersData) {
         setUsuarios(usersData.map(u => `${u.first_name} ${u.last_name}`));
+        const newUserMap = (usersData || []).reduce((acc, user) => ({
+          ...acc,
+          [user.id]: `${user.first_name} ${user.last_name}`
+        }), {} as Record<string, string>);
+        setUserMap(newUserMap);
       }
 
-      // Cargar áreas y sus tareas
-      const { data: areasData } = await supabase
-        .from('areas')
+      // Cargar salas y sus tareas
+      const { data: salasData } = await supabase
+        .from('salas')
         .select(`
           id,
-          name,
-          tasks (
+          nombre,
+          areas (
             id,
-            title,
-            status,
-            assigned_to,
-            created_at,
-            due_date
+            name,
+            tasks (
+              id,
+              title,
+              status,
+              assigned_to,
+              created_at,
+              due_date
+            )
           )
         `)
         .eq('organization_id', userProfile.organization_id)
-        .eq('status', 'active') as { data: AreaData[] | null };
+        .eq('estado', true);
 
-      if (areasData) {
-        const areasFormatted = await Promise.all(areasData.map(async (area) => {
-          const userIds = area.tasks.map(task => task.assigned_to).filter(Boolean);
+      if (salasData) {
+        const salasFormatted = await Promise.all(salasData.map(async (sala) => {
+          // Obtener todas las tareas de todas las áreas de la sala
+          const tareas = sala.areas.flatMap(area => area.tasks).filter(Boolean);
+          
+          const userIds = tareas.map(task => task.assigned_to).filter(Boolean);
           const { data: usersData } = await supabase
             .from('users')
             .select('id, first_name, last_name')
@@ -189,7 +220,7 @@ export default function AssignmentsPage() {
             [user.id]: `${user.first_name} ${user.last_name}`
           }), {} as Record<string, string>);
 
-          const tareas: Tarea[] = area.tasks.map((task) => ({
+          const tareasFormatted: Tarea[] = tareas.map((task) => ({
             id: task.id,
             titulo: task.title,
             asignadoA: task.assigned_to ? userMap[task.assigned_to] : 'Sin asignar',
@@ -199,21 +230,33 @@ export default function AssignmentsPage() {
                    task.status === 'in_progress' ? 'en_progreso' : 'no_iniciada'
           }));
 
-          const areaFormatted: Area = {
-            nombre: area.name,
-            color: getAreaColor(area.name),
-            tareas,
+          const salaFormatted: Sala = {
+            id: sala.id,
+            nombre: sala.nombre,
+            color: getSalaColor(sala.nombre),
+            tareas: tareasFormatted,
             progreso: {
-              completadas: tareas.filter(t => t.estado === 'completada').length,
-              total: tareas.length
-            }
+              completadas: tareasFormatted.filter(t => t.estado === 'completada').length,
+              total: tareasFormatted.length
+            },
+            areas: sala.areas.map(area => ({
+              id: area.id,
+              name: area.name,
+              tasks: area.tasks.map(task => ({
+                id: task.id,
+                title: task.title,
+                status: task.status,
+                assigned_to: task.assigned_to,
+                created_at: task.created_at,
+                due_date: task.due_date
+              }))
+            }))
           };
 
-          return areaFormatted;
+          return salaFormatted;
         }));
 
-        setAreas(areasFormatted);
-        setAreasDisponibles(areasData.map(a => a.name));
+        setSalas(salasFormatted);
       }
 
     } catch (error) {
@@ -223,18 +266,25 @@ export default function AssignmentsPage() {
     }
   };
 
-  // Función auxiliar para asignar colores a las áreas
-  const getAreaColor = (areaName: string): string => {
+  // Función auxiliar para asignar colores a las salas
+  const getSalaColor = (salaNombre: string): string => {
     const colorMap: { [key: string]: string } = {
-      'Bioseguridad': '#FF6B6B',
-      'Inyección': '#4FD1C5',
-      'Cuarto Frío': '#63B3ED',
+      'Bioseguridad': '#FF6B6B',     // Color rojo/coral como en la imagen
+      'Inyección': '#4FD1C5',        // Color turquesa como en la imagen
+      'Cuarto Frío': '#63B3ED',      // Color azul claro como en la imagen
       'Producción': '#68D391',
       'Techos, Paredes y Pisos': '#F6AD55',
-      'Canaletas y Rejillas': '#4299E1'
+      'Canaletas y Rejillas': '#4299E1',
+      'Áreas Comunes': '#9F7AEA',
+      'Áreas Verdes': '#ED64A6',
+      'Estacionamiento': '#F687B3',
+      'Oficinas': '#48BB78',
+      'Recepción': '#38B2AC',
+      'Baños': '#4C51BF',
+      'Almacén': '#667EEA'
     };
 
-    return colorMap[areaName] || '#6B7280';
+    return colorMap[salaNombre] || '#6B7280';
   };
 
   const addUserToShift = async () => {
@@ -293,9 +343,34 @@ export default function AssignmentsPage() {
     }
   };
 
+  const loadTasks = async (salaId: string, areaId: string) => {
+    try {
+      const { data: tasksData, error } = await supabase
+        .from('tasks')
+        .select('id, title')
+        .eq('area_id', areaId)
+        .eq('status', 'pending');
+
+      if (error) throw error;
+
+      setTasks(tasksData || []);
+    } catch (error) {
+      console.error('Error loading tasks:', error);
+      toast.error('Error al cargar las tareas');
+    }
+  };
+
+  useEffect(() => {
+    if (selectedSala && selectedArea) {
+      loadTasks(selectedSala, selectedArea);
+    } else {
+      setTasks([]);
+    }
+  }, [selectedSala, selectedArea]);
+
   const handleCreateAssignment = async () => {
     try {
-      if (!selectedUser || !selectedSala || !selectedArea || !selectedDate) {
+      if (!selectedUser || !selectedSala || !selectedArea || !selectedDate || !selectedTask) {
         toast.error('Por favor complete todos los campos');
         return;
       }
@@ -326,6 +401,7 @@ export default function AssignmentsPage() {
         user_id: userData.id,
         sala_id: selectedSala,
         area_id: selectedArea,
+        task_id: selectedTask,
         start_time: new Date(selectedDate).toISOString(),
         status: 'scheduled'
       };
@@ -343,6 +419,7 @@ export default function AssignmentsPage() {
       setSelectedSala(null);
       setSelectedArea('');
       setSelectedDate('');
+      setSelectedTask('');
 
       // Recargar los datos
       await loadData();
@@ -465,6 +542,27 @@ export default function AssignmentsPage() {
               className="space-y-4"
             />
 
+            {/* Tarea */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-blue-700 mb-2">
+                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                Tarea
+              </label>
+              <select
+                className="w-full p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                value={selectedTask}
+                onChange={(e) => setSelectedTask(e.target.value)}
+                disabled={!selectedArea}
+              >
+                <option value="">Seleccionar Tarea</option>
+                {tasks.map((task) => (
+                  <option key={task.id} value={task.id}>{task.title}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Fecha de Asignación */}
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-blue-700 mb-2">
@@ -530,7 +628,7 @@ export default function AssignmentsPage() {
               <button
                 onClick={handleCreateAssignment}
                 className="w-full py-3 bg-[#4263eb] text-white rounded-lg hover:bg-[#364fc7] transition-colors"
-                disabled={!selectedUser || !selectedSala || !selectedArea || !selectedDate}
+                disabled={!selectedUser || !selectedSala || !selectedArea || !selectedDate || !selectedTask}
               >
                 Crear Asignación
               </button>
@@ -539,103 +637,118 @@ export default function AssignmentsPage() {
         </div>
       </div>
 
-      {/* Tareas por Área */}
+      {/* Tareas por Sala */}
       <div className="mt-8">
-        <h2 className="text-lg font-semibold mb-4">Tareas por Área</h2>
+        <h2 className="text-lg font-semibold mb-4">Tareas por Sala</h2>
         <div className="grid grid-cols-3 gap-6">
-          {areas.map((area, index) => (
+          {salas.map((sala) => (
             <div 
-              key={index}
-              className="bg-white rounded-lg overflow-hidden"
-              style={{ borderLeft: `4px solid ${area.color}` }}
+              key={sala.id}
+              className="bg-white rounded-lg shadow-sm overflow-hidden"
+              style={{ borderLeft: `4px solid ${sala.color}` }}
             >
-              {/* Encabezado del área */}
-              <div className="p-4">
+              {/* Encabezado de la sala */}
+              <div className="p-4" style={{ backgroundColor: `${sala.color}10` }}>
                 <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium" style={{ color: area.color }}>{area.nombre}</h3>
-                  <span className="text-sm" style={{ color: area.color }}>{area.tareas.length} tareas</span>
+                  <h3 className="text-lg font-medium" style={{ color: sala.color }}>{sala.nombre}</h3>
+                  <span className="text-sm font-medium px-3 py-1 rounded-full" 
+                    style={{ 
+                      backgroundColor: `${sala.color}20`,
+                      color: sala.color 
+                    }}
+                  >
+                    {sala.tareas.length} tareas
+                  </span>
                 </div>
               </div>
 
-              {/* Lista de tareas */}
-              <div className="px-4 space-y-3 max-h-[300px] overflow-y-auto">
-                {area.tareas.map((tarea) => (
-                  <div 
-                    key={tarea.id} 
-                    className="rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-300"
-                    style={{ 
-                      background: `linear-gradient(to right, ${area.color}15, white)`,
-                      borderLeft: `4px solid ${area.color}`
-                    }}
-                  >
-                    <div className="flex justify-between items-start mb-3">
-                      <h4 className="font-semibold text-base" style={{ color: area.color }}>{tarea.titulo}</h4>
-                      <button className="hover:text-red-500 transition-colors" style={{ color: `${area.color}88` }}>
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                    
+              {/* Áreas y sus tareas */}
+              <div className="divide-y divide-gray-100 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+                {sala.areas?.map((area) => (
+                  <div key={area.id} className="p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <div 
                         className="w-2 h-2 rounded-full"
-                        style={{ backgroundColor: area.color }}
+                        style={{ backgroundColor: sala.color }}
                       />
-                      <p className="text-sm font-medium" style={{ color: area.color }}>
-                        {tarea.asignadoA}
-                      </p>
+                      <h4 className="font-medium" style={{ color: sala.color }}>
+                        {area.name}
+                      </h4>
+                      <span className="text-sm" style={{ color: `${sala.color}88` }}>
+                        ({area.tasks?.length || 0} tareas)
+                      </span>
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="flex items-center text-xs" style={{ color: `${area.color}88` }}>
-                        <svg className="w-4 h-4 mr-2" style={{ color: area.color }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <span className="font-medium mr-1" style={{ color: area.color }}>Inicio:</span>
-                        <span style={{ color: `${area.color}dd` }}>{tarea.inicio}</span>
-                      </div>
-                      <div className="flex items-center text-xs" style={{ color: `${area.color}88` }}>
-                        <svg className="w-4 h-4 mr-2" style={{ color: area.color }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span className="font-medium mr-1" style={{ color: area.color }}>Finalización:</span>
-                        <span style={{ color: `${area.color}dd` }}>{tarea.finalizacion}</span>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${area.color}25` }}>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium" style={{ color: area.color }}>Estado</span>
-                        <span 
-                          className="px-3 py-1 rounded-full text-xs font-medium"
+                    {/* Lista de tareas del área */}
+                    <div className="space-y-2 ml-4">
+                      {area.tasks?.map((task) => (
+                        <div 
+                          key={task.id}
+                          className="rounded-lg p-3"
                           style={{ 
-                            backgroundColor: `${area.color}15`,
-                            color: area.color
+                            backgroundColor: `${sala.color}08`,
+                            borderLeft: `3px solid ${sala.color}40`
                           }}
                         >
-                          {tarea.estado === 'completada' ? 'Completada' :
-                           tarea.estado === 'en_progreso' ? 'En Progreso' :
-                           'No Iniciada'}
-                        </span>
-                      </div>
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-sm font-medium mb-1" style={{ color: `${sala.color}` }}>
+                                {task.title}
+                              </p>
+                              <div className="flex items-center gap-2 text-xs" style={{ color: `${sala.color}88` }}>
+                                <span>
+                                  Asignado: {task.assigned_to ? 
+                                    userMap[task.assigned_to] || 'Sin asignar' : 
+                                    'Sin asignar'}
+                                </span>
+                                <span>•</span>
+                                <span>
+                                  {task.status === 'completed' ? 'Completada' :
+                                   task.status === 'in_progress' ? 'En Progreso' :
+                                   'No Iniciada'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button 
+                                className="p-1 rounded hover:bg-gray-100"
+                                style={{ color: `${sala.color}88` }}
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                              </button>
+                              <button 
+                                className="p-1 rounded hover:bg-gray-100"
+                                style={{ color: `${sala.color}88` }}
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
               </div>
 
               {/* Barra de progreso */}
-              <div className="px-4 py-4" style={{ backgroundColor: `${area.color}05`, borderTop: `1px solid ${area.color}15` }}>
+              <div className="px-4 py-3 sticky bottom-0 bg-white" style={{ borderTop: `1px solid ${sala.color}15` }}>
                 <div className="flex items-center justify-between text-sm mb-2">
-                  <span className="font-medium" style={{ color: area.color }}>Progreso Total</span>
-                  <span className="font-medium" style={{ color: `${area.color}dd` }}>{area.progreso.completadas}/{area.progreso.total}</span>
+                  <span className="font-medium" style={{ color: sala.color }}>Progreso Total</span>
+                  <span className="font-medium" style={{ color: `${sala.color}dd` }}>
+                    {sala.progreso.completadas}/{sala.progreso.total}
+                  </span>
                 </div>
-                <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: `${area.color}15` }}>
+                <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: `${sala.color}15` }}>
                   <div
                     className="h-full rounded-full transition-all duration-300"
                     style={{
-                      width: `${(area.progreso.completadas / area.progreso.total) * 100}%`,
-                      background: `linear-gradient(to right, ${area.color}88, ${area.color})`
+                      width: `${(sala.progreso.completadas / sala.progreso.total) * 100}%`,
+                      background: `linear-gradient(to right, ${sala.color}88, ${sala.color})`
                     }}
                   />
                 </div>
