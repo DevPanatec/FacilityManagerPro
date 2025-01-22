@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import toast from 'react-hot-toast';
+import SalaAreaSelector from '@/app/shared/componentes/SalaAreaSelector'
 
 interface Employee {
   id: string;
@@ -67,6 +68,8 @@ export default function RRHHPage() {
 
   // Estados para asignaciones
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+
+  const [selectedSala, setSelectedSala] = useState<string | null>(null);
 
   const supabase = createClientComponentClient();
 
@@ -259,13 +262,14 @@ export default function RRHHPage() {
   const handleCreateShift = async () => {
     try {
       console.log('Datos del formulario:', {
+        selectedSala,
         selectedArea,
         selectedUser,
         shiftStartTime,
         shiftEndTime
       });
 
-      if (!selectedArea || !selectedUser || !shiftStartTime || !shiftEndTime) {
+      if (!selectedSala || !selectedArea || !selectedUser || !shiftStartTime || !shiftEndTime) {
         toast.error('Por favor complete todos los campos');
         return;
       }
@@ -302,6 +306,7 @@ export default function RRHHPage() {
 
       const shiftData = {
         organization_id: userData.organization_id,
+        sala_id: selectedSala,
         area_id: selectedArea,
         user_id: selectedUser,
         start_time: startDate.toISOString(),
@@ -339,6 +344,7 @@ export default function RRHHPage() {
       setShowShiftModal(false);
       
       // Limpiar el formulario
+      setSelectedSala(null);
       setSelectedArea('');
       setSelectedUser('');
       setShiftStartTime('');
@@ -885,22 +891,7 @@ export default function RRHHPage() {
             <h2 className="text-xl font-bold mb-4">Crear Nuevo Turno</h2>
             
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Área</label>
-                <select
-                  value={selectedArea}
-                  onChange={(e) => setSelectedArea(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                >
-                  <option value="">Seleccione un área</option>
-                  {areas.map((area) => (
-                    <option key={area.id} value={area.id}>
-                      {area.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
+              {/* Usuario */}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Usuario</label>
                 <select
@@ -917,6 +908,14 @@ export default function RRHHPage() {
                 </select>
               </div>
 
+              {/* Sala y Área */}
+              <SalaAreaSelector
+                onSalaChange={(sala) => setSelectedSala(sala?.id || null)}
+                onAreaChange={(area) => setSelectedArea(area?.id || '')}
+                className="space-y-4"
+              />
+
+              {/* Hora de inicio */}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Hora de inicio</label>
                 <input
@@ -927,6 +926,7 @@ export default function RRHHPage() {
                 />
               </div>
 
+              {/* Hora de fin */}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Hora de fin</label>
                 <input
