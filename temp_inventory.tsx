@@ -1,0 +1,1 @@
+how 075740776fc4c9d96a5d9ec5e481e36d1dd2f2c5:app/shared/inventory/page.tsx
