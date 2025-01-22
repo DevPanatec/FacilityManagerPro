@@ -34,46 +34,93 @@ export default function SalaAreaSelector({
         setLoading(true)
         
         // Obtener el usuario actual y su organization_id
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        console.log('Auth User:', user)
+        console.log('Auth Error:', authError)
+        
         if (!user) throw new Error('No autorizado')
 
-        const { data: userProfile } = await supabase
+        // Obtener perfil completo del usuario
+        const { data: userProfile, error: userError } = await supabase
           .from('users')
-          .select('organization_id')
+          .select('*')  // Seleccionar todos los campos para depuración
           .eq('id', user.id)
           .single()
 
+        console.log('User Profile COMPLETO:', userProfile)
+        console.log('User Profile Error:', userError)
+
         if (!userProfile) throw new Error('Perfil no encontrado')
 
-        // Cargar salas
+        // Verificar organización
+        const { data: orgData, error: orgError } = await supabase
+          .from('organizations')
+          .select('*')
+          .eq('id', userProfile.organization_id)
+          .single()
+
+        console.log('Organización del usuario:', orgData)
+        console.log('Error de organización:', orgError)
+
+        // Cargar salas con más detalles
         const { data: salasData, error: salasError } = await supabase
           .from('salas')
           .select('*')
           .eq('estado', true)
-          .order('nombre')
+          .eq('organization_id', userProfile.organization_id)
 
-        if (salasError) throw salasError
+        console.log('Organization ID del usuario:', userProfile.organization_id)
+        console.log('Consulta de salas completa:', {
+          query: `organization_id: ${userProfile.organization_id}`,
+          data: salasData,
+          error: salasError
+        })
 
-        // Cargar áreas
+        if (salasError) {
+          console.error('Error al cargar salas:', salasError)
+          throw salasError
+        }
+
+        // Cargar áreas con más detalles - removido el filtro de estado que no existe
         const { data: areasData, error: areasError } = await supabase
           .from('areas')
-          .select('*')
-          .eq('estado', true)
-          .order('nombre')
+          .select(`
+            id,
+            name,
+            organization_id,
+            sala_id
+          `)
+          .eq('organization_id', userProfile.organization_id)
+          .order('name')
 
-        if (areasError) throw areasError
+        console.log('Consulta de áreas completa:', {
+          data: areasData,
+          error: areasError
+        })
 
-        setSalas(salasData || [])
-        setAreas(areasData || [])
+        if (areasError) {
+          console.error('Error al cargar áreas:', areasError)
+          throw areasError
+        }
+
+        // Verificar y establecer los datos
+        const validSalas = Array.isArray(salasData) ? salasData : []
+        const validAreas = Array.isArray(areasData) ? areasData : []
+
+        console.log('Salas válidas encontradas:', validSalas.length)
+        console.log('Áreas válidas encontradas:', validAreas.length)
+
+        setSalas(validSalas)
+        setAreas(validAreas)
         
         // Si hay un sala seleccionada por defecto, filtrar las áreas
         if (defaultSalaId) {
-          const filteredAreas = (areasData || []).filter(area => area.sala_id === defaultSalaId)
+          const filteredAreas = validAreas.filter(area => area.sala_id === defaultSalaId)
           setFilteredAreas(filteredAreas)
         }
 
       } catch (error) {
-        console.error('Error fetching data:', error)
+        console.error('Error detallado:', error)
         setSalas([])
         setAreas([])
         setFilteredAreas([])
@@ -87,7 +134,19 @@ export default function SalaAreaSelector({
 
   useEffect(() => {
     if (selectedSala) {
-      const filtered = areas.filter(area => area.sala_id === selectedSala)
+      console.log('Sala seleccionada:', selectedSala)
+      console.log('Todas las áreas disponibles:', areas)
+      
+      const filtered = areas.filter(area => {
+        console.log('Comparando área:', {
+          area_sala_id: area.sala_id,
+          selected_sala_id: selectedSala,
+          matches: area.sala_id === selectedSala
+        })
+        return area.sala_id === selectedSala
+      })
+      
+      console.log('Áreas filtradas para la sala:', filtered)
       setFilteredAreas(filtered)
       
       // Si el área seleccionada no está en la lista filtrada, limpiarla
@@ -103,7 +162,9 @@ export default function SalaAreaSelector({
   }, [selectedSala, areas, selectedArea])
 
   const handleSalaChange = (salaId: string) => {
+    console.log('Cambiando sala a:', salaId)
     const sala = salas.find(s => s.id === salaId) || null
+    console.log('Sala encontrada:', sala)
     setSelectedSala(salaId || null)
     onSalaChange?.(sala)
     setSelectedArea(null)
@@ -111,7 +172,9 @@ export default function SalaAreaSelector({
   }
 
   const handleAreaChange = (areaId: string) => {
+    console.log('Cambiando área a:', areaId)
     const area = areas.find(a => a.id === areaId) || null
+    console.log('Área encontrada:', area)
     setSelectedArea(areaId || null)
     onAreaChange?.(area)
   }
@@ -170,7 +233,7 @@ export default function SalaAreaSelector({
           <option value="">Seleccionar Área</option>
           {filteredAreas.map((area) => (
             <option key={area.id} value={area.id}>
-              {area.nombre}
+              {area.name}
             </option>
           ))}
         </select>

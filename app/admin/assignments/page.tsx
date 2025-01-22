@@ -5,6 +5,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Dialog } from '@headlessui/react';
 import { User } from '@supabase/supabase-js';
 import SalaAreaSelector from '@/app/shared/componentes/SalaAreaSelector'
+import { toast } from 'react-hot-toast';
 
 interface UserProfile {
   id: string;
@@ -46,6 +47,7 @@ interface WorkShiftData {
   start_time: string;
   end_time: string;
   user_id: string | null;
+  sala_id: string | null;
 }
 
 interface TaskData {
@@ -92,6 +94,7 @@ export default function AssignmentsPage() {
   const [areasDisponibles, setAreasDisponibles] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedArea, setSelectedArea] = useState('');
+  const [selectedSala, setSelectedSala] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [frecuencia, setFrecuencia] = useState('diario');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -127,7 +130,8 @@ export default function AssignmentsPage() {
           area:areas!inner(name),
           start_time,
           end_time,
-          user_id
+          user_id,
+          sala_id
         `)
         .eq('organization_id', userProfile.organization_id)
         .eq('status', 'scheduled') as { data: WorkShiftData[] | null };
@@ -289,6 +293,87 @@ export default function AssignmentsPage() {
     }
   };
 
+  const handleCreateAssignment = async () => {
+    try {
+      if (!selectedUser || !selectedSala || !selectedArea || !selectedDate) {
+        toast.error('Por favor complete todos los campos');
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
+
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!userProfile) throw new Error('Perfil no encontrado');
+
+      // Obtener el ID del usuario seleccionado
+      const { data: userData } = await supabase
+        .from('users')
+        .select('id')
+        .eq('organization_id', userProfile.organization_id)
+        .eq('first_name || \' \' || last_name', selectedUser)
+        .single();
+
+      if (!userData) throw new Error('Usuario no encontrado');
+
+      const assignmentData = {
+        organization_id: userProfile.organization_id,
+        user_id: userData.id,
+        sala_id: selectedSala,
+        area_id: selectedArea,
+        start_time: new Date(selectedDate).toISOString(),
+        status: 'scheduled'
+      };
+
+      const { error: insertError } = await supabase
+        .from('work_shifts')
+        .insert([assignmentData]);
+
+      if (insertError) throw insertError;
+
+      toast.success('Asignación creada exitosamente');
+
+      // Limpiar el formulario
+      setSelectedUser('');
+      setSelectedSala(null);
+      setSelectedArea('');
+      setSelectedDate('');
+
+      // Recargar los datos
+      await loadData();
+
+    } catch (error) {
+      console.error('Error creating assignment:', error);
+      toast.error('Error al crear la asignación');
+    }
+  };
+
+  const handleDeleteShift = async (shiftId: string) => {
+    try {
+      if (!window.confirm('¿Está seguro que desea eliminar este turno?')) {
+        return;
+      }
+
+      const { error } = await supabase
+        .from('work_shifts')
+        .delete()
+        .eq('id', shiftId);
+
+      if (error) throw error;
+
+      toast.success('Turno eliminado exitosamente');
+      loadData(); // Recargar los turnos
+    } catch (error) {
+      console.error('Error al eliminar turno:', error);
+      toast.error('Error al eliminar el turno');
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -316,9 +401,20 @@ export default function AssignmentsPage() {
                     <h3 className="font-medium">{turno.nombre}</h3>
                     <p className="text-sm text-gray-500">{turno.personasAsignadas} personas asignadas</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium">{turno.horario}</p>
-                    <p className="text-sm text-gray-500">{turno.enLinea} en línea</p>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <p className="text-sm font-medium">{turno.horario}</p>
+                      <p className="text-sm text-gray-500">{turno.enLinea} en línea</p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteShift(turno.id)}
+                      className="p-2 text-red-600 hover:text-red-800 transition-colors"
+                      title="Eliminar turno"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -358,8 +454,14 @@ export default function AssignmentsPage() {
 
             {/* Sala y Área */}
             <SalaAreaSelector
-              onSalaChange={(sala) => console.log('Sala seleccionada:', sala)}
-              onAreaChange={(area) => setSelectedArea(area?.nombre || '')}
+              onSalaChange={(sala) => {
+                setSelectedSala(sala?.id || null);
+                console.log('Sala seleccionada:', sala);
+              }}
+              onAreaChange={(area) => {
+                setSelectedArea(area?.id || '');
+                console.log('Área seleccionada:', area);
+              }}
               className="space-y-4"
             />
 
@@ -423,9 +525,16 @@ export default function AssignmentsPage() {
               </button>
             </div>
 
-            <button className="w-full py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
-              Asignar
-            </button>
+            {/* Botón de Crear Asignación */}
+            <div className="mt-6">
+              <button
+                onClick={handleCreateAssignment}
+                className="w-full py-3 bg-[#4263eb] text-white rounded-lg hover:bg-[#364fc7] transition-colors"
+                disabled={!selectedUser || !selectedSala || !selectedArea || !selectedDate}
+              >
+                Crear Asignación
+              </button>
+            </div>
           </div>
         </div>
       </div>

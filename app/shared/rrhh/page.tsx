@@ -59,17 +59,27 @@ export default function RRHHPage() {
   // Estados para modales
   const [showAddModal, setShowAddModal] = useState(false);
   const [showTurnosModal, setShowTurnosModal] = useState(false);
-  const [showShiftModal, setShowShiftModal] = useState(false);
   const [selectedArea, setSelectedArea] = useState('');
   const [selectedUser, setSelectedUser] = useState('');
-  const [shiftStartTime, setShiftStartTime] = useState('');
-  const [shiftEndTime, setShiftEndTime] = useState('');
   const [areas, setAreas] = useState<{id: string, name: string}[]>([]);
 
   // Estados para asignaciones
   const [assignments, setAssignments] = useState<Assignment[]>([]);
 
   const [selectedSala, setSelectedSala] = useState<string | null>(null);
+
+  // Agregar estados para gestión de turnos
+  const [showShiftModal, setShowShiftModal] = useState(false);
+  const [shiftStartTime, setShiftStartTime] = useState('');
+  const [shiftEndTime, setShiftEndTime] = useState('');
+  const [selectedTurno, setSelectedTurno] = useState('');
+
+  // Definir los turnos disponibles
+  const TURNOS = [
+    { id: 'mañana', nombre: 'Mañana', inicio: '06:00', fin: '14:00' },
+    { id: 'tarde', nombre: 'Tarde', inicio: '14:00', fin: '22:00' },
+    { id: 'noche', nombre: 'Noche', inicio: '22:00', fin: '06:00' }
+  ];
 
   const supabase = createClientComponentClient();
 
@@ -256,103 +266,6 @@ export default function RRHHPage() {
     } catch (error) {
       console.error('Error al crear empleado:', error);
       toast.error('Error al crear empleado');
-    }
-  };
-
-  const handleCreateShift = async () => {
-    try {
-      console.log('Datos del formulario:', {
-        selectedSala,
-        selectedArea,
-        selectedUser,
-        shiftStartTime,
-        shiftEndTime
-      });
-
-      if (!selectedSala || !selectedArea || !selectedUser || !shiftStartTime || !shiftEndTime) {
-        toast.error('Por favor complete todos los campos');
-        return;
-      }
-
-      // Validar que la fecha de fin sea posterior a la de inicio
-      const startDate = new Date(shiftStartTime);
-      const endDate = new Date(shiftEndTime);
-      
-      console.log('Fechas convertidas:', {
-        startDate,
-        endDate
-      });
-
-      if (endDate <= startDate) {
-        toast.error('La fecha de fin debe ser posterior a la fecha de inicio');
-        return;
-      }
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No autorizado');
-
-      const { data: userData } = await supabase
-        .from('users')
-        .select('organization_id')
-        .eq('id', user.id)
-        .single();
-
-      console.log('Datos del usuario:', {
-        userId: user.id,
-        organizationId: userData?.organization_id
-      });
-
-      if (!userData?.organization_id) throw new Error('Usuario no tiene organización asignada');
-
-      const shiftData = {
-        organization_id: userData.organization_id,
-        sala_id: selectedSala,
-        area_id: selectedArea,
-        user_id: selectedUser,
-        start_time: startDate.toISOString(),
-        end_time: endDate.toISOString(),
-        status: 'scheduled'
-      };
-
-      console.log('Datos a insertar:', shiftData);
-
-      // Crear el turno
-      const { data: shift, error: shiftError } = await supabase
-        .from('work_shifts')
-        .insert([shiftData])
-        .select()
-        .single();
-
-      if (shiftError) {
-        console.error('Error al crear el turno:', shiftError);
-        throw new Error(shiftError.message);
-      }
-
-      console.log('Turno creado:', shift);
-
-      if (!shift) {
-        throw new Error('No se pudo crear el turno');
-      }
-
-      // Actualizar las estadísticas
-      setStats(prevStats => ({
-        ...prevStats,
-        shiftsToday: prevStats.shiftsToday + 1
-      }));
-
-      toast.success('Turno creado exitosamente');
-      setShowShiftModal(false);
-      
-      // Limpiar el formulario
-      setSelectedSala(null);
-      setSelectedArea('');
-      setSelectedUser('');
-      setShiftStartTime('');
-      setShiftEndTime('');
-
-    } catch (error) {
-      console.error('Error creating shift:', error);
-      toast.error(error instanceof Error ? error.message : 'Error al crear el turno');
     }
   };
 
@@ -557,6 +470,87 @@ export default function RRHHPage() {
         </div>
       </div>
     );
+  };
+
+  // Agregar función handleCreateShift
+  const handleCreateShift = async () => {
+    try {
+      console.log('Datos del formulario:', {
+        selectedSala,
+        selectedArea,
+        selectedUser,
+        selectedTurno
+      });
+
+      if (!selectedSala || !selectedArea || !selectedUser || !selectedTurno) {
+        toast.error('Por favor complete todos los campos');
+        return;
+      }
+
+      const turno = TURNOS.find(t => t.id === selectedTurno);
+      if (!turno) {
+        toast.error('Turno inválido');
+        return;
+      }
+
+      // Crear fecha de inicio y fin basado en el turno seleccionado
+      const today = new Date();
+      const startTime = new Date(today);
+      const [startHour, startMinute] = turno.inicio.split(':');
+      startTime.setHours(parseInt(startHour), parseInt(startMinute), 0);
+
+      const endTime = new Date(today);
+      const [endHour, endMinute] = turno.fin.split(':');
+      endTime.setHours(parseInt(endHour), parseInt(endMinute), 0);
+
+      // Si el turno es nocturno y la hora de fin es menor que la de inicio,
+      // significa que termina al día siguiente
+      if (endTime <= startTime) {
+        endTime.setDate(endTime.getDate() + 1);
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!userData?.organization_id) throw new Error('Usuario no tiene organización asignada');
+
+      const shiftData = {
+        organization_id: userData.organization_id,
+        sala_id: selectedSala,
+        area_id: selectedArea,
+        user_id: selectedUser,
+        start_time: startTime.toISOString(),
+        end_time: endTime.toISOString(),
+        status: 'scheduled'
+      };
+
+      console.log('Datos del turno a crear:', shiftData);
+
+      const { error: insertError } = await supabase
+        .from('work_shifts')
+        .insert([shiftData]);
+
+      if (insertError) throw insertError;
+
+      toast.success('Turno creado exitosamente');
+      setShowShiftModal(false);
+      
+      // Resetear los estados
+      setSelectedUser('');
+      setSelectedSala(null);
+      setSelectedArea('');
+      setSelectedTurno('');
+      
+    } catch (error) {
+      console.error('Error al crear turno:', error);
+      toast.error('Error al crear el turno');
+    }
   };
 
   if (isLoading) {
@@ -886,7 +880,7 @@ export default function RRHHPage() {
 
       {/* Modal de Gestión de Turnos */}
       {showShiftModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[9999]">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">Crear Nuevo Turno</h2>
             
@@ -915,42 +909,43 @@ export default function RRHHPage() {
                 className="space-y-4"
               />
 
-              {/* Hora de inicio */}
+              {/* Turno */}
               <div>
-                <label className="block text-sm font-medium text-gray-700">Hora de inicio</label>
-                <input
-                  type="datetime-local"
-                  value={shiftStartTime}
-                  onChange={(e) => setShiftStartTime(e.target.value)}
+                <label className="block text-sm font-medium text-gray-700">Turno</label>
+                <select
+                  value={selectedTurno}
+                  onChange={(e) => setSelectedTurno(e.target.value)}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Hora de fin */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Hora de fin</label>
-                <input
-                  type="datetime-local"
-                  value={shiftEndTime}
-                  onChange={(e) => setShiftEndTime(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  onClick={() => setShowShiftModal(false)}
-                  className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300 transition-colors"
                 >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleCreateShift}
-                  className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
-                >
-                  Crear Turno
-                </button>
+                  <option value="">Seleccione un turno</option>
+                  {TURNOS.map((turno) => (
+                    <option key={turno.id} value={turno.id}>
+                      {`${turno.nombre} (${turno.inicio} - ${turno.fin})`}
+                    </option>
+                  ))}
+                </select>
               </div>
+            </div>
+
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowShiftModal(false);
+                  setSelectedUser('');
+                  setSelectedSala(null);
+                  setSelectedArea('');
+                  setSelectedTurno('');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateShift}
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+              >
+                Crear Turno
+              </button>
             </div>
           </div>
         </div>

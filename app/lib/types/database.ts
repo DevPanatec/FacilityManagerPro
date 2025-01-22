@@ -441,4 +441,20 @@ export interface Database {
       [_ in never]: never
     }
   }
+}
+
+export interface Sala {
+  id: string;
+  nombre: string;
+  estado: boolean;
+  organization_id: string;
+  created_at?: string;
+}
+
+export interface Area {
+  id: string;
+  name: string;
+  organization_id: string;
+  sala_id: string;
+  created_at?: string;
 } 
