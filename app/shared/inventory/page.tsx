@@ -607,152 +607,154 @@ export default function InventoryPage() {
           </div>
 
           {/* Tabla */}
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead>
-                <tr className="bg-gray-50">
-                  {[
-                    { key: 'name', label: 'Nombre', width: '25%' },
-                    { key: 'quantity', label: 'Stock', width: '12%' },
-                    { key: 'min_stock', label: 'Stock Mínimo', width: '12%' },
-                    { key: 'location', label: 'Ubicación', width: '15%' },
-                    { key: 'status', label: 'Estado', width: '12%' },
-                    { key: 'organization', label: 'Organización', width: '12%' },
-                    { key: 'updated_at', label: 'Actualizado', width: '12%' },
-                    { key: 'actions', label: '', width: '120px' }
-                  ].map(({ key, label, width }) => (
-                    <th
-                      key={key}
-                      style={{ width }}
-                      onClick={() => key !== 'actions' && setSortConfig(current => ({
-                        key: key as keyof InventoryItem,
-                        direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
-                      }))}
-                      className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider
-                                ${key !== 'actions' ? 'cursor-pointer hover:bg-gray-100' : ''}`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {label}
-                        {key !== 'actions' && sortConfig.key === key && (
-                          <span className="text-blue-500">
-                            {sortConfig.direction === 'asc' ? '↑' : '↓'}
-                          </span>
+          <div className="overflow-hidden">
+            <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 400px)' }}>
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0 z-10">
+                  <tr>
+                    {[
+                      { key: 'name', label: 'Nombre', width: '25%' },
+                      { key: 'quantity', label: 'Stock', width: '12%' },
+                      { key: 'min_stock', label: 'Stock Mínimo', width: '12%' },
+                      { key: 'location', label: 'Ubicación', width: '15%' },
+                      { key: 'status', label: 'Estado', width: '12%' },
+                      { key: 'organization', label: 'Organización', width: '12%' },
+                      { key: 'updated_at', label: 'Actualizado', width: '12%' },
+                      { key: 'actions', label: '', width: '120px' }
+                    ].map(({ key, label, width }) => (
+                      <th
+                        key={key}
+                        style={{ width }}
+                        onClick={() => key !== 'actions' && setSortConfig(current => ({
+                          key: key as keyof InventoryItem,
+                          direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+                        }))}
+                        className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider
+                                  ${key !== 'actions' ? 'cursor-pointer hover:bg-gray-100' : ''}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {label}
+                          {key !== 'actions' && sortConfig.key === key && (
+                            <span className="text-blue-500">
+                              {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                            </span>
+                          )}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-4 text-center">
+                        <div className="flex justify-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : error ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-4 text-center">
+                        <div className="text-red-500">{error}</div>
+                      </td>
+                    </tr>
+                  ) : filteredItems.map(item => (
+                    <tr key={item.id} className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="px-6 py-4">
+                        <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                        {item.description && (
+                          <div className="text-sm text-gray-500 mt-0.5">{item.description}</div>
                         )}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {loading ? (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-4 text-center">
-                      <div className="flex justify-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-                      </div>
-                    </td>
-                  </tr>
-                ) : error ? (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-4 text-center">
-                      <div className="text-red-500">{error}</div>
-                    </td>
-                  </tr>
-                ) : filteredItems.map(item => (
-                  <tr key={item.id} className="hover:bg-gray-50 transition-colors duration-150">
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">{item.name}</div>
-                      {item.description && (
-                        <div className="text-sm text-gray-500 mt-0.5">{item.description}</div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center">
-                        <span className={`flex-shrink-0 w-2.5 h-2.5 rounded-full mr-2 ${
-                          item.quantity > item.min_stock ? 'bg-green-400' :
-                          item.quantity === 0 ? 'bg-red-400' : 'bg-yellow-400'
-                        }`}></span>
-                        <span className="text-sm text-gray-600">
-                          {item.quantity} {item.unit}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center">
+                          <span className={`flex-shrink-0 w-2.5 h-2.5 rounded-full mr-2 ${
+                            item.quantity > item.min_stock ? 'bg-green-400' :
+                            item.quantity === 0 ? 'bg-red-400' : 'bg-yellow-400'
+                          }`}></span>
+                          <span className="text-sm text-gray-600">
+                            {item.quantity} {item.unit}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {item.min_stock} {item.unit}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {item.location}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                          ${item.quantity > item.min_stock
+                            ? 'bg-green-100 text-green-800'
+                            : item.quantity === 0
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                          {item.quantity > item.min_stock ? 'Disponible' :
+                           item.quantity === 0 ? 'Sin Stock' : 'Stock Bajo'}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {item.min_stock} {item.unit}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {item.location}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                        ${item.quantity > item.min_stock
-                          ? 'bg-green-100 text-green-800'
-                          : item.quantity === 0
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                        {item.quantity > item.min_stock ? 'Disponible' :
-                         item.quantity === 0 ? 'Sin Stock' : 'Stock Bajo'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {item.organization?.name || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {new Date(item.updated_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end -space-x-1">
-                        <button
-                          onClick={() => handleEditClick(item)}
-                          title="Editar"
-                          className="relative inline-flex items-center justify-center p-2 text-gray-600 
-                                   hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all duration-200
-                                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedItem(item)
-                            setModalMode('use')
-                            setIsModalOpen(true)
-                          }}
-                          title="Gestionar Stock"
-                          className="relative inline-flex items-center justify-center p-2 text-gray-600 
-                                   hover:text-green-600 hover:bg-green-50 rounded-full transition-all duration-200
-                                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (window.confirm('¿Estás seguro de que deseas eliminar este item?')) {
-                              deleteInventoryItem(item.id)
-                            }
-                          }}
-                          title="Eliminar"
-                          className="relative inline-flex items-center justify-center p-2 text-gray-600 
-                                   hover:text-red-600 hover:bg-red-50 rounded-full transition-all duration-200
-                                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {item.organization?.name || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {new Date(item.updated_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end -space-x-1">
+                          <button
+                            onClick={() => handleEditClick(item)}
+                            title="Editar"
+                            className="relative inline-flex items-center justify-center p-2 text-gray-600 
+                                     hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all duration-200
+                                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
+                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedItem(item)
+                              setModalMode('use')
+                              setIsModalOpen(true)
+                            }}
+                            title="Gestionar Stock"
+                            className="relative inline-flex items-center justify-center p-2 text-gray-600 
+                                     hover:text-green-600 hover:bg-green-50 rounded-full transition-all duration-200
+                                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (window.confirm('¿Estás seguro de que deseas eliminar este item?')) {
+                                deleteInventoryItem(item.id)
+                              }
+                            }}
+                            title="Eliminar"
+                            className="relative inline-flex items-center justify-center p-2 text-gray-600 
+                                     hover:text-red-600 hover:bg-red-50 rounded-full transition-all duration-200
+                                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

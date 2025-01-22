@@ -232,13 +232,39 @@ CREATE POLICY IF NOT EXISTS "Enable read access for users in same organization" 
     );
 
 -- Políticas para work_shifts
-CREATE POLICY IF NOT EXISTS "Enable read access for users in same organization" ON work_shifts
-    FOR SELECT
-    USING (
-        auth.uid() IN (
-            SELECT id FROM users 
-            WHERE organization_id = work_shifts.organization_id
-            AND role IN ('admin', 'enterprise')
+CREATE POLICY "Work shifts are viewable by organization members" ON work_shifts
+    FOR SELECT USING (
+        auth.role() = 'authenticated' AND (
+            organization_id IN (
+                SELECT organization_id FROM users WHERE id = auth.uid()
+            )
+        )
+    );
+
+CREATE POLICY "Work shifts can be created by organization members" ON work_shifts
+    FOR INSERT WITH CHECK (
+        auth.role() = 'authenticated' AND (
+            organization_id IN (
+                SELECT organization_id FROM users WHERE id = auth.uid()
+            )
+        )
+    );
+
+CREATE POLICY "Work shifts can be updated by organization members" ON work_shifts
+    FOR UPDATE USING (
+        auth.role() = 'authenticated' AND (
+            organization_id IN (
+                SELECT organization_id FROM users WHERE id = auth.uid()
+            )
+        )
+    );
+
+CREATE POLICY "Work shifts can be deleted by organization members" ON work_shifts
+    FOR DELETE USING (
+        auth.role() = 'authenticated' AND (
+            organization_id IN (
+                SELECT organization_id FROM users WHERE id = auth.uid()
+            )
         )
     );
 

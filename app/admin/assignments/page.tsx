@@ -39,11 +39,12 @@ interface Area {
 
 interface WorkShiftData {
   id: string;
-  name: string | null;
+  area: {
+    name: string;
+  };
   start_time: string;
   end_time: string;
-  assigned_users: { count: number };
-  online_users: { count: number };
+  user_id: string | null;
 }
 
 interface TaskData {
@@ -122,11 +123,10 @@ export default function AssignmentsPage() {
         .from('work_shifts')
         .select(`
           id,
-          name:area_id(name),
+          area:areas!inner(name),
           start_time,
           end_time,
-          assigned_users:user_id(count),
-          online_users:user_id(count)
+          user_id
         `)
         .eq('organization_id', userProfile.organization_id)
         .eq('status', 'scheduled') as { data: WorkShiftData[] | null };
@@ -134,10 +134,10 @@ export default function AssignmentsPage() {
       if (turnosData) {
         const turnosFormatted: Turno[] = turnosData.map((turno) => ({
           id: turno.id,
-          nombre: turno.name || 'Sin nombre',
+          nombre: turno.area.name || 'Sin nombre',
           horario: `${new Date(turno.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(turno.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-          personasAsignadas: turno.assigned_users.count,
-          enLinea: turno.online_users.count
+          personasAsignadas: turno.user_id ? 1 : 0,
+          enLinea: 0 // Este valor se podría actualizar con un sistema de presencia en tiempo real
         }));
         setTurnos(turnosFormatted);
       }
@@ -219,25 +219,17 @@ export default function AssignmentsPage() {
   };
 
   // Función auxiliar para asignar colores a las áreas
-  const getAreaColor = (areaName: string) => {
-    const colors: { [key: string]: string } = {
-      'Escalera de emergencia': '#4ECDC4',
-      'Sala de espera': '#4263eb',
-      'Cuarto de descanso': '#4ECDC4',
-      'Area de recepción': '#4263eb',
-      'Oficina de jefe de enfermeria': '#4ECDC4',
-      'Oficina del jefe del servicio': '#4263eb',
-      'Sala de reuniones': '#4ECDC4',
-      'Baño publico medicina': '#4263eb',
-      'Pasillo de acceso entrada': '#4ECDC4',
-      'Cuarto de ropa sucia': '#4263eb',
-      'Cto séptico': '#4ECDC4',
-      'Sala de hospitalización 1, 2, 4, 5, 6': '#4263eb',
-      'Cuarto de curaciones': '#4ECDC4',
-      'Consultorio de oncologia': '#4263eb',
-      'Depósito': '#4ECDC4'
+  const getAreaColor = (areaName: string): string => {
+    const colorMap: { [key: string]: string } = {
+      'Bioseguridad': '#FF6B6B',
+      'Inyección': '#4FD1C5',
+      'Cuarto Frío': '#63B3ED',
+      'Producción': '#68D391',
+      'Techos, Paredes y Pisos': '#F6AD55',
+      'Canaletas y Rejillas': '#4299E1'
     };
-    return colors[areaName] || '#4263eb'; // Color azul por defecto si no se encuentra el área
+
+    return colorMap[areaName] || '#6B7280';
   };
 
   const addUserToShift = async () => {
