@@ -1,6 +1,12 @@
-module.exports = {
-  testEnvironment: 'jsdom',
+const nextJest = require('next/jest')
+
+const createJestConfig = nextJest({
+  dir: './',
+})
+
+const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/app/$1',
     '^@/lib/(.*)$': '<rootDir>/app/lib/$1',
@@ -18,6 +24,9 @@ module.exports = {
     'app/**/*.{js,jsx,ts,tsx}',
     '!app/**/*.d.ts',
     '!app/**/_*.{js,jsx,ts,tsx}',
-    '!app/**/*.stories.{js,jsx,ts,tsx}'
+    '!app/**/*.stories.{js,jsx,ts,tsx}',
+    '!app/api/**',
   ]
-} 
+}
+
+module.exports = createJestConfig(customJestConfig) 

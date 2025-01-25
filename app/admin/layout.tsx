@@ -3,9 +3,10 @@
 import { useRouter } from 'next/navigation'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import Navbar from '../shared/componentes/navbar'
-import ChatWidget from '../shared/componentes/ChatWidget'
+import Navbar from '../shared/components/navbar'
+import ChatWidget from '@/app/shared/components/ChatWidget'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { ChatProvider } from '@/app/shared/contexts/ChatContext'
 
 interface Organization {
   id: string
@@ -91,12 +92,14 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <Navbar />
-      <main className="container mx-auto px-4 py-8">
-        {children}
-      </main>
-      <ChatWidget />
-    </div>
+    <ChatProvider>
+      <div className="min-h-screen bg-gray-100">
+        <Navbar />
+        <main className="container mx-auto px-4 py-8">
+          {children}
+        </main>
+        <ChatWidget isAdmin={true} isAdminPrincipal={true} />
+      </div>
+    </ChatProvider>
   )
 }

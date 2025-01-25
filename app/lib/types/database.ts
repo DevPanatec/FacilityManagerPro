@@ -430,6 +430,142 @@ export interface Database {
           organization_id?: string | null
         }
       }
+      chat_rooms: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          type: 'direct' | 'group' | 'channel'
+          description: string | null
+          created_by: string
+          is_private: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          organization_id: string
+          name: string
+          type: 'direct' | 'group' | 'channel'
+          description?: string | null
+          created_by: string
+          is_private?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          organization_id?: string
+          name?: string
+          type?: 'direct' | 'group' | 'channel'
+          description?: string | null
+          created_by?: string
+          is_private?: boolean
+          updated_at?: string
+        }
+      }
+      chat_room_members: {
+        Row: {
+          room_id: string
+          user_id: string
+          role: 'owner' | 'admin' | 'member'
+          last_read_at: string
+          unread_count: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          room_id: string
+          user_id: string
+          role: 'owner' | 'admin' | 'member'
+          last_read_at?: string
+          unread_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          role?: 'owner' | 'admin' | 'member'
+          last_read_at?: string
+          unread_count?: number
+          updated_at?: string
+        }
+      }
+      chat_messages: {
+        Row: {
+          id: string
+          organization_id: string
+          room_id: string
+          user_id: string
+          content: string
+          type: 'text' | 'image' | 'file' | 'system'
+          parent_id: string | null
+          is_edited: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          organization_id: string
+          room_id: string
+          user_id: string
+          content: string
+          type: 'text' | 'image' | 'file' | 'system'
+          parent_id?: string | null
+          is_edited?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          type?: 'text' | 'image' | 'file' | 'system'
+          is_edited?: boolean
+          updated_at?: string
+        }
+      }
+      chat_message_reactions: {
+        Row: {
+          message_id: string
+          user_id: string
+          reaction: string
+          created_at: string
+        }
+        Insert: {
+          message_id: string
+          user_id: string
+          reaction: string
+          created_at?: string
+        }
+        Update: {
+          reaction?: string
+        }
+      }
+      chat_message_attachments: {
+        Row: {
+          id: string
+          organization_id: string
+          message_id: string
+          file_url: string
+          file_type: string
+          file_name: string
+          file_size: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          organization_id: string
+          message_id: string
+          file_url: string
+          file_type: string
+          file_name: string
+          file_size: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          file_url?: string
+          file_type?: string
+          file_name?: string
+          file_size?: number
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never

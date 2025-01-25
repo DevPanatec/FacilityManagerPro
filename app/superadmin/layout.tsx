@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import Navbar from '../shared/componentes/navbar'
-import ChatWidget from '../shared/componentes/ChatWidget'
+import Navbar from '../shared/components/navbar'
+import ChatWidget from '@/app/shared/components/ChatWidget'
 import type { Database } from '@/lib/types/database'
 
 export default function SuperAdminLayout({

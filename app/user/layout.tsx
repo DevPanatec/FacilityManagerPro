@@ -2,8 +2,8 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import Navbar from '../shared/componentes/navbar'
-import ChatWidget from '../shared/componentes/ChatWidget'
+import Navbar from '../shared/components/navbar'
+import ChatWidget from '@/app/shared/components/ChatWidget'
 
 export default function UserLayout({
   children,

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import toast from 'react-hot-toast';
-import SalaAreaSelector from '@/app/shared/componentes/SalaAreaSelector'
+import SalaAreaSelector from '@/app/shared/components/SalaAreaSelector'
 
 interface Employee {
   id: string;

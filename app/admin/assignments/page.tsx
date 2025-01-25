@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Dialog } from '@headlessui/react';
 import { User } from '@supabase/supabase-js';
-import SalaAreaSelector from '@/app/shared/componentes/SalaAreaSelector'
+import SalaAreaSelector from '@/app/shared/components/SalaAreaSelector'
 import { toast } from 'react-hot-toast';
 
 interface UserProfile {
