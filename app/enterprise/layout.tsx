@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import Navbar from '../shared/components/navbar'
-import ChatWidget from '@/app/shared/components/ChatWidget'
+import { ChatWidget } from '@/app/components/Chat/ChatWidget'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { ChatProvider } from '@/app/shared/contexts/ChatContext'
 

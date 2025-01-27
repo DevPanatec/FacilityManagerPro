@@ -1,10 +1,13 @@
+'use client';
+
 import { useState } from 'react';
 import { MessageCircle, X } from 'lucide-react';
-import { useUser } from '@/hooks/useUser';
-import { cn } from '@/lib/utils';
+import { useUser } from '@/app/shared/hooks/useUser';
+import { cn } from '@/app/lib/utils';
 import { ChatList } from './ChatList';
 import { NewChatView } from './NewChatView';
 import { ChatView } from './ChatView';
+import { usePathname } from 'next/navigation';
 
 interface ChatWidgetProps {
   className?: string;
@@ -15,9 +18,10 @@ export function ChatWidget({ className }: ChatWidgetProps) {
   const [view, setView] = useState<'list' | 'new' | 'chat'>('list');
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const { user } = useUser();
+  const pathname = usePathname();
 
-  // Solo mostrar el widget si el usuario está autenticado
-  if (!user) return null;
+  // No mostrar el chat en la página de login
+  if (!user || pathname === '/login' || pathname === '/register') return null;
 
   function handleNewChat(roomId: string) {
     setActiveRoomId(roomId);
@@ -47,17 +51,17 @@ export function ChatWidget({ className }: ChatWidgetProps) {
 
       {/* Panel de chat */}
       {isOpen && (
-        <div className="absolute bottom-16 right-0 w-96 rounded-lg bg-background border shadow-xl">
-          <div className="flex flex-col h-[600px]">
+        <div className="absolute bottom-16 right-0 w-96 rounded-lg border shadow-xl bg-white">
+          <div className="flex flex-col h-[600px] bg-white">
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold">
+            <div className="flex items-center justify-between p-4 border-b bg-white rounded-t-lg">
+              <h2 className="text-lg font-semibold text-gray-900">
                 {view === 'list' && 'Chat'}
                 {view === 'new' && 'Nuevo Chat'}
                 {view === 'chat' && 'Conversación'}
               </h2>
               <div className="flex items-center gap-2">
-                {view === 'list' && user.role === 'enterprise' && (
+                {view === 'list' && user?.role === 'enterprise' && (
                   <button
                     className="text-sm px-3 py-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
                     onClick={() => setView('new')}
@@ -67,7 +71,7 @@ export function ChatWidget({ className }: ChatWidgetProps) {
                 )}
                 {(view === 'new' || view === 'chat') && (
                   <button
-                    className="text-sm px-2 py-1 rounded-md hover:bg-muted"
+                    className="text-sm px-2 py-1 rounded-md hover:bg-gray-100"
                     onClick={handleBackToList}
                   >
                     <X className="h-5 w-5" />
@@ -77,7 +81,7 @@ export function ChatWidget({ className }: ChatWidgetProps) {
             </div>
 
             {/* Contenido principal */}
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden bg-white">
               {view === 'list' && (
                 <ChatList onSelectChat={handleSelectChat} />
               )}

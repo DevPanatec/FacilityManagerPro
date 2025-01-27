@@ -1,6 +1,8 @@
+'use client';
+
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useUser } from '@/hooks/useUser';
+import { supabase } from '@/app/lib/supabase/client';
+import { useUser } from '@/app/shared/hooks/useUser';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -13,16 +15,22 @@ interface ChatRoom {
   unread_count: number;
 }
 
-export function ChatList() {
+interface ChatListProps {
+  onSelectChat: (roomId: string) => void;
+}
+
+export function ChatList({ onSelectChat }: ChatListProps) {
   const { user } = useUser();
   const [chats, setChats] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user) return;
 
     async function loadChats() {
       try {
+        if (!user?.id) return;
+        
         const { data, error } = await supabase
           .rpc('get_user_chat_rooms', {
             p_user_id: user.id
@@ -31,7 +39,7 @@ export function ChatList() {
         if (error) throw error;
         setChats(data || []);
       } catch (error) {
-        console.error('Error loading chats:', error);
+        console.error('Error cargando chats:', error);
       } finally {
         setLoading(false);
       }
@@ -69,7 +77,7 @@ export function ChatList() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-4">
         <p className="text-muted-foreground">No tienes chats activos</p>
-        {user.role === 'enterprise' && (
+        {user?.role === 'enterprise' && (
           <p className="text-sm mt-2">
             Haz clic en "Nuevo Chat" para comenzar una conversación con un administrador
           </p>
@@ -84,7 +92,7 @@ export function ChatList() {
         <button
           key={chat.room_id}
           className="w-full flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors text-left"
-          onClick={() => {/* TODO: Implementar selección de chat */}}
+          onClick={() => onSelectChat(chat.room_id)}
         >
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-start">

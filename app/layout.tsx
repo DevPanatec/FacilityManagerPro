@@ -2,6 +2,7 @@ import './globals.css'
 import { Inter } from 'next/font/google'
 import { Providers } from '@/app/providers'
 import RealtimeManager from './components/RealtimeManager'
+import { ChatWidget } from '@/app/components/Chat/ChatWidget'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -25,6 +26,7 @@ export default function RootLayout({
         <Providers>
           <RealtimeManager />
           {children}
+          <ChatWidget />
         </Providers>
       </body>
     </html>

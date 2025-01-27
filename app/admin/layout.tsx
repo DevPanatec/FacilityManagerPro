@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import Navbar from '../shared/components/navbar'
-import ChatWidget from '@/app/shared/components/ChatWidget'
+import { ChatWidget } from '@/app/components/Chat/ChatWidget'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { ChatProvider } from '@/app/shared/contexts/ChatContext'
 
@@ -93,12 +93,12 @@ export default function AdminLayout({
 
   return (
     <ChatProvider>
-      <div className="min-h-screen bg-gray-100">
+      <div className="flex flex-col min-h-screen">
         <Navbar />
-        <main className="container mx-auto px-4 py-8">
+        <main className="flex-1 p-4">
           {children}
         </main>
-        <ChatWidget isAdmin={true} isAdminPrincipal={true} />
+        <ChatWidget />
       </div>
     </ChatProvider>
   )
