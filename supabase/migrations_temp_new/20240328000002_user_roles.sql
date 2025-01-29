@@ -12,6 +12,15 @@ EXCEPTION
     WHEN duplicate_column THEN null;
 END $$;
 
+-- Create organizations table if it doesn't exist
+CREATE TABLE IF NOT EXISTS organizations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Add organization_id to users if it doesn't exist
 DO $$ BEGIN
     ALTER TABLE users ADD COLUMN organization_id UUID REFERENCES organizations(id);
@@ -19,54 +28,44 @@ EXCEPTION
     WHEN duplicate_column THEN null;
 END $$;
 
--- Create RLS policies for organizations if they don't exist
-DO $$ BEGIN
-    CREATE POLICY "Organizations are viewable by their members"
-    ON organizations
-    FOR SELECT
-    USING (
-        auth.role() = 'authenticated' AND
-        EXISTS (
-            SELECT 1 FROM users
-            WHERE users.organization_id = organizations.id
-            AND users.id = auth.uid()
-        )
-    );
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
+-- Create RLS policies for organizations
+ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
 
-DO $$ BEGIN
-    CREATE POLICY "Organizations can be created by admins"
-    ON organizations
-    FOR INSERT
-    WITH CHECK (
-        auth.role() = 'authenticated' AND
-        EXISTS (
-            SELECT 1 FROM users
-            WHERE users.id = auth.uid()
-            AND users.role = 'admin'
-        )
-    );
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
+CREATE POLICY "Organizations are viewable by their members"
+ON organizations
+FOR SELECT
+USING (
+    auth.role() = 'authenticated' AND
+    EXISTS (
+        SELECT 1 FROM users
+        WHERE users.organization_id = organizations.id
+        AND users.id = auth.uid()
+    )
+);
 
-DO $$ BEGIN
-    CREATE POLICY "Organizations can be updated by admins"
-    ON organizations
-    FOR UPDATE
-    USING (
-        auth.role() = 'authenticated' AND
-        EXISTS (
-            SELECT 1 FROM users
-            WHERE users.id = auth.uid()
-            AND users.role = 'admin'
-        )
-    );
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
+CREATE POLICY "Organizations can be created by admins"
+ON organizations
+FOR INSERT
+WITH CHECK (
+    auth.role() = 'authenticated' AND
+    EXISTS (
+        SELECT 1 FROM users
+        WHERE users.id = auth.uid()
+        AND users.role = 'admin'
+    )
+);
+
+CREATE POLICY "Organizations can be updated by admins"
+ON organizations
+FOR UPDATE
+USING (
+    auth.role() = 'authenticated' AND
+    EXISTS (
+        SELECT 1 FROM users
+        WHERE users.id = auth.uid()
+        AND users.role = 'admin'
+    )
+);
 
 -- Create function to create a default organization and admin user
 CREATE OR REPLACE FUNCTION create_default_organization_and_admin(
@@ -137,12 +136,8 @@ BEGIN
 END;
 $$;
 
--- Create trigger to update updated_at timestamp if it doesn't exist
-DO $$ BEGIN
-    CREATE TRIGGER update_organizations_updated_at
-        BEFORE UPDATE ON organizations
-        FOR EACH ROW
-        EXECUTE FUNCTION update_updated_at_column();
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$; 
+-- Create trigger to update updated_at timestamp
+CREATE TRIGGER update_organizations_updated_at
+    BEFORE UPDATE ON organizations
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column(); 

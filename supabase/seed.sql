@@ -8,7 +8,14 @@ VALUES (
   NOW()
 );
 
--- Insert test users
+-- Insert test users in auth.users first
+INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at)
+VALUES
+  ('123e4567-e89b-12d3-a456-426614174001', 'admin@test.com', crypt('admin123', gen_salt('bf')), NOW()),
+  ('123e4567-e89b-12d3-a456-426614174002', 'user1@test.com', crypt('user123', gen_salt('bf')), NOW()),
+  ('123e4567-e89b-12d3-a456-426614174003', 'user2@test.com', crypt('user123', gen_salt('bf')), NOW());
+
+-- Then insert users in public.users
 INSERT INTO users (id, email, role, first_name, last_name, organization_id, status, created_at, updated_at)
 VALUES
   ('123e4567-e89b-12d3-a456-426614174001', 'admin@test.com', 'admin', 'Admin', 'User', '123e4567-e89b-12d3-a456-426614174000', 'active', NOW(), NOW()),

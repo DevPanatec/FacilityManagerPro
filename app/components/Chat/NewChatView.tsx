@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase/client';
 import { useUser } from '@/app/shared/hooks/useUser';
 import { Search } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 interface Admin {
   id: string;
@@ -72,54 +73,53 @@ export function NewChatView({ onClose, onChatCreated }: NewChatViewProps) {
       }
     } catch (error) {
       console.error('Error creating chat:', error);
+      toast.error('Error al crear el chat');
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-full bg-white">
-      <div className="p-4 border-b bg-white">
+    <div className="p-4">
+      <div className="mb-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
           <input
             type="text"
-            placeholder="Buscar administrador..."
-            className="w-full pl-9 pr-4 py-2 rounded-md border border-gray-300 bg-white text-gray-900 focus:border-primary focus:ring-1 focus:ring-primary"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar administrador..."
+            className="w-full pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-white">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        ) : filteredAdmins.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-center p-4">
-            <p className="text-gray-500">
-              {searchTerm ? 'No se encontraron administradores' : 'No hay administradores disponibles'}
-            </p>
-          </div>
+      <div className="space-y-2">
+        {filteredAdmins.length > 0 ? (
+          filteredAdmins.map((admin) => (
+            <button
+              key={admin.id}
+              onClick={() => handleSelectAdmin(admin.id)}
+              className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors text-left"
+            >
+              <div className="flex-1">
+                <h3 className="font-medium">
+                  {admin.first_name} {admin.last_name}
+                </h3>
+                <p className="text-sm text-muted-foreground">{admin.email}</p>
+              </div>
+            </button>
+          ))
         ) : (
-          <div className="space-y-1 p-2">
-            {filteredAdmins.map((admin) => (
-              <button
-                key={admin.id}
-                className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left"
-                onClick={() => handleSelectAdmin(admin.id)}
-              >
-                <div>
-                  <h3 className="font-medium text-gray-900">
-                    {admin.first_name} {admin.last_name}
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    {admin.email}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
+          <p className="text-center text-muted-foreground">
+            No se encontraron administradores
+          </p>
         )}
       </div>
     </div>

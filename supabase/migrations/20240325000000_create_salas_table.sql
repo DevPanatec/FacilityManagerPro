@@ -1,40 +1,52 @@
 -- Create salas table
-CREATE TABLE IF NOT EXISTS salas (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    nombre TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS public.salas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nombre TEXT NOT NULL UNIQUE,
     descripcion TEXT,
     estado BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Add sala_id to areas table
 ALTER TABLE areas 
 ADD COLUMN IF NOT EXISTS sala_id UUID REFERENCES salas(id);
 
--- Create RLS policies for salas
-ALTER TABLE salas ENABLE ROW LEVEL SECURITY;
+-- Enable RLS
+ALTER TABLE public.salas ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow read access for authenticated users" ON salas
-    FOR SELECT TO authenticated
-    USING (true);
+-- Create policies
+CREATE POLICY "Salas are viewable by authenticated users"
+    ON public.salas
+    FOR SELECT
+    USING (auth.role() = 'authenticated');
 
-CREATE POLICY "Allow insert for authenticated admin users" ON salas
-    FOR INSERT TO authenticated
+CREATE POLICY "Salas can be created by admins"
+    ON public.salas
+    FOR INSERT
     WITH CHECK (
-        auth.jwt() ->> 'role' IN ('admin', 'superadmin')
+        auth.role() = 'authenticated' AND
+        EXISTS (
+            SELECT 1 FROM users
+            WHERE users.id = auth.uid()
+            AND users.role IN ('superadmin', 'admin')
+        )
     );
 
-CREATE POLICY "Allow update for authenticated admin users" ON salas
-    FOR UPDATE TO authenticated
+CREATE POLICY "Salas can be updated by admins"
+    ON public.salas
+    FOR UPDATE
     USING (
-        auth.jwt() ->> 'role' IN ('admin', 'superadmin')
-    )
-    WITH CHECK (
-        auth.jwt() ->> 'role' IN ('admin', 'superadmin')
+        auth.role() = 'authenticated' AND
+        EXISTS (
+            SELECT 1 FROM users
+            WHERE users.id = auth.uid()
+            AND users.role IN ('superadmin', 'admin')
+        )
     );
 
-CREATE POLICY "Allow delete for authenticated admin users" ON salas
-    FOR DELETE TO authenticated
-    USING (
-        auth.jwt() ->> 'role' IN ('admin', 'superadmin')
-    ); 
+-- Create updated_at trigger
+CREATE TRIGGER update_salas_updated_at
+    BEFORE UPDATE ON salas
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column(); 
