@@ -770,13 +770,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       if (roomError) throw roomError
 
-      // Agregar miembros al chat
+      // Agregar miembros al chat con organization_id
       const roomMembers = [
-        { room_id: room.id, user_id: user.id, role: 'owner' },
+        { 
+          room_id: room.id, 
+          user_id: user.id, 
+          role: 'owner',
+          organization_id: user.organization_id,
+          status: 'active'
+        },
         ...memberIds.map(id => ({
           room_id: room.id,
           user_id: id,
-          role: 'member'
+          role: 'member',
+          organization_id: user.organization_id,
+          status: 'active'
         }))
       ]
 

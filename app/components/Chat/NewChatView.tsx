@@ -57,23 +57,42 @@ export function NewChatView({ onClose, onChatCreated }: NewChatViewProps) {
 
   async function handleSelectAdmin(adminId: string) {
     try {
-      if (!user?.organization_id) return;
+      if (!user?.id) {
+        console.error('No user ID');
+        return;
+      }
 
-      const { data, error } = await supabase
+      setLoading(true);
+      console.log('Starting chat creation with admin:', adminId);
+
+      // Crear o obtener la sala de chat usando la función RPC
+      const { data: roomId, error: roomError } = await supabase
         .rpc('get_or_create_direct_chat', {
-          p_organization_id: user.organization_id,
-          p_user_id_1: user.id,
-          p_user_id_2: adminId
+          target_user_id: adminId
         });
 
-      if (error) throw error;
-      
-      if (data) {
-        onChatCreated(data);
+      console.log('get_or_create_direct_chat result:', { roomId, error: roomError });
+
+      if (roomError) {
+        console.error('Error creating chat:', roomError);
+        throw roomError;
       }
+      
+      if (!roomId) {
+        console.error('No room ID returned');
+        throw new Error('No se pudo crear la sala de chat');
+      }
+
+      // Esperar un momento para que se procesen los cambios
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      console.log('Chat creation completed successfully');
+      onChatCreated(roomId);
     } catch (error) {
-      console.error('Error creating chat:', error);
+      console.error('Error in handleSelectAdmin:', error);
       toast.error('Error al crear el chat');
+    } finally {
+      setLoading(false);
     }
   }
 

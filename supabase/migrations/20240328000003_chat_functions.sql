@@ -1,9 +1,5 @@
 -- Función para obtener o crear un chat directo entre dos usuarios
-CREATE OR REPLACE FUNCTION get_or_create_direct_chat(
-    p_organization_id UUID,
-    p_user_id_1 UUID,
-    p_user_id_2 UUID
-)
+CREATE OR REPLACE FUNCTION get_or_create_direct_chat(target_user_id UUID)
 RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -11,71 +7,77 @@ SET search_path = public
 AS $$
 DECLARE
     v_room_id UUID;
-    v_user_1_name TEXT;
-    v_user_2_name TEXT;
-    v_room_name TEXT;
+    v_org_id UUID;
+    v_current_user_id UUID;
 BEGIN
+    -- Obtener el ID del usuario actual
+    v_current_user_id := auth.uid();
+    
+    -- Obtener organization_id del usuario autenticado
+    SELECT organization_id INTO v_org_id 
+    FROM users 
+    WHERE id = v_current_user_id;
+
     -- Verificar que ambos usuarios pertenecen a la misma organización
     IF NOT EXISTS (
-        SELECT 1 FROM users 
-        WHERE id IN (p_user_id_1, p_user_id_2) 
-        AND organization_id = p_organization_id
-        GROUP BY organization_id 
-        HAVING COUNT(*) = 2
+        SELECT 1 
+        FROM users 
+        WHERE id = target_user_id 
+        AND organization_id = v_org_id
     ) THEN
         RAISE EXCEPTION 'Los usuarios deben pertenecer a la misma organización';
     END IF;
 
     -- Buscar si ya existe un chat directo entre estos usuarios
-    SELECT DISTINCT cr.id INTO v_room_id
+    SELECT cr.id INTO v_room_id
     FROM chat_rooms cr
-    JOIN chat_room_members crm1 ON cr.id = crm1.room_id
-    JOIN chat_room_members crm2 ON cr.id = crm2.room_id
     WHERE cr.type = 'direct'
-    AND cr.organization_id = p_organization_id
-    AND crm1.user_id = p_user_id_1
-    AND crm2.user_id = p_user_id_2;
+    AND cr.organization_id = v_org_id
+    AND EXISTS (
+        SELECT 1 
+        FROM chat_room_members crm1
+        JOIN chat_room_members crm2 ON crm1.room_id = crm2.room_id
+        WHERE crm1.room_id = cr.id
+        AND crm1.user_id = v_current_user_id
+        AND crm2.user_id = target_user_id
+        AND crm1.status = 'active'
+        AND crm2.status = 'active'
+    )
+    LIMIT 1;
 
     -- Si no existe, crear uno nuevo
     IF v_room_id IS NULL THEN
-        -- Obtener nombres de usuarios para el nombre de la sala
-        SELECT CONCAT(first_name, ' ', last_name) INTO v_user_1_name
-        FROM users WHERE id = p_user_id_1;
-        
-        SELECT CONCAT(first_name, ' ', last_name) INTO v_user_2_name
-        FROM users WHERE id = p_user_id_2;
-
-        -- Crear nombre de la sala
-        v_room_name := CONCAT(v_user_1_name, ' - ', v_user_2_name);
-
         -- Crear la sala
         INSERT INTO chat_rooms (
             organization_id,
             name,
             type,
             created_by,
-            status
+            is_private
         )
         VALUES (
-            p_organization_id,
-            v_room_name,
+            v_org_id,
+            'Chat Directo',
             'direct',
-            p_user_id_1,
-            'active'
+            v_current_user_id,
+            true
         )
         RETURNING id INTO v_room_id;
 
-        -- Agregar miembros
+        -- Agregar miembros con status activo
         INSERT INTO chat_room_members (
             room_id,
             user_id,
             organization_id,
             role,
-            status
+            status,
+            created_by,
+            created_at,
+            updated_at
         )
         VALUES
-            (v_room_id, p_user_id_1, p_organization_id, 'member', 'active'),
-            (v_room_id, p_user_id_2, p_organization_id, 'member', 'active');
+            (v_room_id, v_current_user_id, v_org_id, 'member', 'active', v_current_user_id, NOW(), NOW()),
+            (v_room_id, target_user_id, v_org_id, 'member', 'active', v_current_user_id, NOW(), NOW());
     END IF;
 
     RETURN v_room_id;

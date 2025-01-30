@@ -10,8 +10,10 @@ import { toast } from 'react-hot-toast';
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 interface User {
+  id: string;
   first_name: string;
   last_name: string;
+  organization_id: string;
 }
 
 interface Message {
@@ -19,7 +21,11 @@ interface Message {
   content: string;
   created_at: string;
   user_id: string;
-  user: User;
+  user: {
+    first_name: string;
+    last_name: string;
+    organization_id: string;
+  };
 }
 
 interface ChatMessage {
@@ -29,9 +35,18 @@ interface ChatMessage {
   user_id: string;
   room_id: string;
   organization_id: string;
+  users: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    organization_id: string;
+  };
 }
 
-type RealtimePayload = RealtimePostgresChangesPayload<ChatMessage>;
+type RealtimePayload = RealtimePostgresChangesPayload<{
+  [key: string]: any;
+  new: ChatMessage;
+}>;
 
 interface ChatViewProps {
   roomId: string;
@@ -44,54 +59,58 @@ export function ChatView({ roomId, onClose }: ChatViewProps) {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
-  // Cargar mensajes
+  // Cargar mensajes y configurar realtime
   useEffect(() => {
-    if (userLoading) return;
+    if (!user || userLoading) return;
 
     async function loadMessages() {
       try {
-        if (!user) {
-          console.error("Usuario no autenticado");
-          toast.error('Por favor inicia sesión para ver los mensajes');
-          return;
-        }
+        // Verificar membresía en la sala con reintentos
+        let memberData = null;
+        let retries = 0;
+        const maxRetries = 3;
 
-        console.log('Verificando membresía para:', {
-          roomId,
-          userId: user.id
-        });
+        while (retries < maxRetries && !memberData) {
+          console.log(`Intento ${retries + 1} de verificar membresía...`);
+          
+          const { data, error: memberError } = await supabase
+            .from('chat_room_members')
+            .select('*')
+            .eq('room_id', roomId)
+            .eq('user_id', user.id)
+            .maybeSingle();
 
-        // Verificar membresía en la sala
-        const { data: memberData, error: memberError } = await supabase
-          .from('chat_room_members')
-          .select('*')
-          .eq('room_id', roomId)
-          .eq('user_id', user.id)
-          .single();
+          if (memberError) {
+            console.error('Error verificando membresía:', memberError);
+            toast.error('Error de acceso al chat');
+            onClose();
+            return;
+          }
 
-        if (memberError) {
-          console.error('Error detallado:', {
-            error: memberError,
-            context: {
-              roomId,
-              userId: user.id
-            }
-          });
-          toast.error(`Error de acceso: ${memberError.message}`);
-          return;
+          if (data) {
+            console.log('Membresía encontrada:', data);
+            memberData = data;
+            break;
+          }
+
+          console.log('Membresía no encontrada, reintentando...');
+          retries++;
+          if (retries < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
         }
 
         if (!memberData) {
-          console.error('Usuario no es miembro de la sala:', {
-            roomId,
-            userId: user.id
-          });
+          console.error('No se encontró membresía después de reintentos');
           toast.error('No tienes acceso a esta sala de chat');
+          onClose();
           return;
         }
 
-        const { data, error } = await supabase
+        // Cargar mensajes
+        const { data: messages, error: messagesError } = await supabase
           .from('chat_messages')
           .select(`
             id,
@@ -101,92 +120,45 @@ export function ChatView({ roomId, onClose }: ChatViewProps) {
             users (
               id,
               first_name,
-              last_name
+              last_name,
+              organization_id
             )
           `)
           .eq('room_id', roomId)
           .order('created_at', { ascending: true });
 
-        if (error) {
-          console.error('Error cargando mensajes:', error);
+        if (messagesError) {
+          console.error('Error cargando mensajes:', messagesError);
           toast.error('Error cargando los mensajes');
           return;
         }
 
-        const typedMessages = (data || []).map((msg: any): Message => ({
+        const typedMessages = (messages || []).map((msg: ChatMessage): Message => ({
           id: msg.id,
           content: msg.content,
           created_at: msg.created_at,
           user_id: msg.user_id,
           user: {
-            first_name: msg.users.first_name,
-            last_name: msg.users.last_name
+            first_name: msg.users.first_name || 'Usuario',
+            last_name: msg.users.last_name || 'Desconocido',
+            organization_id: msg.users.organization_id || user?.organization_id || ''
           }
         }));
 
         setMessages(typedMessages);
-      } catch (error) {
-        console.error('Error detallado al cargar mensajes:', {
-          error,
-          context: {
-            roomId,
-            userId: user?.id
-          }
-        });
-        toast.error('Error cargando los mensajes');
-      }
-      setLoading(false);
-    }
 
-    loadMessages();
-
-    // Suscribirse a cambios en tiempo real
-    const channel: RealtimeChannel = supabase.channel(`room:${roomId}`, {
-      config: {
-        broadcast: { self: true }
-      }
-    });
-
-    // Función para procesar nuevos mensajes
-    const handleNewMessage = async (payload: RealtimePayload) => {
-      try {
-        console.log('Nuevo mensaje recibido:', payload);
-        
-        if (!payload.new) {
-          console.error('No hay datos nuevos en el payload');
-          return;
-        }
-
-        const newData = payload.new as ChatMessage;
-        
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('first_name, last_name')
-          .eq('id', newData.user_id)
-          .single();
-
-        if (userError) {
-          console.error('Error cargando datos del usuario:', userError);
-          return;
-        }
-
-        const newMessage: Message = {
-          id: newData.id,
-          content: newData.content,
-          created_at: newData.created_at,
-          user_id: newData.user_id,
-          user: userData as User
-        };
-
-        setMessages(current => [...current, newMessage]);
+        // Actualizar último mensaje leído
         await updateLastRead();
       } catch (error) {
-        console.error('Error procesando mensaje en tiempo real:', error);
+        console.error('Error cargando chat:', error);
+        toast.error('Error cargando el chat');
+      } finally {
+        setLoading(false);
       }
-    };
+    }
 
-    // Suscribirse a cambios en los mensajes
-    channel
+    // Configurar canal de realtime
+    const channel = supabase.channel(`room:${roomId}`)
       .on(
         'postgres_changes',
         {
@@ -199,56 +171,90 @@ export function ChatView({ roomId, onClose }: ChatViewProps) {
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          console.log(`Suscrito al canal room:${roomId}`);
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('Error en el canal de realtime');
-          toast.error('Error en la conexión en tiempo real');
+          console.log('Suscrito a actualizaciones del chat');
         }
       });
 
-    // Actualizar último mensaje leído
-    const updateLastRead = async () => {
-      try {
-        if (!user) {
-          console.error("Usuario no autenticado");
-          return;
-        }
+    channelRef.current = channel;
+    loadMessages();
 
-        const { error } = await supabase
-          .from('chat_room_members')
-          .update({ 
-            last_read_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('room_id', roomId)
-          .eq('user_id', user.id);
-
-        if (error) {
-          console.error('Error updating last_read:', error);
-          toast.error('Error actualizando el estado de lectura');
-        }
-      } catch (error) {
-        console.error('Error updating last_read:', error);
-        toast.error('Error actualizando el estado de lectura');
+    return () => {
+      if (channelRef.current) {
+        channelRef.current.unsubscribe();
       }
     };
-
-    updateLastRead();
-    
-    return () => {
-      console.log('Limpiando suscripción de realtime');
-      channel.unsubscribe();
-    };
   }, [roomId, user, userLoading]);
+
+  // Manejar nuevos mensajes
+  async function handleNewMessage(payload: RealtimePayload) {
+    try {
+      if (!payload.new) return;
+
+      const newData = payload.new as ChatMessage;
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('first_name, last_name, organization_id')
+        .eq('id', newData.user_id)
+        .single();
+
+      if (userError) {
+        console.error('Error cargando datos del usuario:', userError);
+        return;
+      }
+
+      const newMessage: Message = {
+        id: newData.id,
+        content: newData.content,
+        created_at: newData.created_at,
+        user_id: newData.user_id,
+        user: {
+          first_name: userData.first_name || 'Usuario',
+          last_name: userData.last_name || 'Desconocido',
+          organization_id: userData.organization_id
+        }
+      };
+
+      setMessages(current => [...current, newMessage]);
+      await updateLastRead();
+    } catch (error) {
+      console.error('Error procesando nuevo mensaje:', error);
+    }
+  }
+
+  // Actualizar último mensaje leído
+  async function updateLastRead() {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('chat_room_members')
+        .update({ 
+          last_read_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('room_id', roomId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error actualizando último mensaje leído:', error);
+      }
+    } catch (error) {
+      console.error('Error en updateLastRead:', error);
+    }
+  }
 
   // Scroll al último mensaje
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Enviar mensaje
   async function handleSendMessage(e: React.FormEvent) {
     e.preventDefault();
-    if (!newMessage.trim() || !user) return;
+    if (!newMessage.trim() || !user?.id || !user?.organization_id) {
+      console.log('Missing required data:', { user, newMessage });
+      return;
+    }
 
     try {
       // Verificar membresía en la sala
@@ -257,33 +263,39 @@ export function ChatView({ roomId, onClose }: ChatViewProps) {
         .select('*')
         .eq('room_id', roomId)
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (memberError || !memberData) {
-        console.error('Error: Usuario no es miembro de la sala', memberError);
+      if (memberError) {
+        console.error('Error verificando membresía:', memberError);
+        toast.error('Error de acceso al chat');
+        return;
+      }
+
+      if (!memberData) {
+        console.error('Usuario no es miembro de la sala');
         toast.error('No tienes permiso para enviar mensajes en esta sala');
         return;
       }
 
-      const { error: sendError } = await supabase
+      // Enviar mensaje
+      const { error } = await supabase
         .from('chat_messages')
         .insert({
           room_id: roomId,
           content: newMessage.trim(),
           user_id: user.id,
-          type: 'text'
+          organization_id: user.organization_id
         });
 
-      if (sendError) {
-        console.error('Error al enviar mensaje:', sendError);
-        toast.error('Error al enviar el mensaje: ' + sendError.message);
+      if (error) {
+        console.error('Error enviando mensaje:', error);
+        toast.error('Error al enviar el mensaje');
         return;
       }
 
       setNewMessage('');
-      toast.success('Mensaje enviado');
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('Error en handleSendMessage:', error);
       toast.error('Error al enviar el mensaje');
     }
   }
