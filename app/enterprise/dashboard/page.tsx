@@ -93,6 +93,11 @@ interface FormattedTask extends Omit<TaskData, 'assignee'> {
 
 interface SalaWithTasks extends Sala {
   tasks: FormattedTask[]
+  areas: {
+    id: string
+    name: string
+    sala_id: string
+  }[]
 }
 
 interface Employee {
@@ -350,24 +355,62 @@ export default function EnterpriseOverviewPage() {
         throw new Error(`Error al cargar salas: ${salasError.message}`);
       }
 
+      // 4. Cargar áreas para cada sala
+      const { data: areasData, error: areasError } = await supabase
+        .from('areas')
+        .select('*')
+        .eq('organization_id', userProfile.organization_id)
+        .eq('status', 'active');
+
+      if (areasError) {
+        console.error('Error al cargar áreas:', areasError);
+        throw new Error(`Error al cargar áreas: ${areasError.message}`);
+      }
+
+      // 5. Cargar tareas
+      const { data: tasksData, error: tasksError } = await supabase
+        .from('tasks')
+        .select(`
+          *,
+          assignee:assigned_to(id, first_name, last_name)
+        `)
+        .eq('organization_id', userProfile.organization_id);
+
+      if (tasksError) {
+        console.error('Error al cargar tareas:', tasksError);
+        throw new Error(`Error al cargar tareas: ${tasksError.message}`);
+      }
+
       if (!salasData || salasData.length === 0) {
         console.warn('No se encontraron salas');
         setAreas([]);
         setAreasTasks([]);
       } else {
-        // 4. Formatear y establecer datos de salas
-        const formattedSalas = salasData.map(sala => ({
-          id: sala.id,
-          name: sala.nombre,
-          color: getSalaColor(sala.nombre),
-          staff_count: 0
-        }));
+        // 6. Formatear y establecer datos de salas con sus áreas y tareas
+        const formattedSalas = salasData.map(sala => {
+          const salaAreas = areasData?.filter(area => area.sala_id === sala.id) || [];
+          const salaTasks = tasksData?.filter(task => 
+            salaAreas.some(area => area.id === task.area_id)
+          ).map(task => ({
+            ...task,
+            assigned_name: task.assignee ? `${task.assignee.first_name} ${task.assignee.last_name}` : 'Sin asignar'
+          })) || [];
+
+          return {
+            id: sala.id,
+            name: sala.nombre,
+            color: getSalaColor(sala.nombre),
+            staff_count: 0,
+            areas: salaAreas,
+            tasks: salaTasks
+          };
+        });
 
         setAreas(formattedSalas);
-        setAreasTasks(formattedSalas.map(sala => ({ ...sala, tasks: [] })));
+        setAreasTasks(formattedSalas);
       }
 
-      // 5. Cargar inventario
+      // 7. Cargar inventario
       const { data: inventoryData, error: inventoryError } = await supabase
         .from('inventory_items')
         .select('*')
@@ -689,45 +732,82 @@ export default function EnterpriseOverviewPage() {
       <div className="mt-8">
         <h2 className="text-2xl font-bold text-gray-800 mb-6">Tareas por Sala</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {areasTasks.map(area => {
-            const completedTasks = area.tasks.filter(t => t.status === 'completed').length;
-            const progress = `${completedTasks}/${area.tasks.length}`;
-            const progressPercentage = (completedTasks / area.tasks.length) * 100;
-            const areaColor = getSalaColor(area.name);
+          {areasTasks.map(sala => {
+            const completedTasks = sala.tasks.filter(t => t.status === 'completed').length;
+            const progress = `${completedTasks}/${sala.tasks.length}`;
+            const progressPercentage = sala.tasks.length > 0 ? (completedTasks / sala.tasks.length) * 100 : 0;
+            const salaColor = getSalaColor(sala.name);
+
+            // Filtrar solo las áreas que tienen tareas asignadas
+            const areasWithTasks = sala.areas.filter(area => 
+              sala.tasks.some(task => task.area_id === area.id)
+            );
 
             return (
-              <div key={area.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
-                <div className="p-6 border-l-4" style={{ borderColor: areaColor }}>
+              <div key={sala.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div className="p-6 border-l-4" style={{ borderColor: salaColor }}>
+                  {/* Encabezado de la Sala */}
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold" style={{ color: areaColor }}>{area.name}</h3>
-                    <span className="text-sm text-gray-500">{area.tasks.length} tareas</span>
+                    <h3 className="text-lg font-semibold" style={{ color: salaColor }}>{sala.name}</h3>
+                    <span className="text-sm text-gray-500">{sala.tasks.length} tareas</span>
                   </div>
-                  <div className="space-y-4">
-                    {area.tasks.map(task => (
-                      <div key={task.id} className="p-4 bg-gray-50 rounded-lg">
-                        <h4 className="font-medium">{task.title}</h4>
-                        <div className="mt-2 space-y-2">
-                          <p className="text-sm text-gray-600">Asignado a: {task.assigned_name}</p>
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <span>Inicio: {new Date(task.created_at || '').toLocaleString()}</span>
+
+                  {/* Lista de Áreas y sus Tareas */}
+                  <div className="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                    {areasWithTasks.map(area => {
+                      const areaTasks = sala.tasks.filter(task => task.area_id === area.id);
+                      
+                      return (
+                        <div key={area.id} className="border-t pt-4 first:border-t-0 first:pt-0">
+                          <div className="flex justify-between items-center mb-2">
+                            <h4 className="font-medium text-gray-700">{area.name}</h4>
+                            <span className="text-xs text-gray-500">{areaTasks.length} tareas</span>
                           </div>
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <span>Finalización: {task.status === 'completed' ? 'Completado' : 'En progreso'}</span>
+                          <div className="space-y-3">
+                            {areaTasks.map(task => (
+                              <div key={task.id} className="p-3 bg-gray-50 rounded-lg">
+                                <div className="flex justify-between items-start">
+                                  <h5 className="font-medium text-gray-900">{task.title}</h5>
+                                  <span className={`text-xs px-2 py-1 rounded-full ${
+                                    task.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                    task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {task.status === 'completed' ? 'Completado' :
+                                     task.status === 'in_progress' ? 'En progreso' :
+                                     'Pendiente'}
+                                  </span>
+                                </div>
+                                <div className="mt-2 space-y-1">
+                                  <p className="text-sm text-gray-600">{task.description}</p>
+                                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                                    <span>Asignado a: {task.assigned_name}</span>
+                                  </div>
+                                  {task.due_date && (
+                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                      <span>Vence: {new Date(task.due_date).toLocaleDateString()}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
+
+                  {/* Barra de Progreso */}
                   <div className="mt-4 flex items-center justify-between">
-                    <span className="text-sm text-gray-500">Progreso</span>
-                    <span className="text-sm" style={{ color: areaColor }}>{progress}</span>
+                    <span className="text-sm text-gray-500">Progreso General</span>
+                    <span className="text-sm" style={{ color: salaColor }}>{progress}</span>
                   </div>
                   <div className="mt-2 h-1 bg-gray-200 rounded-full">
                     <div 
                       className="h-1 rounded-full" 
                       style={{ 
                         width: `${progressPercentage}%`,
-                        backgroundColor: areaColor
+                        backgroundColor: salaColor
                       }}
                     ></div>
                   </div>
