@@ -14,14 +14,14 @@ interface User {
   last_name: string
 }
 
-interface WorkShiftArea {
-  name: string
+interface WorkShiftSala {
+  nombre: string
 }
 
 interface WorkShift {
   id: string
   organization_id: string
-  area_id: string | null
+  sala_id: string | null
   user_id: string | null
   replacement_user_id: string | null
   start_time: string
@@ -33,7 +33,7 @@ interface WorkShift {
   notes: string | null
   main_user: User | null
   replacement_user: User | null
-  area: WorkShiftArea | null
+  sala: WorkShiftSala | null
 }
 
 interface Shift {
@@ -49,19 +49,25 @@ interface Shift {
   overtime: string | null
   shift_type: 'morning' | 'afternoon' | 'night' | 'custom' | null
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+  sala_id?: string | null
 }
 
-interface Area {
+interface Sala {
   id: string
   name: string
+  nombre?: string
   color: string
   staff_count: number
+  estado?: boolean
+  descripcion?: string | null
+  created_at?: string
+  organization_id?: string
 }
 
 interface TaskData {
   id: string
   organization_id: string
-  area_id: string | null
+  sala_id: string | null
   title: string
   description: string | null
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
@@ -80,11 +86,12 @@ interface TaskData {
   assignee: User | null
 }
 
-interface FormattedTask extends TaskData {
+interface FormattedTask extends Omit<TaskData, 'assignee'> {
+  assignee: User | null
   assigned_name: string
 }
 
-interface AreaWithTasks extends Area {
+interface SalaWithTasks extends Sala {
   tasks: FormattedTask[]
 }
 
@@ -142,14 +149,157 @@ export default function EnterpriseOverviewPage() {
   const [showAreaModal, setShowAreaModal] = useState(false);
   const [showAllStaff, setShowAllStaff] = useState(false);
   const [shifts, setShifts] = useState<Shift[]>([]);
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [areasTasks, setAreasTasks] = useState<AreaWithTasks[]>([]);
+  const [areas, setAreas] = useState<Sala[]>([]);
+  const [areasTasks, setAreasTasks] = useState<SalaWithTasks[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const supabase = createClientComponentClient();
+
+  const getSalaColor = (salaName: string): string => {
+    // Normalizar el nombre de la sala (quitar acentos y convertir a minúsculas)
+    const normalizedName = salaName.toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+    const colorMap: { [key: string]: string } = {
+      // Salas de recepción y espera
+      'area de recepcion': '#3b82f6',
+      'area recepcion': '#3b82f6',
+      'recepcion': '#3b82f6',
+      'sala de espera': '#0ea5e9',
+
+      // Salas médicas y procedimientos
+      'consultorio de oncologia': '#22c55e',
+      'consultorio oncologia': '#22c55e',
+      'oncologia': '#22c55e',
+      'sala de procedimientos': '#f43f5e',
+      'procedimientos': '#f43f5e',
+      'sala de reanimacion': '#ef4444',
+      'reanimacion': '#ef4444',
+      'triage': '#22c55e',
+
+      // Salas de servicio y almacenamiento
+      'bano publico medicina': '#ef4444',
+      'banos': '#ef4444',
+      'cto septico': '#f59e0b',
+      'cuarto septico': '#f59e0b',
+      'cuarto de aseo': '#8b5cf6',
+      'aseo': '#8b5cf6',
+      'cuarto de urgencias': '#10b981',
+      'urgencias': '#10b981',
+      'cuarto de descanso': '#0891b2',
+      'descanso': '#0891b2',
+      'cuarto de medicamento': '#6366f1',
+      'medicamento': '#6366f1',
+      'cuarto de ropa limpia': '#22c55e',
+      'ropa limpia': '#22c55e',
+      'cuarto de ropa sucia': '#f43f5e',
+      'ropa sucia': '#f43f5e',
+
+      // Depósitos y almacenes
+      'deposito': '#6366f1',
+      'deposito de medicamentos': '#6366f1',
+      'medicamentos': '#6366f1',
+      'deposito de residuos': '#f43f5e',
+      'residuos': '#f43f5e',
+
+      // Salas administrativas y de personal
+      'estar de enfermeria': '#0ea5e9',
+      'enfermeria': '#0ea5e9',
+      'estacion de enfermeria': '#0ea5e9',
+      'oficina de jefe de enfermeria': '#3b82f6',
+      'jefe enfermeria': '#3b82f6',
+      'oficina del jefe del servicio': '#8b5cf6',
+      'jefe servicio': '#8b5cf6',
+      'sala de reuniones': '#f97316',
+      'reuniones': '#f97316',
+
+      // Salas de circulación
+      'pasillo de acceso entrada': '#64748b',
+      'pasillo entrada': '#64748b',
+      'escalera de emergencia': '#ef4444',
+      'escalera emergencia': '#ef4444',
+
+      // Salas de hospitalización
+      'sala de hospitalizacion': '#14b8a6',
+      'sala de hospitalizacion 1': '#14b8a6',
+      'sala de hospitalizacion 2': '#a855f7',
+      'sala de hospitalizacion 4': '#06b6d4',
+      'sala de hospitalizacion 5': '#8b5cf6',
+      'sala de hospitalizacion 6': '#f97316',
+      'sala hospitalizacion 1, 2, 4, 5, 6': '#14b8a6',
+
+      // Habitaciones (1-20)
+      'habitacion 1': '#14b8a6',
+      'habitacion1': '#14b8a6',
+      'hab 1': '#14b8a6',
+      'habitacion 2': '#a855f7',
+      'habitacion2': '#a855f7',
+      'hab 2': '#a855f7',
+      'habitacion 3': '#ec4899',
+      'habitacion3': '#ec4899',
+      'hab 3': '#ec4899',
+      'habitacion 4': '#06b6d4',
+      'habitacion4': '#06b6d4',
+      'hab 4': '#06b6d4',
+      'habitacion 5': '#8b5cf6',
+      'habitacion5': '#8b5cf6',
+      'hab 5': '#8b5cf6',
+      'habitacion 6': '#f97316',
+      'habitacion6': '#f97316',
+      'hab 6': '#f97316',
+      'habitacion 7': '#84cc16',
+      'habitacion7': '#84cc16',
+      'hab 7': '#84cc16',
+      'habitacion 8': '#6366f1',
+      'habitacion8': '#6366f1',
+      'hab 8': '#6366f1',
+      'habitacion 9': '#14b8a6',
+      'habitacion9': '#14b8a6',
+      'hab 9': '#14b8a6',
+      'habitacion 10': '#0ea5e9',
+      'habitacion10': '#0ea5e9',
+      'hab 10': '#0ea5e9',
+      'habitacion 11': '#a855f7',
+      'habitacion11': '#a855f7',
+      'hab 11': '#a855f7',
+      'habitacion 12': '#f43f5e',
+      'habitacion12': '#f43f5e',
+      'hab 12': '#f43f5e',
+      'habitacion 13': '#22c55e',
+      'habitacion13': '#22c55e',
+      'hab 13': '#22c55e',
+      'habitacion 14': '#f97316',
+      'habitacion14': '#f97316',
+      'hab 14': '#f97316',
+      'habitacion 15': '#3b82f6',
+      'habitacion15': '#3b82f6',
+      'hab 15': '#3b82f6',
+      'habitacion 16': '#8b5cf6',
+      'habitacion16': '#8b5cf6',
+      'hab 16': '#8b5cf6',
+      'habitacion 17': '#ef4444',
+      'habitacion17': '#ef4444',
+      'hab 17': '#ef4444',
+      'habitacion 18': '#06b6d4',
+      'habitacion18': '#06b6d4',
+      'hab 18': '#06b6d4',
+      'habitacion 19': '#84cc16',
+      'habitacion19': '#84cc16',
+      'hab 19': '#84cc16',
+      'habitacion 20': '#6366f1',
+      'habitacion20': '#6366f1',
+      'hab 20': '#6366f1',
+
+      // Sala general
+      'general': '#64748b'
+    };
+
+    return colorMap[normalizedName] || '#64748b'; // Color por defecto gris si no se encuentra la sala
+  };
 
   // Cargar datos del dashboard
   useEffect(() => {
@@ -161,206 +311,63 @@ export default function EnterpriseOverviewPage() {
       setLoading(true);
       setError(null);
 
-      // Obtener el usuario y su organización
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No autorizado');
+      // 1. Obtener el usuario y verificar sesión
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      console.log('Auth user:', user);
+      console.log('Auth error:', userError);
+      
+      if (userError || !user) {
+        console.error('Error de autenticación:', userError);
+        throw new Error('No autorizado');
+      }
 
+      // 2. Obtener perfil del usuario
       const { data: userProfile, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', user.id)
         .single();
 
-      if (profileError) {
-        console.log('Error al obtener perfil:', profileError);
-        throw profileError;
+      console.log('User profile:', userProfile);
+      console.log('Profile error:', profileError);
+
+      if (profileError || !userProfile) {
+        console.error('Error al obtener perfil:', profileError);
+        throw new Error('Perfil no encontrado');
       }
 
-      if (!userProfile) throw new Error('Usuario no encontrado');
-
-      // Verificar permisos del usuario
-      console.log('Perfil de usuario:', {
-        id: userProfile.id,
-        email: userProfile.email,
-        role: userProfile.role,
-        organization_id: userProfile.organization_id
-      });
-
-      // Intentar una consulta simple a employees primero
-      const { data: testAccess, error: testError } = await supabase
-        .from('users')
-        .select('count')
-        .eq('organization_id', userProfile.organization_id)
-        .single();
-
-      if (testError) {
-        console.log('Error de prueba de acceso:', testError);
-      } else {
-        console.log('Acceso exitoso a usuarios, conteo:', testAccess);
-      }
-
-      // Cargar personal desde la tabla users
-      const { data: staffData, error: staffError } = await supabase
-        .from('users')
-        .select(`
-          id,
-          organization_id,
-          first_name,
-          last_name,
-          role,
-          status
-        `)
-        .eq('organization_id', userProfile.organization_id)
-        .not('role', 'eq', 'superadmin');
-
-      if (staffError) {
-        console.log('Error detallado del personal:', staffError);
-        throw staffError;
-      }
-
-      const formattedStaff = (staffData || []).map(member => ({
-        id: member.id,
-        organization_id: member.organization_id,
-        user_id: member.id,
-        work_shift_id: null,
-        first_name: member.first_name,
-        last_name: member.last_name,
-        position: member.role || 'No especificado',
-        department: 'General',  // Por defecto asignamos a General
-        status: member.status || 'active',
-        hire_date: new Date().toISOString(),
-        role: member.role,
-        contact_info: {},
-        created_at: null,
-        updated_at: null,
-        name: `${member.first_name} ${member.last_name}`,
-        area_name: 'General'  // Por defecto asignamos a General
-      }));
-
-      setStaff(formattedStaff);
-
-      // Cargar turnos
-      const { data: shiftsData, error: shiftsError } = await supabase
-        .from('work_shifts')
-        .select(`
-          id,
-          organization_id,
-          area_id,
-          user_id,
-          replacement_user_id,
-          start_time,
-          end_time,
-          status,
-          break_time,
-          overtime_minutes,
-          shift_type,
-          notes,
-          main_user:user_id(
-            first_name,
-            last_name
-          ),
-          replacement_user:replacement_user_id(
-            first_name,
-            last_name
-          ),
-          area:area_id(
-            name
-          )
-        `)
-        .eq('organization_id', userProfile.organization_id)
-        .order('start_time');
-
-      if (shiftsError) throw shiftsError;
-      
-      const formattedShifts = (shiftsData as unknown as WorkShift[])?.map(shift => ({
-        ...shift,
-        name: shift.shift_type ? 
-          `Turno ${shift.shift_type === 'morning' ? 'Mañana' : 
-                  shift.shift_type === 'afternoon' ? 'Tarde' : 
-                  shift.shift_type === 'night' ? 'Noche' : 'Personalizado'}` :
-          `${shift.main_user?.first_name} ${shift.main_user?.last_name}`,
-        schedule: `${new Date(shift.start_time).toLocaleTimeString()} - ${new Date(shift.end_time).toLocaleTimeString()}`,
-        total_capacity: shift.shift_type ? 
-          (shift.shift_type === 'morning' ? 10 : 
-           shift.shift_type === 'afternoon' ? 8 : 
-           shift.shift_type === 'night' ? 6 : 4) : 1,
-        active_count: shift.status === 'in_progress' ? 1 : 0,
-        color: shift.status === 'completed' ? '#22c55e' : 
-               shift.status === 'in_progress' ? '#3b82f6' : 
-               shift.status === 'cancelled' ? '#ef4444' : '#f59e0b',
-        area_name: shift.area?.name || 'Sin área',
-        replacement: shift.replacement_user ? 
-          `${shift.replacement_user.first_name} ${shift.replacement_user.last_name}` : null,
-        duration: shift.break_time ? 
-          `${Math.floor((new Date(shift.end_time).getTime() - new Date(shift.start_time).getTime()) / (1000 * 60) - shift.break_time)} min (${shift.break_time} min descanso)` :
-          `${Math.floor((new Date(shift.end_time).getTime() - new Date(shift.start_time).getTime()) / (1000 * 60))} min`,
-        overtime: shift.overtime_minutes ? `${shift.overtime_minutes} min extra` : null,
-        shift_type: shift.shift_type,
-        status: shift.status
-      })) || [];
-
-      setShifts(formattedShifts);
-
-      // Cargar áreas
-      const { data: areasData, error: areasError } = await supabase
-        .from('areas')
+      // 3. Consulta simple a salas
+      const { data: salasData, error: salasError } = await supabase
+        .from('salas')
         .select('*')
-        .eq('organization_id', userProfile.organization_id)
-        .order('name');
-
-      if (areasError) throw areasError;
-      setAreas(areasData || []);
-
-      // Cargar tareas por área
-      const { data: tasksData, error: tasksError } = await supabase
-        .from('tasks')
-        .select(`
-          id,
-          organization_id,
-          area_id,
-          title,
-          description,
-          status,
-          priority,
-          assigned_to,
-          due_date,
-          created_at,
-          estimated_hours,
-          actual_hours,
-          complexity,
-          assignee:assigned_to(
-            first_name,
-            last_name
-          )
-        `)
         .eq('organization_id', userProfile.organization_id);
 
-      if (tasksError) throw tasksError;
+      console.log('Salas data:', salasData);
+      console.log('Salas error:', salasError);
 
-      // Agrupar tareas por área
-      const areasWithTasks = areasData?.map(area => ({
-        ...area,
-        tasks: (tasksData as unknown as TaskData[])?.filter(task => task.area_id === area.id).map(task => ({
-          id: task.id,
-          organization_id: task.organization_id,
-          area_id: task.area_id,
-          title: task.title,
-          description: task.description,
-          status: task.status,
-          priority: task.priority,
-          assigned_to: task.assigned_to,
-          due_date: task.due_date,
-          estimated_hours: task.estimated_hours,
-          actual_hours: task.actual_hours,
-          complexity: task.complexity,
-          assignee: task.assignee,
-          assigned_name: task.assignee ? `${task.assignee.first_name} ${task.assignee.last_name}` : 'Sin asignar'
-        })) || []
-      })) || [];
+      if (salasError) {
+        console.error('Error al cargar salas:', salasError);
+        throw new Error(`Error al cargar salas: ${salasError.message}`);
+      }
 
-      setAreasTasks(areasWithTasks);
+      if (!salasData || salasData.length === 0) {
+        console.warn('No se encontraron salas');
+        setAreas([]);
+        setAreasTasks([]);
+      } else {
+        // 4. Formatear y establecer datos de salas
+        const formattedSalas = salasData.map(sala => ({
+          id: sala.id,
+          name: sala.nombre,
+          color: getSalaColor(sala.nombre),
+          staff_count: 0
+        }));
 
-      // Cargar inventario (mostrar solo 3 items)
+        setAreas(formattedSalas);
+        setAreasTasks(formattedSalas.map(sala => ({ ...sala, tasks: [] })));
+      }
+
+      // 5. Cargar inventario
       const { data: inventoryData, error: inventoryError } = await supabase
         .from('inventory_items')
         .select('*')
@@ -369,8 +376,14 @@ export default function EnterpriseOverviewPage() {
         .order('quantity', { ascending: true })
         .limit(3);
 
-      if (inventoryError) throw inventoryError;
-      setInventory(inventoryData || []);
+      console.log('Inventory data:', inventoryData);
+      console.log('Inventory error:', inventoryError);
+
+      if (inventoryError) {
+        console.error('Error al cargar inventario:', inventoryError);
+      } else {
+        setInventory(inventoryData || []);
+      }
 
     } catch (error) {
       console.error('Error loading dashboard:', error);
@@ -425,7 +438,7 @@ export default function EnterpriseOverviewPage() {
 
       {/* Grid Principal */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Columna Izquierda y Central - Turnos y Áreas */}
+        {/* Columna Izquierda y Central - Turnos y Salas */}
         <div className="lg:col-span-2 space-y-6">
           <h2 className="text-2xl font-bold text-gray-800">Turnos Activos</h2>
           
@@ -518,11 +531,11 @@ export default function EnterpriseOverviewPage() {
             </div>
           </div>
 
-          {/* Distribución por Áreas */}
+          {/* Distribución por Salas */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-semibold text-gray-800">
-                Distribución por Áreas
+                Distribución por Salas
               </h3>
               <div className="flex gap-2">
                 <button className="p-2 rounded hover:bg-gray-100">
@@ -547,7 +560,7 @@ export default function EnterpriseOverviewPage() {
                       data={areas.map(area => ({
                         name: area.name,
                         value: staff.filter(s => s.area_name === area.name).length || 1,
-                        color: getAreaColor(area.name)
+                        color: getSalaColor(area.name)
                       }))}
                       cx="50%"
                       cy="50%"
@@ -557,7 +570,7 @@ export default function EnterpriseOverviewPage() {
                       dataKey="value"
                     >
                       {areas.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={getAreaColor(entry.name)} />
+                        <Cell key={`cell-${index}`} fill={getSalaColor(entry.name)} />
                       ))}
                     </Pie>
                     <Tooltip />
@@ -565,12 +578,12 @@ export default function EnterpriseOverviewPage() {
                 </ResponsiveContainer>
               </div>
 
-              {/* Lista de Áreas */}
+              {/* Lista de Salas */}
               <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
                 {areas.map(area => {
                   const areaStaff = staff.filter(s => s.area_name === area.name).length;
                   const percentage = Math.round((areaStaff / staff.length) * 100);
-                  const areaColor = getAreaColor(area.name);
+                  const areaColor = getSalaColor(area.name);
                   
                   return (
                     <div key={area.id} className="flex items-center justify-between py-2 px-4 hover:bg-gray-50 rounded-lg transition-colors duration-150">
@@ -672,15 +685,15 @@ export default function EnterpriseOverviewPage() {
         </div>
       </div>
 
-      {/* Tareas por Área - ahora fuera del grid principal */}
+      {/* Tareas por Sala - ahora fuera del grid principal */}
       <div className="mt-8">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">Tareas por Área</h2>
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">Tareas por Sala</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {areasTasks.map(area => {
             const completedTasks = area.tasks.filter(t => t.status === 'completed').length;
             const progress = `${completedTasks}/${area.tasks.length}`;
             const progressPercentage = (completedTasks / area.tasks.length) * 100;
-            const areaColor = getAreaColor(area.name);
+            const areaColor = getSalaColor(area.name);
 
             return (
               <div key={area.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -727,146 +740,3 @@ export default function EnterpriseOverviewPage() {
     </div>
   );
 }
-
-const getAreaColor = (areaName: string): string => {
-  // Normalizar el nombre del área (quitar acentos y convertir a minúsculas)
-  const normalizedName = areaName.toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-
-  const colorMap: { [key: string]: string } = {
-    // Áreas de recepción y espera
-    'area de recepcion': '#3b82f6',
-    'area recepcion': '#3b82f6',
-    'recepcion': '#3b82f6',
-    'sala de espera': '#0ea5e9',
-
-    // Áreas médicas y procedimientos
-    'consultorio de oncologia': '#22c55e',
-    'consultorio oncologia': '#22c55e',
-    'oncologia': '#22c55e',
-    'sala de procedimientos': '#f43f5e',
-    'procedimientos': '#f43f5e',
-    'sala de reanimacion': '#ef4444',
-    'reanimacion': '#ef4444',
-    'triage': '#22c55e',
-
-    // Áreas de servicio y almacenamiento
-    'bano publico medicina': '#ef4444',
-    'banos': '#ef4444',
-    'cto septico': '#f59e0b',
-    'cuarto septico': '#f59e0b',
-    'cuarto de aseo': '#8b5cf6',
-    'aseo': '#8b5cf6',
-    'cuarto de urgencias': '#10b981',
-    'urgencias': '#10b981',
-    'cuarto de descanso': '#0891b2',
-    'descanso': '#0891b2',
-    'cuarto de medicamento': '#6366f1',
-    'medicamento': '#6366f1',
-    'cuarto de ropa limpia': '#22c55e',
-    'ropa limpia': '#22c55e',
-    'cuarto de ropa sucia': '#f43f5e',
-    'ropa sucia': '#f43f5e',
-
-    // Depósitos y almacenes
-    'deposito': '#6366f1',
-    'deposito de medicamentos': '#6366f1',
-    'medicamentos': '#6366f1',
-    'deposito de residuos': '#f43f5e',
-    'residuos': '#f43f5e',
-
-    // Áreas administrativas y de personal
-    'estar de enfermeria': '#0ea5e9',
-    'enfermeria': '#0ea5e9',
-    'estacion de enfermeria': '#0ea5e9',
-    'oficina de jefe de enfermeria': '#3b82f6',
-    'jefe enfermeria': '#3b82f6',
-    'oficina del jefe del servicio': '#8b5cf6',
-    'jefe servicio': '#8b5cf6',
-    'sala de reuniones': '#f97316',
-    'reuniones': '#f97316',
-
-    // Áreas de circulación
-    'pasillo de acceso entrada': '#64748b',
-    'pasillo entrada': '#64748b',
-    'escalera de emergencia': '#ef4444',
-    'escalera emergencia': '#ef4444',
-
-    // Salas de hospitalización
-    'sala de hospitalizacion': '#14b8a6',
-    'sala de hospitalizacion 1': '#14b8a6',
-    'sala de hospitalizacion 2': '#a855f7',
-    'sala de hospitalizacion 4': '#06b6d4',
-    'sala de hospitalizacion 5': '#8b5cf6',
-    'sala de hospitalizacion 6': '#f97316',
-    'sala hospitalizacion 1, 2, 4, 5, 6': '#14b8a6',
-
-    // Habitaciones (1-20)
-    'habitacion 1': '#14b8a6',
-    'habitacion1': '#14b8a6',
-    'hab 1': '#14b8a6',
-    'habitacion 2': '#a855f7',
-    'habitacion2': '#a855f7',
-    'hab 2': '#a855f7',
-    'habitacion 3': '#ec4899',
-    'habitacion3': '#ec4899',
-    'hab 3': '#ec4899',
-    'habitacion 4': '#06b6d4',
-    'habitacion4': '#06b6d4',
-    'hab 4': '#06b6d4',
-    'habitacion 5': '#8b5cf6',
-    'habitacion5': '#8b5cf6',
-    'hab 5': '#8b5cf6',
-    'habitacion 6': '#f97316',
-    'habitacion6': '#f97316',
-    'hab 6': '#f97316',
-    'habitacion 7': '#84cc16',
-    'habitacion7': '#84cc16',
-    'hab 7': '#84cc16',
-    'habitacion 8': '#6366f1',
-    'habitacion8': '#6366f1',
-    'hab 8': '#6366f1',
-    'habitacion 9': '#14b8a6',
-    'habitacion9': '#14b8a6',
-    'hab 9': '#14b8a6',
-    'habitacion 10': '#0ea5e9',
-    'habitacion10': '#0ea5e9',
-    'hab 10': '#0ea5e9',
-    'habitacion 11': '#a855f7',
-    'habitacion11': '#a855f7',
-    'hab 11': '#a855f7',
-    'habitacion 12': '#f43f5e',
-    'habitacion12': '#f43f5e',
-    'hab 12': '#f43f5e',
-    'habitacion 13': '#22c55e',
-    'habitacion13': '#22c55e',
-    'hab 13': '#22c55e',
-    'habitacion 14': '#f97316',
-    'habitacion14': '#f97316',
-    'hab 14': '#f97316',
-    'habitacion 15': '#3b82f6',
-    'habitacion15': '#3b82f6',
-    'hab 15': '#3b82f6',
-    'habitacion 16': '#8b5cf6',
-    'habitacion16': '#8b5cf6',
-    'hab 16': '#8b5cf6',
-    'habitacion 17': '#ef4444',
-    'habitacion17': '#ef4444',
-    'hab 17': '#ef4444',
-    'habitacion 18': '#06b6d4',
-    'habitacion18': '#06b6d4',
-    'hab 18': '#06b6d4',
-    'habitacion 19': '#84cc16',
-    'habitacion19': '#84cc16',
-    'hab 19': '#84cc16',
-    'habitacion 20': '#6366f1',
-    'habitacion20': '#6366f1',
-    'hab 20': '#6366f1',
-
-    // Área general
-    'general': '#64748b'
-  };
-
-  return colorMap[normalizedName] || '#64748b'; // Color por defecto gris si no se encuentra el área
-};

@@ -5,22 +5,30 @@ import { supabase } from '@/lib/supabase/client'
 interface Sala {
   id: string
   nombre: string
-  estado: boolean
+  status: 'active' | 'inactive'
   organization_id: string
+  created_at?: string
+  updated_at?: string
 }
 
 interface Area {
   id: string
   name: string
+  description?: string | null
+  organization_id: string
   sala_id: string
   status: 'active' | 'inactive'
-  organization_id: string
+  created_at?: string
+  updated_at?: string
 }
 
 interface User {
   id: string
-  first_name: string
-  last_name: string
+  first_name: string | null
+  last_name: string | null
+  email: string
+  organization_id: string | null
+  status: 'active' | 'inactive' | 'pending'
 }
 
 interface TaskModalProps {
@@ -31,14 +39,14 @@ interface TaskModalProps {
   organizationId: string
 }
 
-export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizationId }: TaskModalProps) {
+export default function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizationId }: TaskModalProps) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [selectedSala, setSelectedSala] = useState('')
+  const [selectedArea, setSelectedArea] = useState('')
   const [priority, setPriority] = useState('media')
   const [status, setStatus] = useState('pendiente')
   const [assignedTo, setAssignedTo] = useState('')
-  const [selectedSala, setSelectedSala] = useState('')
-  const [selectedArea, setSelectedArea] = useState('')
   const [salas, setSalas] = useState<Sala[]>([])
   const [areas, setAreas] = useState<Area[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -56,51 +64,46 @@ export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizatio
     areas: null,
     users: null
   })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!organizationId) {
-        return
-      }
-
       setLoading(prev => ({ ...prev, salas: true, users: true }))
       setError(prev => ({ ...prev, salas: null, users: null }))
 
       try {
-        // Obtener salas
+        // Obtener salas de la organización
         const { data: salasData, error: salasError } = await supabase
           .from('salas')
-          .select('id, nombre, estado, organization_id')
-          .eq('organization_id', organizationId)
-          .eq('estado', true)
-          .order('nombre')
-
-        if (salasError) {
-          console.error('Error fetching salas:', salasError)
-          setError(prev => ({ ...prev, salas: 'Error al cargar las salas' }))
-          return
-        }
-
-        setSalas(salasData || [])
-
-        // Obtener usuarios
-        const { data: usersData, error: usersError } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name')
+          .select('id, nombre, status, organization_id')
           .eq('organization_id', organizationId)
           .eq('status', 'active')
 
-        if (usersError) {
-          console.error('Error fetching users:', usersError)
-          setError(prev => ({ ...prev, users: 'Error al cargar los usuarios' }))
-          return
-        }
+        if (salasError) throw salasError
+        setSalas(salasData || [])
+      } catch (error) {
+        console.error('Error fetching salas:', error)
+        setError(prev => ({ ...prev, salas: 'Error al cargar las salas' }))
+      } finally {
+        setLoading(prev => ({ ...prev, salas: false }))
+      }
 
+      try {
+        // Obtener usuarios
+        const { data: usersData, error: usersError } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email, organization_id, status')
+          .eq('organization_id', organizationId)
+          .eq('status', 'active')
+
+        if (usersError) throw usersError
         setUsers(usersData || [])
       } catch (error) {
-        console.error('Error en fetchData:', error)
+        console.error('Error fetching users:', error)
+        setError(prev => ({ ...prev, users: 'Error al cargar los usuarios' }))
       } finally {
-        setLoading(prev => ({ ...prev, salas: false, users: false }))
+        setLoading(prev => ({ ...prev, users: false }))
       }
     }
 
@@ -109,50 +112,57 @@ export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizatio
     }
   }, [isOpen, organizationId])
 
-  // Efecto para cargar áreas cuando se selecciona una sala
-  useEffect(() => {
-    const fetchAreas = async () => {
-      if (!selectedSala) {
-        setAreas([])
-        return
-      }
-
+  const handleSalaChange = async (salaId: string) => {
+    setSelectedSala(salaId)
+    setSelectedArea('')
+    
+    if (salaId) {
       setLoading(prev => ({ ...prev, areas: true }))
       setError(prev => ({ ...prev, areas: null }))
 
       try {
+        // Primero obtener la sala para verificar que esté activa
+        const { data: salaData, error: salaError } = await supabase
+          .from('salas')
+          .select('id')
+          .eq('id', salaId)
+          .eq('status', 'active')
+          .single()
+
+        if (salaError) throw salaError
+        if (!salaData) throw new Error('Sala no encontrada o inactiva')
+
+        // Luego obtener las áreas de esa sala
         const { data: areasData, error: areasError } = await supabase
           .from('areas')
-          .select('id, name, sala_id, status, organization_id')
+          .select('id, name, sala_id, organization_id, status')
           .eq('organization_id', organizationId)
-          .eq('sala_id', selectedSala)
+          .eq('sala_id', salaId)
           .eq('status', 'active')
-          .order('name')
 
-        if (areasError) {
-          console.error('Error fetching areas:', areasError)
-          setError(prev => ({ ...prev, areas: 'Error al cargar las áreas' }))
-          return
-        }
-
+        if (areasError) throw areasError
         setAreas(areasData || [])
       } catch (error) {
-        console.error('Error en fetchAreas:', error)
+        console.error('Error fetching areas:', error)
+        setError(prev => ({ ...prev, areas: 'Error al cargar las áreas' }))
+        setAreas([])
       } finally {
         setLoading(prev => ({ ...prev, areas: false }))
       }
+    } else {
+      setAreas([])
     }
-
-    fetchAreas()
-  }, [selectedSala, organizationId])
-
-  const handleSalaChange = (salaId: string) => {
-    setSelectedSala(salaId)
-    setSelectedArea('') // Resetear el área seleccionada cuando cambia la sala
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setSubmitError(null)
+
+    // Validaciones
+    if (!title.trim()) {
+      setError(prev => ({ ...prev, salas: 'El título es requerido' }))
+      return
+    }
 
     if (!selectedSala) {
       setError(prev => ({ ...prev, salas: 'Debe seleccionar una sala' }))
@@ -164,26 +174,65 @@ export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizatio
       return
     }
 
-    onSubmit({
-      titulo: title,
-      descripcion: description,
-      sala_id: selectedSala,
-      area_id: selectedArea,
-      fecha: selectedDate,
-      prioridad: priority,
-      status: status,
-      asignado_a: assignedTo ? [assignedTo] : [],
-      organization_id: organizationId
-    })
-    onClose()
+    setIsSubmitting(true)
+
+    try {
+      // Crear la tarea
+      const taskData = {
+        titulo: title.trim(),
+        descripcion: description.trim(),
+        sala_id: selectedSala,
+        area_id: selectedArea,
+        fecha: selectedDate,
+        prioridad: priority,
+        status: status,
+        asignado_a: assignedTo ? [assignedTo] : [],
+        organization_id: organizationId
+      }
+
+      await onSubmit(taskData)
+
+      // Limpiar el formulario
+      setTitle('')
+      setDescription('')
+      setSelectedSala('')
+      setSelectedArea('')
+      setPriority('media')
+      setStatus('pendiente')
+      setAssignedTo('')
+      
+      onClose()
+    } catch (error) {
+      console.error('Error al crear la tarea:', error)
+      setSubmitError('Error al crear la tarea. Por favor, intente nuevamente.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  if (!isOpen || !organizationId) return null
+  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
-        <h2 className="text-xl font-bold mb-4">Nueva Tarea</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">Nueva Tarea</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+            disabled={isSubmitting}
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {submitError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-md">
+            {submitError}
+          </div>
+        )}
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -314,19 +363,31 @@ export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizatio
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md disabled:opacity-50"
+              disabled={isSubmitting}
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 flex items-center space-x-2"
+              disabled={isSubmitting}
             >
-              Crear
+              {isSubmitting ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Creando...</span>
+                </>
+              ) : (
+                <span>Crear</span>
+              )}
             </button>
           </div>
         </form>
       </div>
     </div>
   )
-}
+} 

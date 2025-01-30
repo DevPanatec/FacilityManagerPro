@@ -85,8 +85,18 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
     return days
   }, [currentDate, firstDayOfMonth, lastDayOfMonth])
 
-  const formatDate = (date: Date) => {
-    return date.toISOString().split('T')[0]
+  const formatDate = (date: Date, format: string = '') => {
+    // Formato para comparaciones de fecha (YYYY-MM-DD)
+    if (format === 'compare') {
+      return date.toISOString().split('T')[0]
+    }
+    // Formato para datetime-local (YYYY-MM-DDTHH:mm)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    return `${year}-${month}-${day}T${hours}:${minutes}`
   }
 
   // Función para obtener las tareas de un día específico
@@ -244,7 +254,7 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
               ${!day.isCurrentMonth ? 'bg-gray-50' : ''}
               ${day.isWeekend ? 'bg-gray-50' : ''}
               hover:bg-gray-50 transition-colors
-              ${formatDate(day.date) === formatDate(new Date()) ? 
+              ${formatDate(day.date, 'compare') === formatDate(new Date(), 'compare') ? 
                 'ring-1 ring-inset ring-blue-500' : ''}
             `}
             onClick={() => onAddTask(formatDate(day.date))}

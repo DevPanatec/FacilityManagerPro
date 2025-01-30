@@ -9,11 +9,9 @@ interface InventoryItem {
   organization_id: string
   name: string
   description: string | null
-  category: string
   quantity: number
   unit: string
   min_stock: number
-  location: string
   status: 'available' | 'low' | 'out_of_stock'
   created_at: string
   updated_at: string
@@ -46,21 +44,10 @@ interface RestockRecord {
 interface InventoryFormData {
   name: string
   description?: string
-  category: string
   quantity: number
   unit: string
   min_stock: number
-  location: string
   organization_id?: string
-}
-
-const getCategoryLabel = (category: string) => {
-  switch (category) {
-    case 'cleaning': return 'Limpieza'
-    case 'safety': return 'Seguridad'
-    case 'tools': return 'Herramientas'
-    default: return category
-  }
 }
 
 export default function InventoryPage() {
@@ -70,7 +57,6 @@ export default function InventoryPage() {
   }>({ key: 'name', direction: 'asc' });
 
   const [filters, setFilters] = useState({
-    category: 'all',
     status: 'all'
   })
 
@@ -84,6 +70,19 @@ export default function InventoryPage() {
   const [showAlerts, setShowAlerts] = useState(true)
 
   const supabase = createClientComponentClient()
+
+  // Definir los handlers aquí, antes de useEffect
+  const handleEditClick = (item: InventoryItem) => {
+    setSelectedItem(item)
+    setModalMode('edit')
+    setIsModalOpen(true)
+  }
+
+  const handleItemClick = (item: InventoryItem) => {
+    setSelectedItem(item)
+    setModalMode('use')
+    setIsModalOpen(true)
+  }
 
   // Cargar datos del inventario
   useEffect(() => {
@@ -149,11 +148,9 @@ export default function InventoryPage() {
         .update({
           name: item.name,
           description: item.description,
-          category: item.category,
           quantity: item.quantity,
-          unit: item.unit,
-          min_stock: item.min_stock,
-          location: item.location,
+          minimum_quantity: item.minimum_quantity,
+          unit_of_measure: item.unit_of_measure,
           status: item.status,
           updated_at: new Date().toISOString()
         })
@@ -183,27 +180,28 @@ export default function InventoryPage() {
 
       if (!userData) throw new Error('Usuario no encontrado')
 
-      // Si es superadmin y no se especificó organization_id, lanzar error
-      if (userData.role === 'superadmin' && !item.organization_id) {
-        throw new Error('Debe especificar una organización para el item')
+      const newItem = {
+        name: item.name,
+        description: item.description || null,
+        quantity: item.quantity || 0,
+        minimum_quantity: item.minimum_quantity || 0,
+        unit_of_measure: item.unit_of_measure,
+        organization_id: userData.organization_id,
+        status: item.quantity === 0 ? 'discontinued' : 'active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }
 
-      const organization_id = userData.role === 'superadmin' 
-        ? item.organization_id 
-        : userData.organization_id
+      console.log('Creating item:', newItem)
 
       const { error } = await supabase
         .from('inventory_items')
-        .insert([{
-          ...item,
-          organization_id,
-          status: item.quantity > item.min_stock ? 'available' : 
-                 item.quantity === 0 ? 'out_of_stock' : 'low',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }])
+        .insert([newItem])
 
-      if (error) throw error
+      if (error) {
+        console.error('Supabase error:', error)
+        throw error
+      }
 
       await loadInventoryItems()
       toast.success('Item creado correctamente')
@@ -221,9 +219,9 @@ export default function InventoryPage() {
 
       // Registrar uso
       const { error: usageError } = await supabase
-        .from('inventory_items_usage')
+        .from('inventory_usage')
         .insert([{
-          inventory_item_id: itemId,
+          inventory_id: itemId,
           quantity,
           user_id: user.id,
           created_at: new Date().toISOString(),
@@ -253,73 +251,52 @@ export default function InventoryPage() {
     }
   }
 
-  // Función para registrar reposición de item
-  const registerItemRestock = async (itemId: string, quantity: number, supplier: string) => {
-    try {
-      // Registrar reposición
-      const { error: restockError } = await supabase
-        .from('inventory_items_restock')
-        .insert([{
-          inventory_item_id: itemId,
-          quantity,
-          supplier,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }])
-
-      if (restockError) throw restockError
-
-      // Actualizar cantidad en inventario
-      const item = items.find(i => i.id === itemId)
-      if (!item) throw new Error('Item no encontrado')
-
-      const newQuantity = item.quantity + quantity
-      const newStatus = newQuantity > item.min_stock ? 'available' : 
-                       newQuantity === 0 ? 'out_of_stock' : 'low'
-
-      await updateInventoryItem({
-        ...item,
-        quantity: newQuantity,
-        status: newStatus
-      })
-
-      toast.success('Reposición registrada correctamente')
-    } catch (error) {
-      console.error('Error registering restock:', error)
-      toast.error('Error al registrar la reposición')
-    }
-  }
-
   // Función para eliminar item
   const deleteInventoryItem = async (itemId: string) => {
     try {
+      console.log('=== Inicio de eliminación de item ===')
+      console.log('ID del item a eliminar:', itemId)
+
+      // Intentar eliminar el item directamente
       const { error } = await supabase
         .from('inventory_items')
         .delete()
         .eq('id', itemId)
 
-      if (error) throw error
+      if (error) {
+        console.error('Error de Supabase al eliminar:', error)
+        throw error
+      }
 
-      await loadInventoryItems()
+      // Actualizar el estado local inmediatamente
+      setItems(prevItems => prevItems.filter(item => item.id !== itemId))
+      
+      console.log('Item eliminado exitosamente')
       toast.success('Item eliminado correctamente')
     } catch (error) {
-      console.error('Error deleting item:', error)
+      console.error('Error al eliminar item:', error)
       toast.error('Error al eliminar el item')
     }
   }
 
+  // Estadísticas generales
+  const stats = useMemo(() => {
+    const total = items.length
+    const lowStock = items.filter(item => item.quantity <= item.min_stock).length
+
+    return { total, lowStock }
+  }, [items])
+
+  // Obtener items con stock bajo
+  const lowStockItems = useMemo(() => {
+    return items.filter(item => item.quantity <= item.min_stock)
+  }, [items])
+
   // Filtrar y ordenar items
   const filteredItems = useMemo(() => {
-    console.log('Filtering items:', { items, filters, search }); // Debug log
-    
     let result = [...items]
 
-    // Aplicar filtros
-    if (filters.category !== 'all') {
-      result = result.filter(item => item.category === filters.category)
-    }
-
-    // Actualizar el filtro de estado para usar la lógica de quantity vs min_stock
+    // Aplicar filtro de estado
     if (filters.status !== 'all') {
       result = result.filter(item => {
         if (filters.status === 'available') return item.quantity > item.min_stock
@@ -334,8 +311,6 @@ export default function InventoryPage() {
       const searchLower = search.toLowerCase()
       result = result.filter(item =>
         item.name.toLowerCase().includes(searchLower) ||
-        item.location?.toLowerCase().includes(searchLower) ||
-        getCategoryLabel(item.category).toLowerCase().includes(searchLower) ||
         item.organization?.name?.toLowerCase().includes(searchLower)
       )
     }
@@ -359,85 +334,29 @@ export default function InventoryPage() {
       })
     }
 
-    console.log('Filtered result:', result); // Debug log
     return result
   }, [items, sortConfig, filters, search])
-
-  // Estadísticas generales
-  const stats = useMemo(() => {
-    const total = items.length
-    const lowStock = items.filter(item => item.status === 'low').length
-    const locations = new Set(items.map(item => item.location)).size
-
-    return { total, lowStock, locations }
-  }, [items])
-
-  // Obtener items con stock bajo
-  const lowStockItems = useMemo(() => {
-    return items.filter(item => item.quantity <= item.min_stock)
-  }, [items])
 
   const handleModalSubmit = async (formData: any) => {
     try {
       if (modalMode === 'use' && selectedItem) {
         await registerItemUsage(selectedItem.id, formData.quantity)
-      } else if (modalMode === 'restock' && selectedItem) {
-        await registerItemRestock(selectedItem.id, formData.quantity, formData.supplier)
-      } else if (selectedItem) {
+      } else if (modalMode === 'edit' && selectedItem) {
         await updateInventoryItem({
           ...selectedItem,
           ...formData
         })
-      } else {
+      } else if (modalMode === 'create') {
         await createInventoryItem(formData)
       }
+      
       setIsModalOpen(false)
       setModalMode('edit')
-      loadInventoryItems() // Refresh the list after changes
+      await loadInventoryItems()
     } catch (error) {
       console.error('Error in modal submit:', error)
       toast.error('Error al procesar la operación')
     }
-  }
-
-  const handleItemClick = (item: InventoryItem) => {
-    setSelectedItem(item)
-    setModalMode('use')
-    setIsModalOpen(true)
-  }
-
-  const handleRestockClick = (item: InventoryItem) => {
-    setSelectedItem(item)
-    setModalMode('restock')
-    setIsModalOpen(true)
-  }
-
-  const handleEditClick = (item: InventoryItem) => {
-    setSelectedItem(item)
-    setModalMode('edit')
-    setIsModalOpen(true)
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center justify-center">
-        <div className="text-red-500 text-xl font-semibold mb-4">{error}</div>
-        <button
-          onClick={loadInventoryItems}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-        >
-          Reintentar
-        </button>
-      </div>
-    )
   }
 
   return (
@@ -445,8 +364,11 @@ export default function InventoryPage() {
       {/* Header Principal */}
       <div className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <h1 className="text-xl font-semibold text-gray-900">Inventario</h1>
+          <div className="flex justify-between items-center py-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Inventario</h1>
+              <p className="mt-1 text-sm text-gray-500">Gestiona los items del inventario</p>
+            </div>
             <button
               onClick={() => {
                 setSelectedItem(undefined)
@@ -457,10 +379,15 @@ export default function InventoryPage() {
                        rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 
                        focus:ring-blue-500 transition-all duration-200 shadow-sm"
             >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                className="h-5 w-5 mr-2" 
+                viewBox="0 0 20 20" 
+                fill="currentColor"
+              >
+                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
               </svg>
-              Nuevo Item
+              Agregar Item
             </button>
           </div>
         </div>
@@ -468,7 +395,7 @@ export default function InventoryPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Estadísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center">
               <div className="p-3 rounded-lg bg-blue-50">
@@ -492,20 +419,6 @@ export default function InventoryPage() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-500">Stock Crítico</p>
                 <p className="text-2xl font-semibold text-gray-900">{stats.lowStock}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="p-3 rounded-lg bg-green-50">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Ubicaciones</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.locations}</p>
               </div>
             </div>
           </div>
@@ -545,7 +458,7 @@ export default function InventoryPage() {
                   <div key={item.id} className="flex justify-between items-center">
                     <div className="flex items-center">
                       <div className="h-2 w-2 rounded-full bg-yellow-400 mr-2"></div>
-                      <span className="text-sm text-gray-600">{item.name}: {item.quantity} {item.unit} (Mínimo: {item.min_stock})</span>
+                      <span className="text-sm text-gray-600">{item.name}: {item.quantity} unidades (Mínimo: {item.min_stock})</span>
                     </div>
                     <button
                       onClick={() => {
@@ -568,9 +481,8 @@ export default function InventoryPage() {
           </div>
         )}
 
-        {/* Contenedor principal */}
+        {/* Tabla */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          {/* Barra de herramientas */}
           <div className="border-b border-gray-200 px-6 py-4">
             <div className="flex flex-col sm:flex-row justify-between gap-4">
               <div className="relative flex-1 maxw-lg">
@@ -606,20 +518,20 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          {/* Tabla */}
-          <div className="overflow-hidden">
-            <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 400px)' }}>
+          {/* Agregar contenedor con altura fija y scroll */}
+          <div className="max-h-[600px] overflow-y-auto">
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
+                {/* Hacer que el encabezado sea fijo */}
                 <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr>
                     {[
-                      { key: 'name', label: 'Nombre', width: '25%' },
-                      { key: 'quantity', label: 'Stock', width: '12%' },
-                      { key: 'min_stock', label: 'Stock Mínimo', width: '12%' },
-                      { key: 'location', label: 'Ubicación', width: '15%' },
-                      { key: 'status', label: 'Estado', width: '12%' },
-                      { key: 'organization', label: 'Organización', width: '12%' },
-                      { key: 'updated_at', label: 'Actualizado', width: '12%' },
+                      { key: 'name', label: 'Nombre', width: '30%' },
+                      { key: 'quantity', label: 'Stock', width: '15%' },
+                      { key: 'min_stock', label: 'Stock Mínimo', width: '15%' },
+                      { key: 'status', label: 'Estado', width: '15%' },
+                      { key: 'organization', label: 'Organización', width: '15%' },
+                      { key: 'updated_at', label: 'Actualizado', width: '10%' },
                       { key: 'actions', label: '', width: '120px' }
                     ].map(({ key, label, width }) => (
                       <th
@@ -645,26 +557,12 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={8} className="px-6 py-4 text-center">
-                        <div className="flex justify-center">
-                          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : error ? (
-                    <tr>
-                      <td colSpan={8} className="px-6 py-4 text-center">
-                        <div className="text-red-500">{error}</div>
-                      </td>
-                    </tr>
-                  ) : filteredItems.map(item => (
-                    <tr key={item.id} className="hover:bg-gray-50 transition-colors duration-150">
+                  {filteredItems.map(item => (
+                    <tr key={item.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">{item.name}</div>
                         {item.description && (
-                          <div className="text-sm text-gray-500 mt-0.5">{item.description}</div>
+                          <div className="text-sm text-gray-500">{item.description}</div>
                         )}
                       </td>
                       <td className="px-6 py-4">
@@ -674,26 +572,23 @@ export default function InventoryPage() {
                             item.quantity === 0 ? 'bg-red-400' : 'bg-yellow-400'
                           }`}></span>
                           <span className="text-sm text-gray-600">
-                            {item.quantity} {item.unit}
+                            {item.quantity} unidades
                           </span>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        {item.min_stock} {item.unit}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {item.location}
+                        {item.min_stock} unidades
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                          ${item.quantity > item.min_stock
+                          ${item.status === 'active'
                             ? 'bg-green-100 text-green-800'
-                            : item.quantity === 0
+                            : item.status === 'discontinued'
                             ? 'bg-red-100 text-red-800'
                             : 'bg-yellow-100 text-yellow-800'
                           }`}>
-                          {item.quantity > item.min_stock ? 'Disponible' :
-                           item.quantity === 0 ? 'Sin Stock' : 'Stock Bajo'}
+                          {item.status === 'active' ? 'Disponible' :
+                           item.status === 'discontinued' ? 'Sin Stock' : 'Stock Bajo'}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
@@ -703,13 +598,11 @@ export default function InventoryPage() {
                         {new Date(item.updated_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end -space-x-1">
+                        <div className="flex items-center justify-end space-x-2">
                           <button
                             onClick={() => handleEditClick(item)}
+                            className="text-gray-600 hover:text-blue-600"
                             title="Editar"
-                            className="relative inline-flex items-center justify-center p-2 text-gray-600 
-                                     hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all duration-200
-                                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
@@ -717,15 +610,9 @@ export default function InventoryPage() {
                             </svg>
                           </button>
                           <button
-                            onClick={() => {
-                              setSelectedItem(item)
-                              setModalMode('use')
-                              setIsModalOpen(true)
-                            }}
-                            title="Gestionar Stock"
-                            className="relative inline-flex items-center justify-center p-2 text-gray-600 
-                                     hover:text-green-600 hover:bg-green-50 rounded-full transition-all duration-200
-                                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                            onClick={() => handleItemClick(item)}
+                            className="text-gray-600 hover:text-green-600"
+                            title="Registrar uso"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
@@ -738,10 +625,8 @@ export default function InventoryPage() {
                                 deleteInventoryItem(item.id)
                               }
                             }}
+                            className="text-gray-600 hover:text-red-600"
                             title="Eliminar"
-                            className="relative inline-flex items-center justify-center p-2 text-gray-600 
-                                     hover:text-red-600 hover:bg-red-50 rounded-full transition-all duration-200
-                                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 

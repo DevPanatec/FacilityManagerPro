@@ -592,5 +592,7 @@ export interface Area {
   name: string;
   organization_id: string;
   sala_id: string;
+  status: 'active' | 'inactive';
   created_at?: string;
+  updated_at?: string;
 } 

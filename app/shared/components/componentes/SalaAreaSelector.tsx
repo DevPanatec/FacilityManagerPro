@@ -66,7 +66,7 @@ export default function SalaAreaSelector({
         const { data: salasData, error: salasError } = await supabase
           .from('salas')
           .select('*')
-          .eq('estado', true)
+          .eq('status', 'active')
           .eq('organization_id', userProfile.organization_id)
 
         console.log('Organization ID del usuario:', userProfile.organization_id)
@@ -88,9 +88,11 @@ export default function SalaAreaSelector({
             id,
             name,
             organization_id,
-            sala_id
+            sala_id,
+            status
           `)
           .eq('organization_id', userProfile.organization_id)
+          .eq('status', 'active')
           .order('name')
 
         console.log('Consulta de áreas completa:', {
