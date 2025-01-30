@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    serverActions: true,
+  },
   images: {
     remotePatterns: [
       {
@@ -39,7 +42,12 @@ const nextConfig = {
         pathname: '/**',
       }
     ],
+    domains: ['wldiefpqmfjxernvuywv.supabase.co'],
+  },
+  webpack: (config) => {
+    config.externals = [...config.externals, 'canvas', 'jsdom'];
+    return config;
   },
 }
 
-module.exports = nextConfig 
+export default nextConfig; 

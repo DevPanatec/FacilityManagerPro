@@ -3,26 +3,46 @@ DELETE FROM chat_messages;
 DELETE FROM chat_room_members;
 DELETE FROM chat_rooms;
 
+-- Agregar columnas faltantes
+ALTER TABLE chat_rooms 
+    ADD COLUMN IF NOT EXISTS is_private BOOLEAN;
+
+ALTER TABLE chat_room_members 
+    ADD COLUMN IF NOT EXISTS status TEXT,
+    ADD COLUMN IF NOT EXISTS role TEXT,
+    ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id);
+
+ALTER TABLE chat_messages 
+    ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'text',
+    ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'sent';
+
 -- Asegurar que las tablas tienen las columnas correctas
 ALTER TABLE chat_rooms 
     ALTER COLUMN organization_id SET NOT NULL,
     ALTER COLUMN created_by SET NOT NULL,
-    ALTER COLUMN type SET NOT NULL,
-    ALTER COLUMN is_private SET NOT NULL DEFAULT true;
+    ALTER COLUMN type SET NOT NULL;
+
+ALTER TABLE chat_rooms
+    ALTER COLUMN is_private SET DEFAULT true,
+    ALTER COLUMN is_private SET NOT NULL;
 
 ALTER TABLE chat_room_members 
     ALTER COLUMN organization_id SET NOT NULL,
     ALTER COLUMN user_id SET NOT NULL,
     ALTER COLUMN room_id SET NOT NULL,
-    ALTER COLUMN status SET NOT NULL DEFAULT 'active',
-    ALTER COLUMN role SET NOT NULL DEFAULT 'member',
+    ALTER COLUMN status SET DEFAULT 'active',
+    ALTER COLUMN status SET NOT NULL,
+    ALTER COLUMN role SET DEFAULT 'member',
+    ALTER COLUMN role SET NOT NULL,
     ALTER COLUMN created_by SET NOT NULL;
 
 ALTER TABLE chat_messages 
     ALTER COLUMN organization_id SET NOT NULL,
     ALTER COLUMN user_id SET NOT NULL,
     ALTER COLUMN room_id SET NOT NULL,
-    ALTER COLUMN content SET NOT NULL;
+    ALTER COLUMN content SET NOT NULL,
+    ALTER COLUMN type SET NOT NULL,
+    ALTER COLUMN status SET NOT NULL;
 
 -- Recrear índices
 DROP INDEX IF EXISTS idx_chat_room_members_user_room;
@@ -102,12 +122,15 @@ USING (
 );
 
 -- Políticas para chat_messages
-CREATE POLICY "Messages are viewable by organization"
+CREATE POLICY "Messages are viewable by room members"
 ON chat_messages
 FOR SELECT
 USING (
-    organization_id IN (
-        SELECT organization_id FROM users WHERE id = auth.uid()
+    EXISTS (
+        SELECT 1 FROM chat_room_members
+        WHERE room_id = chat_messages.room_id
+        AND user_id = auth.uid()
+        AND status = 'active'
     )
 );
 
@@ -122,7 +145,7 @@ WITH CHECK (
         AND status = 'active'
     )
     AND
-    organization_id IN (
+    organization_id = (
         SELECT organization_id FROM users WHERE id = auth.uid()
     )
 );
@@ -132,4 +155,44 @@ ON chat_messages
 FOR UPDATE
 USING (
     user_id = auth.uid()
-); 
+);
+
+-- Agregar organization_id a chat_messages
+ALTER TABLE chat_messages
+ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+
+-- Actualizar los organization_id existentes en chat_messages
+UPDATE chat_messages m
+SET organization_id = r.organization_id
+FROM chat_rooms r
+WHERE m.room_id = r.id;
+
+-- Hacer organization_id NOT NULL después de la actualización
+ALTER TABLE chat_messages
+ALTER COLUMN organization_id SET NOT NULL;
+
+-- Asegurar que los estados de los miembros sean correctos
+UPDATE chat_room_members
+SET status = 'active'
+WHERE status IS NULL;
+
+-- Crear índice para mejorar el rendimiento de las consultas de membresía
+CREATE INDEX IF NOT EXISTS idx_chat_room_members_user_status
+ON chat_room_members(user_id, status);
+
+-- Crear función para verificar membresía
+CREATE OR REPLACE FUNCTION check_chat_room_membership(p_room_id UUID, p_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1
+        FROM chat_room_members
+        WHERE room_id = p_room_id
+        AND user_id = p_user_id
+        AND status = 'active'
+    );
+END;
+$$; 

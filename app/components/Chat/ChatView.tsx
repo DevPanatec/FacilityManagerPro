@@ -19,6 +19,8 @@ interface User {
 interface Message {
   id: string;
   content: string;
+  type: string;
+  status: string;
   created_at: string;
   user_id: string;
   user: {
@@ -31,16 +33,16 @@ interface Message {
 interface ChatMessage {
   id: string;
   content: string;
+  type: string;
+  status: string;
   created_at: string;
+  updated_at: string;
   user_id: string;
   room_id: string;
   organization_id: string;
-  users: {
-    id: string;
-    first_name: string | null;
-    last_name: string | null;
-    organization_id: string;
-  };
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
 }
 
 type RealtimePayload = RealtimePostgresChangesPayload<{
@@ -67,65 +69,11 @@ export function ChatView({ roomId, onClose }: ChatViewProps) {
 
     async function loadMessages() {
       try {
-        // Verificar membresía en la sala con reintentos
-        let memberData = null;
-        let retries = 0;
-        const maxRetries = 3;
-
-        while (retries < maxRetries && !memberData) {
-          console.log(`Intento ${retries + 1} de verificar membresía...`);
-          
-          const { data, error: memberError } = await supabase
-            .from('chat_room_members')
-            .select('*')
-            .eq('room_id', roomId)
-            .eq('user_id', user.id)
-            .maybeSingle();
-
-          if (memberError) {
-            console.error('Error verificando membresía:', memberError);
-            toast.error('Error de acceso al chat');
-            onClose();
-            return;
-          }
-
-          if (data) {
-            console.log('Membresía encontrada:', data);
-            memberData = data;
-            break;
-          }
-
-          console.log('Membresía no encontrada, reintentando...');
-          retries++;
-          if (retries < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        }
-
-        if (!memberData) {
-          console.error('No se encontró membresía después de reintentos');
-          toast.error('No tienes acceso a esta sala de chat');
-          onClose();
-          return;
-        }
-
-        // Cargar mensajes
-        const { data: messages, error: messagesError } = await supabase
-          .from('chat_messages')
-          .select(`
-            id,
-            content,
-            created_at,
-            user_id,
-            users (
-              id,
-              first_name,
-              last_name,
-              organization_id
-            )
-          `)
-          .eq('room_id', roomId)
-          .order('created_at', { ascending: true });
+        // Cargar mensajes usando la función RPC
+        const { data, error: messagesError } = await supabase
+          .rpc('get_chat_room_messages_v1', { 
+            room_uuid: roomId
+          }) as { data: ChatMessage[] | null, error: any };
 
         if (messagesError) {
           console.error('Error cargando mensajes:', messagesError);
@@ -133,15 +81,18 @@ export function ChatView({ roomId, onClose }: ChatViewProps) {
           return;
         }
 
-        const typedMessages = (messages || []).map((msg: ChatMessage): Message => ({
+        const messages = data || [];
+        const typedMessages = messages.map((msg: ChatMessage): Message => ({
           id: msg.id,
           content: msg.content,
           created_at: msg.created_at,
           user_id: msg.user_id,
+          type: msg.type,
+          status: msg.status,
           user: {
-            first_name: msg.users.first_name || 'Usuario',
-            last_name: msg.users.last_name || 'Desconocido',
-            organization_id: msg.users.organization_id || user?.organization_id || ''
+            first_name: msg.first_name || 'Usuario',
+            last_name: msg.last_name || 'Desconocido',
+            organization_id: user?.organization_id || ''
           }
         }));
 
@@ -191,26 +142,18 @@ export function ChatView({ roomId, onClose }: ChatViewProps) {
       if (!payload.new) return;
 
       const newData = payload.new as ChatMessage;
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('first_name, last_name, organization_id')
-        .eq('id', newData.user_id)
-        .single();
-
-      if (userError) {
-        console.error('Error cargando datos del usuario:', userError);
-        return;
-      }
-
+      
       const newMessage: Message = {
         id: newData.id,
         content: newData.content,
         created_at: newData.created_at,
         user_id: newData.user_id,
+        type: newData.type,
+        status: newData.status,
         user: {
-          first_name: userData.first_name || 'Usuario',
-          last_name: userData.last_name || 'Desconocido',
-          organization_id: userData.organization_id
+          first_name: newData.first_name || 'Usuario',
+          last_name: newData.last_name || 'Desconocido',
+          organization_id: newData.organization_id
         }
       };
 
@@ -251,40 +194,18 @@ export function ChatView({ roomId, onClose }: ChatViewProps) {
   // Enviar mensaje
   async function handleSendMessage(e: React.FormEvent) {
     e.preventDefault();
-    if (!newMessage.trim() || !user?.id || !user?.organization_id) {
-      console.log('Missing required data:', { user, newMessage });
-      return;
-    }
+    if (!newMessage.trim() || !user) return;
 
     try {
-      // Verificar membresía en la sala
-      const { data: memberData, error: memberError } = await supabase
-        .from('chat_room_members')
-        .select('*')
-        .eq('room_id', roomId)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (memberError) {
-        console.error('Error verificando membresía:', memberError);
-        toast.error('Error de acceso al chat');
-        return;
-      }
-
-      if (!memberData) {
-        console.error('Usuario no es miembro de la sala');
-        toast.error('No tienes permiso para enviar mensajes en esta sala');
-        return;
-      }
-
-      // Enviar mensaje
       const { error } = await supabase
         .from('chat_messages')
         .insert({
           room_id: roomId,
-          content: newMessage.trim(),
           user_id: user.id,
-          organization_id: user.organization_id
+          content: newMessage.trim(),
+          organization_id: user.organization_id,
+          type: 'text',
+          status: 'sent'
         });
 
       if (error) {
@@ -301,67 +222,59 @@ export function ChatView({ roomId, onClose }: ChatViewProps) {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <div className="flex items-center justify-center h-full">Cargando...</div>;
   }
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* Mensajes */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-white">
+      <div className="flex-1 overflow-y-auto p-4">
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`flex flex-col ${
-              message.user_id === user?.id ? 'items-end' : 'items-start'
+            className={`mb-4 ${
+              message.user_id === user?.id ? 'text-right' : 'text-left'
             }`}
           >
             <div
-              className={`max-w-[80%] rounded-lg p-3 shadow-sm ${
+              className={`inline-block rounded-lg px-4 py-2 max-w-[70%] ${
                 message.user_id === user?.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-gray-100 border border-gray-200'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-100'
               }`}
             >
-              {message.user_id !== user?.id && (
-                <p className="text-sm font-medium mb-1 text-gray-900">
-                  {message.user.first_name} {message.user.last_name}
-                </p>
-              )}
-              <p className={message.user_id === user?.id ? 'text-white' : 'text-gray-800'}>
-                {message.content}
-              </p>
+              <div className="text-sm font-semibold mb-1">
+                {message.user_id === user?.id
+                  ? 'Tú'
+                  : `${message.user.first_name} ${message.user.last_name}`}
+              </div>
+              <div>{message.content}</div>
+              <div className="text-xs mt-1 opacity-70">
+                {formatDistanceToNow(new Date(message.created_at), {
+                  addSuffix: true,
+                  locale: es,
+                })}
+              </div>
             </div>
-            <span className="text-xs text-gray-500 mt-1 px-1">
-              {formatDistanceToNow(new Date(message.created_at), {
-                addSuffix: true,
-                locale: es
-              })}
-            </span>
           </div>
         ))}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input para nuevo mensaje */}
-      <form onSubmit={handleSendMessage} className="p-4 border-t bg-white">
-        <div className="flex gap-2">
+      <form onSubmit={handleSendMessage} className="p-4 border-t">
+        <div className="flex items-center gap-2">
           <input
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Escribe un mensaje..."
-            className="flex-1 min-w-0 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-primary focus:ring-1 focus:ring-primary"
+            className="flex-1 px-4 py-2 border rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
             type="submit"
             disabled={!newMessage.trim()}
-            className="flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-2 text-white bg-blue-500 rounded-full hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Send className="h-4 w-4" />
+            <Send className="w-5 h-5" />
           </button>
         </div>
       </form>
