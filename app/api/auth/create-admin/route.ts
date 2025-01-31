@@ -75,14 +75,15 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const supabase = createServerSupabaseClient()
     const body = await request.json();
     const { email, password, firstName, lastName, organizationId } = body;
 
     // 1. Validar datos
     if (!email || !password || !firstName || !lastName || !organizationId) {
-      return new Response(JSON.stringify({ 
+      return NextResponse.json({ 
         error: 'Faltan datos requeridos' 
-      }), { status: 400 });
+      }, { status: 400 });
     }
 
     // 2. Crear usuario en Auth
@@ -100,15 +101,15 @@ export async function POST(request: Request) {
 
     if (authError) {
       console.error('Error creando usuario:', authError);
-      return new Response(JSON.stringify({ 
+      return NextResponse.json({ 
         error: 'Error al crear el usuario' 
-      }), { status: 500 });
+      }, { status: 500 });
     }
 
     if (!authData.user) {
-      return new Response(JSON.stringify({ 
+      return NextResponse.json({ 
         error: 'No se pudo crear el usuario' 
-      }), { status: 500 });
+      }, { status: 500 });
     }
 
     // 3. Crear/actualizar datos del usuario en la tabla users
@@ -128,9 +129,9 @@ export async function POST(request: Request) {
       console.error('Error creando perfil:', userError);
       // Intentar eliminar el usuario de auth si falla la creación del perfil
       await supabase.auth.admin.deleteUser(authData.user.id);
-      return new Response(JSON.stringify({ 
+      return NextResponse.json({ 
         error: 'Error al crear el perfil del usuario' 
-      }), { status: 500 });
+      }, { status: 500 });
     }
 
     // 4. Crear registro en chat_room_members para acceso al chat
@@ -147,15 +148,15 @@ export async function POST(request: Request) {
       // No revertimos la creación del usuario por este error
     }
 
-    return new Response(JSON.stringify({
+    return NextResponse.json({
       message: 'Administrador creado exitosamente',
       user: authData.user
-    }), { status: 201 });
+    }, { status: 201 });
 
   } catch (error) {
     console.error('Error en create-admin:', error);
-    return new Response(JSON.stringify({ 
+    return NextResponse.json({ 
       error: 'Error interno del servidor' 
-    }), { status: 500 });
+    }, { status: 500 });
   }
 } 
