@@ -1,36 +1,20 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '@/app/lib/supabase/client';
+import { createClient } from '@/app/lib/supabase/client';
 import { useUser } from '@/app/shared/hooks/useUser';
 import { Send, Search, MoreVertical, MessageCircle, Paperclip, Smile, Image, Link, X } from 'lucide-react';
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'react-hot-toast';
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import type { Database } from '@/app/lib/supabase/types';
 
-interface User {
-  id: string;
-  first_name: string;
-  last_name: string;
-  organization_id: string;
-}
+const supabase = createClient();
+
+type ChatMessage = Database['public']['Functions']['get_chat_room_messages_v1']['Returns'][0];
 
 interface Message {
-  id: string;
-  content: string;
-  type: string;
-  status: string;
-  created_at: string;
-  user_id: string;
-  user: {
-    first_name: string;
-    last_name: string;
-    organization_id: string;
-  };
-}
-
-interface ChatMessage {
   id: string;
   content: string;
   type: string;
@@ -40,26 +24,19 @@ interface ChatMessage {
   user_id: string;
   room_id: string;
   organization_id: string;
-  first_name: string | null;
-  last_name: string | null;
-  avatar_url: string | null;
+  user: {
+    first_name: string;
+    last_name: string;
+    avatar_url: string | null;
+  };
 }
 
 type RealtimePayload = RealtimePostgresChangesPayload<{
   [key: string]: any;
-  new: {
-    id: string;
-    content: string;
-    type: string;
-    status: string;
-    created_at: string;
-    user_id: string;
-    room_id: string;
-    organization_id: string;
-    first_name: string | null;
-    last_name: string | null;
-  };
-}>;
+  new: Database['public']['Tables']['chat_messages']['Row'];
+}> & {
+  new: Database['public']['Tables']['chat_messages']['Row'];
+};
 
 interface ChatViewProps {
   roomId: string;
@@ -112,37 +89,33 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
     if (!user) return;
     try {
       const { data, error } = await supabase
-        .from('chat_messages')  // Cambiado a consulta directa en lugar de RPC
-        .select(`
-          id,
-          content,
-          type,
-          status,
-          created_at,
-          user_id,
-          organization_id,
-          users:user_id (
-            first_name,
-            last_name,
-            organization_id
-          )
-        `)
-        .eq('room_id', roomId)
-        .order('created_at', { ascending: true });
+        .rpc('get_chat_room_messages_v1', {
+          room_uuid: roomId,
+          msg_limit: 100,
+          msg_offset: 0
+        });
 
       if (error) throw error;
 
-      const typedMessages = (data || []).map((msg): Message => ({
+      if (!data) {
+        setMessages([]);
+        return;
+      }
+
+      const typedMessages = data.map((msg): Message => ({
         id: msg.id,
         content: msg.content,
-        created_at: msg.created_at,
-        user_id: msg.user_id,
         type: msg.type,
         status: msg.status,
+        created_at: msg.created_at,
+        updated_at: msg.updated_at,
+        user_id: msg.user_id,
+        room_id: msg.room_id,
+        organization_id: msg.organization_id,
         user: {
-          first_name: msg.users?.first_name || 'Usuario',
-          last_name: msg.users?.last_name || 'Desconocido',
-          organization_id: msg.users?.organization_id || user.organization_id
+          first_name: msg.first_name || 'Usuario',
+          last_name: msg.last_name || 'Desconocido',
+          avatar_url: msg.avatar_url
         }
       }));
 
@@ -156,28 +129,33 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
     }
   }, [roomId, user, updateLastRead]);
 
-  const handleNewMessage = useCallback(async (payload: any) => {
+  const handleNewMessage = useCallback(async (payload: RealtimePayload) => {
     if (!payload.new || !user) return;
     
     try {
       // Obtener los datos del usuario que envió el mensaje
-      const { data: userData } = await supabase
+      const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('first_name, last_name, organization_id')
+        .select('first_name, last_name, avatar_url')
         .eq('id', payload.new.user_id)
         .single();
+
+      if (userError) throw userError;
 
       const newMessage: Message = {
         id: payload.new.id,
         content: payload.new.content,
-        created_at: payload.new.created_at,
-        user_id: payload.new.user_id,
         type: payload.new.type,
         status: payload.new.status,
+        created_at: payload.new.created_at,
+        updated_at: payload.new.updated_at,
+        user_id: payload.new.user_id,
+        room_id: payload.new.room_id,
+        organization_id: payload.new.organization_id,
         user: {
           first_name: userData?.first_name || 'Usuario',
           last_name: userData?.last_name || 'Desconocido',
-          organization_id: userData?.organization_id || ''
+          avatar_url: userData?.avatar_url || null
         }
       };
 

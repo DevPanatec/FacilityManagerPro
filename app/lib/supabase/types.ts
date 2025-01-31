@@ -458,6 +458,188 @@ export type Database = {
           created_by: string
         }>
       }
+      chat_rooms: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          description: string | null
+          type: 'direct' | 'group' | 'channel'
+          status: 'active' | 'archived'
+          is_private: boolean
+          created_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          organization_id: string
+          name: string
+          description?: string
+          type: 'direct' | 'group' | 'channel'
+          status?: 'active' | 'archived'
+          is_private?: boolean
+          created_by: string
+        }
+        Update: Partial<{
+          organization_id: string
+          name: string
+          description: string | null
+          type: 'direct' | 'group' | 'channel'
+          status: 'active' | 'archived'
+          is_private: boolean
+          created_by: string
+        }>
+      }
+      chat_room_members: {
+        Row: {
+          id: string
+          room_id: string
+          user_id: string
+          organization_id: string
+          role: 'owner' | 'admin' | 'member'
+          status: 'active' | 'inactive'
+          last_read_at: string
+          created_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          room_id: string
+          user_id: string
+          organization_id: string
+          role?: 'owner' | 'admin' | 'member'
+          status?: 'active' | 'inactive'
+          last_read_at?: string
+          created_by: string
+        }
+        Update: Partial<{
+          room_id: string
+          user_id: string
+          organization_id: string
+          role: 'owner' | 'admin' | 'member'
+          status: 'active' | 'inactive'
+          last_read_at: string
+          created_by: string
+        }>
+      }
+      chat_messages: {
+        Row: {
+          id: string
+          room_id: string
+          user_id: string
+          organization_id: string
+          content: string
+          type: 'text' | 'system' | 'file'
+          status: 'sent' | 'edited' | 'deleted'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          room_id: string
+          user_id: string
+          organization_id: string
+          content: string
+          type?: 'text' | 'system' | 'file'
+          status?: 'sent' | 'edited' | 'deleted'
+        }
+        Update: Partial<{
+          room_id: string
+          user_id: string
+          organization_id: string
+          content: string
+          type: 'text' | 'system' | 'file'
+          status: 'sent' | 'edited' | 'deleted'
+        }>
+      }
+      chat_message_attachments: {
+        Row: {
+          id: string
+          message_id: string
+          file_url: string
+          file_type: string
+          file_name: string
+          file_size: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          message_id: string
+          file_url: string
+          file_type: string
+          file_name: string
+          file_size: number
+        }
+        Update: Partial<{
+          message_id: string
+          file_url: string
+          file_type: string
+          file_name: string
+          file_size: number
+        }>
+      }
+      chat_message_reactions: {
+        Row: {
+          id: string
+          message_id: string
+          user_id: string
+          reaction: string
+          created_at: string
+        }
+        Insert: {
+          message_id: string
+          user_id: string
+          reaction: string
+        }
+        Update: Partial<{
+          message_id: string
+          user_id: string
+          reaction: string
+        }>
+      }
+    }
+    Functions: {
+      get_chat_messages: {
+        Args: {
+          p_room_id: string
+          p_limit: number
+          p_offset: number
+        }
+        Returns: {
+          id: string
+          content: string
+          type: string
+          status: string
+          created_at: string
+          updated_at: string
+          user_id: string
+          room_id: string
+          organization_id: string
+          first_name: string
+          last_name: string
+          avatar_url: string | null
+        }[]
+      }
+      get_chat_room_messages_v1: {
+        Args: {
+          room_uuid: string
+          msg_limit?: number
+          msg_offset?: number
+        }
+        Returns: {
+          id: string
+          content: string
+          type: string
+          status: string
+          created_at: string
+          updated_at: string
+          user_id: string
+          room_id: string
+          organization_id: string
+          first_name: string
+          last_name: string
+          avatar_url: string | null
+        }[]
+      }
     }
   }
 } 
