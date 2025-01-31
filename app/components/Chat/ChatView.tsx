@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/app/lib/supabase/client';
 import { useUser } from '@/app/shared/hooks/useUser';
-import { Send } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { Send, Search, MoreVertical, MessageCircle, Paperclip, Smile, Image, Link, X } from 'lucide-react';
+import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'react-hot-toast';
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
@@ -47,68 +47,153 @@ interface ChatMessage {
 
 type RealtimePayload = RealtimePostgresChangesPayload<{
   [key: string]: any;
-  new: ChatMessage;
+  new: {
+    id: string;
+    content: string;
+    type: string;
+    status: string;
+    created_at: string;
+    user_id: string;
+    room_id: string;
+    organization_id: string;
+    first_name: string | null;
+    last_name: string | null;
+  };
 }>;
 
 interface ChatViewProps {
   roomId: string;
   onClose: () => void;
+  chatTitle?: string;
 }
 
-export function ChatView({ roomId, onClose }: ChatViewProps) {
+interface MessageGroup {
+  userId: string;
+  messages: Message[];
+  date: string;
+}
+
+export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
   const { user, loading: userLoading } = useUser();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [showEmojis, setShowEmojis] = useState(false);
+  const [attachmentType, setAttachmentType] = useState<'none' | 'image' | 'file'>('none');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [searchText, setSearchText] = useState('');
+  const [filteredMessages, setFilteredMessages] = useState<Message[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // Cargar mensajes y configurar realtime
+  const updateLastRead = useCallback(async () => {
+    if (!user) return;
+    try {
+      await supabase
+        .from('chat_room_members')
+        .update({ 
+          last_read_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('room_id', roomId)
+        .eq('user_id', user.id);
+    } catch (error) {
+      console.error('Error en updateLastRead:', error);
+    }
+  }, [roomId, user]);
+
+  const loadMessages = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('chat_messages')  // Cambiado a consulta directa en lugar de RPC
+        .select(`
+          id,
+          content,
+          type,
+          status,
+          created_at,
+          user_id,
+          organization_id,
+          users:user_id (
+            first_name,
+            last_name,
+            organization_id
+          )
+        `)
+        .eq('room_id', roomId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const typedMessages = (data || []).map((msg): Message => ({
+        id: msg.id,
+        content: msg.content,
+        created_at: msg.created_at,
+        user_id: msg.user_id,
+        type: msg.type,
+        status: msg.status,
+        user: {
+          first_name: msg.users?.first_name || 'Usuario',
+          last_name: msg.users?.last_name || 'Desconocido',
+          organization_id: msg.users?.organization_id || user.organization_id
+        }
+      }));
+
+      setMessages(typedMessages);
+      await updateLastRead();
+    } catch (error) {
+      console.error('Error cargando chat:', error);
+      toast.error('Error cargando los mensajes');
+    } finally {
+      setLoading(false);
+    }
+  }, [roomId, user, updateLastRead]);
+
+  const handleNewMessage = useCallback(async (payload: any) => {
+    if (!payload.new || !user) return;
+    
+    try {
+      // Obtener los datos del usuario que envió el mensaje
+      const { data: userData } = await supabase
+        .from('users')
+        .select('first_name, last_name, organization_id')
+        .eq('id', payload.new.user_id)
+        .single();
+
+      const newMessage: Message = {
+        id: payload.new.id,
+        content: payload.new.content,
+        created_at: payload.new.created_at,
+        user_id: payload.new.user_id,
+        type: payload.new.type,
+        status: payload.new.status,
+        user: {
+          first_name: userData?.first_name || 'Usuario',
+          last_name: userData?.last_name || 'Desconocido',
+          organization_id: userData?.organization_id || ''
+        }
+      };
+
+      setMessages(prev => [...prev, newMessage]);
+      
+      if (payload.new.user_id !== user.id) {
+        await updateLastRead();
+      }
+    } catch (error) {
+      console.error('Error procesando nuevo mensaje:', error);
+    }
+  }, [user, updateLastRead]);
+
   useEffect(() => {
     if (!user || userLoading) return;
 
-    async function loadMessages() {
-      try {
-        // Cargar mensajes usando la función RPC
-        const { data, error: messagesError } = await supabase
-          .rpc('get_chat_room_messages_v1', { 
-            room_uuid: roomId
-          }) as { data: ChatMessage[] | null, error: any };
-
-        if (messagesError) {
-          console.error('Error cargando mensajes:', messagesError);
-          toast.error('Error cargando los mensajes');
-          return;
-        }
-
-        const messages = data || [];
-        const typedMessages = messages.map((msg: ChatMessage): Message => ({
-          id: msg.id,
-          content: msg.content,
-          created_at: msg.created_at,
-          user_id: msg.user_id,
-          type: msg.type,
-          status: msg.status,
-          user: {
-            first_name: msg.first_name || 'Usuario',
-            last_name: msg.last_name || 'Desconocido',
-            organization_id: user?.organization_id || ''
-          }
-        }));
-
-        setMessages(typedMessages);
-
-        // Actualizar último mensaje leído
-        await updateLastRead();
-      } catch (error) {
-        console.error('Error cargando chat:', error);
-        toast.error('Error cargando el chat');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    // Configurar canal de realtime
     const channel = supabase.channel(`room:${roomId}`)
       .on(
         'postgres_changes',
@@ -120,79 +205,21 @@ export function ChatView({ roomId, onClose }: ChatViewProps) {
         },
         handleNewMessage
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Suscrito a actualizaciones del chat');
-        }
-      });
+      .subscribe();
 
     channelRef.current = channel;
     loadMessages();
 
     return () => {
-      if (channelRef.current) {
-        channelRef.current.unsubscribe();
-      }
+      channelRef.current?.unsubscribe();
     };
-  }, [roomId, user, userLoading]);
+  }, [roomId, user, userLoading, loadMessages, handleNewMessage]);
 
-  // Manejar nuevos mensajes
-  async function handleNewMessage(payload: RealtimePayload) {
-    try {
-      if (!payload.new) return;
-
-      const newData = payload.new as ChatMessage;
-      
-      const newMessage: Message = {
-        id: newData.id,
-        content: newData.content,
-        created_at: newData.created_at,
-        user_id: newData.user_id,
-        type: newData.type,
-        status: newData.status,
-        user: {
-          first_name: newData.first_name || 'Usuario',
-          last_name: newData.last_name || 'Desconocido',
-          organization_id: newData.organization_id
-        }
-      };
-
-      setMessages(current => [...current, newMessage]);
-      await updateLastRead();
-    } catch (error) {
-      console.error('Error procesando nuevo mensaje:', error);
-    }
-  }
-
-  // Actualizar último mensaje leído
-  async function updateLastRead() {
-    if (!user) return;
-
-    try {
-      const { error } = await supabase
-        .from('chat_room_members')
-        .update({ 
-          last_read_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('room_id', roomId)
-        .eq('user_id', user.id);
-
-      if (error) {
-        console.error('Error actualizando último mensaje leído:', error);
-      }
-    } catch (error) {
-      console.error('Error en updateLastRead:', error);
-    }
-  }
-
-  // Scroll al último mensaje
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Enviar mensaje
-  async function handleSendMessage(e: React.FormEvent) {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user) return;
 
@@ -219,65 +246,379 @@ export function ChatView({ roomId, onClose }: ChatViewProps) {
       console.error('Error en handleSendMessage:', error);
       toast.error('Error al enviar el mensaje');
     }
+  };
+
+  // Corregir el manejo del evento keydown para el textarea
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage(e);
+    }
+  };
+
+  // Función para agrupar mensajes por fecha y usuario
+  const groupMessages = (messages: Message[]): MessageGroup[] => {
+    return messages.reduce((groups: MessageGroup[], message) => {
+      const date = format(new Date(message.created_at), 'yyyy-MM-dd');
+      const lastGroup = groups[groups.length - 1];
+
+      if (lastGroup && lastGroup.userId === message.user_id && lastGroup.date === date) {
+        lastGroup.messages.push(message);
+      } else {
+        groups.push({
+          userId: message.user_id,
+          messages: [message],
+          date
+        });
+      }
+
+      return groups;
+    }, []);
+  };
+
+  const formatDateHeader = (date: string) => {
+    const messageDate = new Date(date);
+    if (isToday(messageDate)) return 'Hoy';
+    if (isYesterday(messageDate)) return 'Ayer';
+    return format(messageDate, "d 'de' MMMM, yyyy", { locale: es });
+  };
+
+  // Auto-resize del textarea
+  const handleTextareaResize = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
+    }
+  };
+
+  // Función para manejar la búsqueda de mensajes
+  const handleSearch = (text: string) => {
+    setSearchText(text);
+    if (text.trim()) {
+      setIsSearching(true);
+      const filtered = messages.filter(message => 
+        message.content.toLowerCase().includes(text.toLowerCase())
+      );
+      setFilteredMessages(filtered);
+    } else {
+      setIsSearching(false);
+      setFilteredMessages([]);
+    }
+  };
+
+  // Función para manejar el estado de "escribiendo..."
+  const handleTypingStatus = () => {
+    if (!user) return;
+
+    // Limpiar el timeout anterior si existe
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Emitir estado de escritura
+    supabase.channel(`room:${roomId}`).send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { user_id: user.id }
+    });
+
+    // Establecer nuevo timeout
+    typingTimeoutRef.current = setTimeout(() => {
+      supabase.channel(`room:${roomId}`).send({
+        type: 'broadcast',
+        event: 'stop_typing',
+        payload: { user_id: user.id }
+      });
+    }, 2000);
+  };
+
+  // Efecto para manejar eventos de escritura
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase.channel(`room:${roomId}`)
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (payload.user_id !== user.id) {
+          setIsTyping(true);
+        }
+      })
+      .on('broadcast', { event: 'stop_typing' }, ({ payload }) => {
+        if (payload.user_id !== user.id) {
+          setIsTyping(false);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [roomId, user]);
+
+  // Modificar el handleMessageChange para incluir el estado de escritura
+  const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNewMessage(e.target.value);
+    handleTextareaResize();
+    handleTypingStatus();
+  };
+
+  // Función para manejar archivos adjuntos
+  const handleAttachment = (type: 'image' | 'file') => {
+    setAttachmentType(type);
+    if (type === 'image') {
+      imageInputRef.current?.click();
+    } else {
+      fileInputRef.current?.click();
+    }
+  };
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-gray-500">Cargando usuario...</p>
+      </div>
+    );
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full">Cargando...</div>;
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col h-full bg-white">
-      <div className="flex-1 overflow-y-auto p-4">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`mb-4 ${
-              message.user_id === user?.id ? 'text-right' : 'text-left'
+      {/* Header Mejorado */}
+      <div className="border-b bg-white px-6 py-4 sticky top-0 z-10">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center ring-2 ring-primary/20">
+                <span className="text-primary text-lg font-bold">
+                  {chatTitle?.[0]?.toUpperCase() || '?'}
+                </span>
+              </div>
+              {isTyping && (
+                <div className="absolute -bottom-1 -right-1 bg-primary text-white text-xs px-2 py-0.5 rounded-full animate-pulse">
+                  escribiendo...
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col">
+              <h2 className="text-lg font-semibold text-gray-800">
+                {chatTitle || 'Nueva conversación'}
+              </h2>
+              <span className="text-xs text-gray-500">
+                {messages.length} mensajes
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setShowSearch(!showSearch)}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <Search className="w-5 h-5 text-gray-500" />
+            </button>
+            <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+              <MoreVertical className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+        </div>
+        
+        {/* Barra de búsqueda mejorada */}
+        {showSearch && (
+          <div className="border-b bg-white px-6 py-4">
+            <div className="relative">
+              <input
+                type="text"
+                value={searchText}
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder="Buscar en la conversación..."
+                className="w-full pl-10 pr-4 py-2 rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+              {searchText && (
+                <button
+                  onClick={() => {
+                    setSearchText('');
+                    setIsSearching(false);
+                    setFilteredMessages([]);
+                  }}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full"
+                >
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              )}
+            </div>
+            {isSearching && (
+              <div className="mt-2 text-sm text-gray-500">
+                {filteredMessages.length} resultados encontrados
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Área de mensajes con resultados de búsqueda */}
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 bg-gradient-to-b from-gray-50/50 to-white">
+        {groupMessages(isSearching ? filteredMessages : messages).map((group, groupIndex) => (
+          <div key={`${group.userId}-${group.date}-${groupIndex}`} 
+            className={`space-y-4 ${
+              isSearching ? 'opacity-60 hover:opacity-100 transition-opacity' : ''
             }`}
           >
-            <div
-              className={`inline-block rounded-lg px-4 py-2 max-w-[70%] ${
-                message.user_id === user?.id
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-100'
-              }`}
-            >
-              <div className="text-sm font-semibold mb-1">
-                {message.user_id === user?.id
-                  ? 'Tú'
-                  : `${message.user.first_name} ${message.user.last_name}`}
+            {/* Separador de fecha */}
+            <div className="flex items-center justify-center">
+              <div className="bg-gray-100 text-gray-500 text-xs px-3 py-1 rounded-full">
+                {formatDateHeader(group.date)}
               </div>
-              <div>{message.content}</div>
-              <div className="text-xs mt-1 opacity-70">
-                {formatDistanceToNow(new Date(message.created_at), {
-                  addSuffix: true,
-                  locale: es,
-                })}
-              </div>
+            </div>
+
+            {/* Grupo de mensajes */}
+            <div className="space-y-1">
+              {group.messages.map((message, messageIndex) => (
+                <div
+                  key={message.id}
+                  className={`flex items-end gap-2 ${
+                    message.user_id === user?.id ? 'justify-end' : 'justify-start'
+                  }`}
+                >
+                  {message.user_id !== user?.id && messageIndex === 0 && (
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ring-2 ring-primary/10">
+                        <span className="text-sm font-semibold text-primary">
+                          {message.user.first_name[0]}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <div
+                    className={`group max-w-[70%] ${
+                      message.user_id === user?.id ? 'ml-4' : 'mr-4'
+                    }`}
+                  >
+                    <div
+                      className={`rounded-2xl px-4 py-3 ${
+                        message.user_id === user?.id
+                          ? 'bg-gradient-to-br from-primary to-primary/90 text-white rounded-br-md'
+                          : 'bg-white text-gray-800 shadow-sm rounded-bl-md'
+                      } transition-all duration-200 hover:shadow-md`}
+                    >
+                      <p className="whitespace-pre-wrap leading-relaxed">
+                        {message.content}
+                      </p>
+                      <div className={`mt-1 text-[11px] ${
+                        message.user_id === user?.id
+                          ? 'text-white/70'
+                          : 'text-gray-400'
+                      } text-right`}>
+                        {formatDistanceToNow(new Date(message.created_at), {
+                          addSuffix: true,
+                          locale: es
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         ))}
         <div ref={messagesEndRef} />
       </div>
 
-      <form onSubmit={handleSendMessage} className="p-4 border-t">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Escribe un mensaje..."
-            className="flex-1 px-4 py-2 border rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            type="submit"
-            disabled={!newMessage.trim()}
-            className="p-2 text-white bg-blue-500 rounded-full hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send className="w-5 h-5" />
-          </button>
+      {/* Área de input mejorada */}
+      <div className="border-t bg-white p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="relative bg-gray-50 rounded-2xl shadow-sm ring-1 ring-gray-200/50">
+            {/* Barra de herramientas */}
+            <div className="absolute left-2 bottom-3 flex items-center gap-1">
+              <button
+                onClick={() => setShowEmojis(!showEmojis)}
+                className="p-2 rounded-lg hover:bg-gray-200/50 transition-colors text-gray-500 hover:text-gray-700"
+              >
+                <Smile className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => handleAttachment('image')}
+                className="p-2 rounded-lg hover:bg-gray-200/50 transition-colors text-gray-500 hover:text-gray-700"
+              >
+                <Image className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => handleAttachment('file')}
+                className="p-2 rounded-lg hover:bg-gray-200/50 transition-colors text-gray-500 hover:text-gray-700"
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Textarea con padding para los botones */}
+            <textarea
+              ref={textareaRef}
+              value={newMessage}
+              onChange={handleMessageChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Escribe un mensaje..."
+              className="w-full bg-transparent rounded-2xl border-0 pt-4 pb-4 pl-[7.5rem] pr-14 focus:ring-2 focus:ring-primary/20 focus:outline-none text-gray-800 resize-none placeholder:text-gray-400 min-h-[52px]"
+              rows={1}
+            />
+
+            {/* Botón de enviar */}
+            <button
+              onClick={handleSendMessage}
+              disabled={!newMessage.trim()}
+              className="absolute right-3 bottom-3 p-2 rounded-xl bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:hover:bg-primary transition-all duration-200 hover:scale-105 hover:shadow-lg disabled:hover:scale-100 disabled:hover:shadow-none"
+            >
+              <Send className="w-5 h-5" />
+            </button>
+
+            {/* Inputs ocultos para archivos */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept=".pdf,.doc,.docx,.txt"
+              onChange={(e) => {
+                // Manejar archivo
+                console.log(e.target.files?.[0]);
+              }}
+            />
+            <input
+              type="file"
+              ref={imageInputRef}
+              className="hidden"
+              accept="image/*"
+              onChange={(e) => {
+                // Manejar imagen
+                console.log(e.target.files?.[0]);
+              }}
+            />
+          </div>
+
+          {/* Panel de emojis */}
+          {showEmojis && (
+            <div className="absolute bottom-full mb-2 bg-white rounded-lg shadow-lg p-4 border">
+              <div className="grid grid-cols-8 gap-2">
+                {['😊', '😂', '❤️', '👍', '🎉', '🤔', '😅', '🙌'].map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => {
+                      setNewMessage(prev => prev + emoji);
+                      setShowEmojis(false);
+                    }}
+                    className="text-2xl hover:bg-gray-100 p-2 rounded-lg transition-colors"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      </form>
+      </div>
     </div>
   );
 } 

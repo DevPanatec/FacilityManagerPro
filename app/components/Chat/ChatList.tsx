@@ -17,9 +17,10 @@ interface ChatRoom {
 
 interface ChatListProps {
   onSelectChat: (roomId: string) => void;
+  onChatsLoaded: (chats: ChatRoom[]) => void;
 }
 
-export function ChatList({ onSelectChat }: ChatListProps) {
+export function ChatList({ onSelectChat, onChatsLoaded }: ChatListProps) {
   const { user } = useUser();
   const [chats, setChats] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +38,9 @@ export function ChatList({ onSelectChat }: ChatListProps) {
           });
 
         if (error) throw error;
-        setChats(data || []);
+        const loadedChats = data || [];
+        setChats(loadedChats);
+        onChatsLoaded(loadedChats);
       } catch (error) {
         console.error('Error cargando chats:', error);
       } finally {
@@ -63,7 +66,7 @@ export function ChatList({ onSelectChat }: ChatListProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [user?.id, onChatsLoaded]);
 
   if (loading) {
     return (
@@ -87,18 +90,25 @@ export function ChatList({ onSelectChat }: ChatListProps) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="p-4 space-y-2">
       {chats.map((chat) => (
         <button
           key={chat.room_id}
-          className="w-full flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors text-left"
+          className="w-full flex items-start gap-3 p-4 rounded-xl hover:bg-white hover:shadow-md transition-all duration-200 group"
           onClick={() => onSelectChat(chat.room_id)}
         >
-          <div className="flex-1 min-w-0">
+          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <span className="text-primary font-semibold text-lg">
+              {chat.room_name[0].toUpperCase()}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0 text-left">
             <div className="flex justify-between items-start">
-              <h3 className="font-medium truncate">{chat.room_name}</h3>
+              <h3 className="font-medium text-gray-900 truncate group-hover:text-primary transition-colors">
+                {chat.room_name}
+              </h3>
               {chat.last_message_at && (
-                <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
+                <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
                   {formatDistanceToNow(new Date(chat.last_message_at), { 
                     addSuffix: true,
                     locale: es 
@@ -107,13 +117,13 @@ export function ChatList({ onSelectChat }: ChatListProps) {
               )}
             </div>
             {chat.last_message && (
-              <p className="text-sm text-muted-foreground truncate">
+              <p className="text-sm text-gray-500 truncate mt-1">
                 {chat.last_message}
               </p>
             )}
           </div>
           {chat.unread_count > 0 && (
-            <div className="flex-shrink-0 bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs">
+            <div className="flex-shrink-0 bg-primary text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium">
               {chat.unread_count}
             </div>
           )}
