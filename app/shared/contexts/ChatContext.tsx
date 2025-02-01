@@ -34,6 +34,7 @@ export interface Message {
   is_edited: boolean
   created_at: string
   updated_at: string
+  reactions?: { user_id: string; reaction: string }[]
 }
 
 export interface RoomMember {
