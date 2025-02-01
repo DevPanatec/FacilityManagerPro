@@ -20,9 +20,10 @@ interface ChatRoom {
 
 interface ChatWidgetProps {
   className?: string;
+  isEnterprise?: boolean;
 }
 
-export function ChatWidget({ className }: ChatWidgetProps) {
+export function ChatWidget({ className, isEnterprise = false }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState<'list' | 'new' | 'chat'>('list');
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
@@ -80,7 +81,7 @@ export function ChatWidget({ className }: ChatWidgetProps) {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {view === 'list' && user?.role === 'enterprise' && (
+                {view === 'list' && isEnterprise && (
                   <button
                     className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
                     onClick={() => setView('new')}
