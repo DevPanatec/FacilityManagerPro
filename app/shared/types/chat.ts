@@ -5,7 +5,7 @@ export interface Message {
   user_id: string
   content: string
   type: 'text' | 'image' | 'file' | 'system'
-  parent_id?: string
+  parent_id: string | null
   is_edited: boolean
   created_at: string
   updated_at: string
