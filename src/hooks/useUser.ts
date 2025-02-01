@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import type { Database } from '@/lib/types/database';
 
 interface User {
   id: string;
@@ -11,6 +12,7 @@ interface User {
 }
 
 export function useUser() {
+  const supabase = createClientComponentClient<Database>();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 

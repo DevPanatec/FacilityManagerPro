@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import type { Database } from '@/lib/types/database'
 
 interface ConnectionState {
@@ -10,6 +10,24 @@ interface ConnectionState {
   isReconnecting: boolean
   lastError: Error | null
   retryCount: number
+}
+
+type PostgresChangesHandler = {
+  event: 'INSERT' | 'UPDATE' | 'DELETE'
+  schema?: string
+  table?: string
+  filter?: string
+  callback: (payload: RealtimePostgresChangesPayload<any>) => void
+}
+
+type PresenceHandler = {
+  event: 'sync' | 'join' | 'leave'
+  callback: (payload: { newPresences?: any[]; leftPresences?: any[] }) => void
+}
+
+type ChannelHandlers = {
+  postgres_changes?: PostgresChangesHandler[]
+  presence?: PresenceHandler[]
 }
 
 export function useSupabaseConnection() {
@@ -62,12 +80,17 @@ export function useSupabaseConnection() {
     }
   }, [supabase, channels, connectionState.retryCount])
 
-  const subscribeToChannel = useCallback((channelName: string, handlers: any) => {
+  const subscribeToChannel = useCallback((channelName: string, handlers: ChannelHandlers) => {
     const channel = supabase.channel(channelName)
     
-    // Configurar handlers
-    Object.entries(handlers).forEach(([event, handler]) => {
-      channel.on(event as any, handler as any)
+    // Configurar handlers de postgres_changes
+    handlers.postgres_changes?.forEach(({ event, schema, table, filter, callback }) => {
+      channel.on('postgres_changes' as any, { event, schema, table, filter }, callback)
+    })
+
+    // Configurar handlers de presence
+    handlers.presence?.forEach(({ event, callback }) => {
+      channel.on('presence' as any, { event }, callback)
     })
 
     // Suscribirse al canal
@@ -102,17 +125,21 @@ export function useSupabaseConnection() {
 
     // Monitorear cambios en la conexión
     const channel = supabase.channel('connection_monitor')
-      .on('presence', { event: 'sync' }, () => {
-        setConnectionState(prev => ({ ...prev, isConnected: true }))
-      })
-      .on('presence', { event: 'join' }, () => {
-        setConnectionState(prev => ({ ...prev, isConnected: true }))
-      })
-      .on('presence', { event: 'leave' }, () => {
-        setConnectionState(prev => ({ ...prev, isConnected: false }))
-        connect()
-      })
-      .subscribe()
+    
+    channel.on('presence' as any, { event: 'sync' }, () => {
+      setConnectionState(prev => ({ ...prev, isConnected: true }))
+    })
+    
+    channel.on('presence' as any, { event: 'join' }, () => {
+      setConnectionState(prev => ({ ...prev, isConnected: true }))
+    })
+    
+    channel.on('presence' as any, { event: 'leave' }, () => {
+      setConnectionState(prev => ({ ...prev, isConnected: false }))
+      connect()
+    })
+    
+    channel.subscribe()
 
     // Conectar inicialmente
     connect()

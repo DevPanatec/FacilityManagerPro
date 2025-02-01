@@ -342,8 +342,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (!session) return
 
     subscribeToChannel('chat_messages', {
-      'postgres_changes': {
-        event: '*',
+      postgres_changes: [{
+        event: 'INSERT',
         schema: 'public',
         table: 'chat_messages',
         filter: `room_id=eq.${state.activeRoom?.id}`,
@@ -379,41 +379,41 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             toast.error('Error al procesar cambios en mensajes')
           }
         }
-      }
+      }]
     })
 
     // Suscripción unificada para eventos de presence
     subscribeToChannel('typing_users', {
-      presence: {
-        events: ['sync', 'join', 'leave'],
-        callback: (event: string, payload: any) => {
-          switch (event) {
-            case 'sync':
-              // Manejar sincronización inicial
-              break
-            case 'join':
-              if (payload.newPresences) {
-                payload.newPresences.forEach((presence: any) => {
-                  dispatch({
-                    type: 'SET_TYPING_USER',
-                    payload: { roomId: state.activeRoom?.id, userId: presence.user_id }
-                  })
-                })
-              }
-              break
-            case 'leave':
-              if (payload.leftPresences) {
-                payload.leftPresences.forEach((presence: any) => {
-                  dispatch({
-                    type: 'REMOVE_TYPING_USER',
-                    payload: { roomId: state.activeRoom?.id, userId: presence.user_id }
-                  })
-                })
-              }
-              break
+      presence: [{
+        event: 'sync',
+        callback: () => {
+          // Manejar sincronización inicial
+        }
+      }, {
+        event: 'join',
+        callback: (payload: any) => {
+          if (payload.newPresences) {
+            payload.newPresences.forEach((presence: any) => {
+              dispatch({
+                type: 'SET_TYPING_USER',
+                payload: { roomId: state.activeRoom?.id, userId: presence.user_id }
+              })
+            })
           }
         }
-      }
+      }, {
+        event: 'leave',
+        callback: (payload: any) => {
+          if (payload.leftPresences) {
+            payload.leftPresences.forEach((presence: any) => {
+              dispatch({
+                type: 'REMOVE_TYPING_USER',
+                payload: { roomId: state.activeRoom?.id, userId: presence.user_id }
+              })
+            })
+          }
+        }
+      }]
     })
   }, [supabase, state.activeRoom?.id, subscribeToChannel])
 

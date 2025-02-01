@@ -1,5 +1,6 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { Database } from '@/lib/types/database'
+import type { FileOptions } from '@supabase/storage-js'
 
 export type FileType = 'image' | 'document' | 'spreadsheet' | 'other'
 
@@ -45,13 +46,11 @@ export class FileService {
       const { data, error } = await this.supabase.storage
         .from('chat-attachments')
         .upload(filePath, file, {
-          abortSignal: controller.signal,
-          onUploadProgress: (progress) => {
-            if (onProgress) {
-              onProgress((progress.loaded / progress.total) * 100)
-            }
-          }
-        })
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type,
+          duplex: 'half',
+        } as FileOptions)
 
       if (error) throw error
 
