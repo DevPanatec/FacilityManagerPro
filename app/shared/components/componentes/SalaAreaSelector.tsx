@@ -35,97 +35,91 @@ export default function SalaAreaSelector({
         
         // Obtener el usuario actual y su organization_id
         const { data: { user }, error: authError } = await supabase.auth.getUser()
-        console.log('Auth User:', user)
-        console.log('Auth Error:', authError)
+        if (authError) {
+          console.error('Error de autenticación:', authError)
+          throw new Error('Error de autenticación: ' + authError.message)
+        }
         
-        if (!user) throw new Error('No autorizado')
+        if (!user) {
+          console.error('No hay usuario autenticado')
+          throw new Error('No autorizado - Usuario no encontrado')
+        }
 
         // Obtener perfil completo del usuario
         const { data: userProfile, error: userError } = await supabase
           .from('users')
-          .select('*')  // Seleccionar todos los campos para depuración
+          .select('organization_id, role')
           .eq('id', user.id)
           .single()
 
-        console.log('User Profile COMPLETO:', userProfile)
-        console.log('User Profile Error:', userError)
+        if (userError) {
+          console.error('Error al obtener perfil de usuario:', userError)
+          throw new Error('Error al obtener perfil: ' + userError.message)
+        }
 
-        if (!userProfile) throw new Error('Perfil no encontrado')
+        if (!userProfile?.organization_id) {
+          console.error('Usuario sin organización asignada')
+          throw new Error('Usuario sin organización asignada')
+        }
 
-        // Verificar organización
-        const { data: orgData, error: orgError } = await supabase
-          .from('organizations')
-          .select('*')
-          .eq('id', userProfile.organization_id)
-          .single()
-
-        console.log('Organización del usuario:', orgData)
-        console.log('Error de organización:', orgError)
-
-        // Cargar salas con más detalles
+        // Cargar salas
         const { data: salasData, error: salasError } = await supabase
           .from('salas')
           .select('*')
-          .eq('status', 'active')
           .eq('organization_id', userProfile.organization_id)
-
-        console.log('Organization ID del usuario:', userProfile.organization_id)
-        console.log('Consulta de salas completa:', {
-          query: `organization_id: ${userProfile.organization_id}`,
-          data: salasData,
-          error: salasError
-        })
+          .eq('estado', true)
 
         if (salasError) {
-          console.error('Error al cargar salas:', salasError)
-          throw salasError
+          console.error('Error al cargar salas:', {
+            error: salasError,
+            organizationId: userProfile.organization_id
+          })
+          throw new Error('Error al cargar salas: ' + salasError.message)
         }
 
-        // Cargar áreas con más detalles - removido el filtro de estado que no existe
+        // Cargar áreas
         const { data: areasData, error: areasError } = await supabase
           .from('areas')
-          .select(`
-            id,
-            name,
-            organization_id,
-            sala_id,
-            status
-          `)
+          .select('*')
           .eq('organization_id', userProfile.organization_id)
           .eq('status', 'active')
-          .order('name')
-
-        console.log('Consulta de áreas completa:', {
-          data: areasData,
-          error: areasError
-        })
 
         if (areasError) {
-          console.error('Error al cargar áreas:', areasError)
-          throw areasError
+          console.error('Error al cargar áreas:', {
+            error: areasError,
+            organizationId: userProfile.organization_id
+          })
+          throw new Error('Error al cargar áreas: ' + areasError.message)
         }
 
         // Verificar y establecer los datos
         const validSalas = Array.isArray(salasData) ? salasData : []
         const validAreas = Array.isArray(areasData) ? areasData : []
 
-        console.log('Salas válidas encontradas:', validSalas.length)
-        console.log('Áreas válidas encontradas:', validAreas.length)
+        console.log('Datos cargados exitosamente:', {
+          salas: validSalas.length,
+          areas: validAreas.length,
+          organizationId: userProfile.organization_id
+        })
 
         setSalas(validSalas)
         setAreas(validAreas)
         
-        // Si hay un sala seleccionada por defecto, filtrar las áreas
         if (defaultSalaId) {
           const filteredAreas = validAreas.filter(area => area.sala_id === defaultSalaId)
           setFilteredAreas(filteredAreas)
         }
 
       } catch (error) {
-        console.error('Error detallado:', error)
+        console.error('Error detallado en SalaAreaSelector:', {
+          error,
+          message: error instanceof Error ? error.message : 'Error desconocido',
+          stack: error instanceof Error ? error.stack : undefined
+        })
         setSalas([])
         setAreas([])
         setFilteredAreas([])
+        // Aquí podrías agregar una notificación al usuario si lo deseas
       } finally {
         setLoading(false)
       }

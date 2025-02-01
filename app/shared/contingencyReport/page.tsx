@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import SalaAreaSelector from '@/app/shared/components/componentes/SalaAreaSelector'
 import { useDropzone } from 'react-dropzone';
 import Image from 'next/image';
-import { FiUpload, FiX } from 'react-icons/fi';
+import { FiUpload, FiX, FiAlertCircle, FiCheckCircle, FiClock, FiPieChart, FiList, FiFilter } from 'react-icons/fi';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -146,7 +146,7 @@ export default function ReportsPage() {
   }, [timeFilter, page, userData]);
 
   const loadData = async () => {
-    if (!userData) return; // Si no hay datos del usuario, no cargar nada
+    if (!userData) return;
 
     try {
       setIsLoading(true);
@@ -162,6 +162,12 @@ export default function ReportsPage() {
       } else if (timeFilter === 'mes') {
         startDate.setMonth(now.getMonth() - 1);
       }
+
+      console.log('Filtro de fechas:', {
+        filtro: timeFilter,
+        fechaInicio: startDate.toISOString(),
+        fechaFin: now.toISOString()
+      });
 
       // Cargar reportes
       let reportsQuery = supabase
@@ -191,10 +197,9 @@ export default function ReportsPage() {
             )
           )
         `, { count: 'exact' })
-        .eq('priority', 'urgent')
         .gte('created_at', startDate.toISOString())
-        .order('created_at', { ascending: false })
-        .range((page - 1) * 10, page * 10 - 1);
+        .lte('created_at', now.toISOString())
+        .order('created_at', { ascending: false });
 
       // Si no es superadmin, filtrar por organization_id
       if (userData.role !== 'superadmin') {
@@ -205,6 +210,15 @@ export default function ReportsPage() {
       }
 
       const { data: reports, error: reportsError, count } = await reportsQuery;
+
+      console.log('Resultado de la consulta:', {
+        totalReportes: count,
+        reportesEncontrados: reports?.length,
+        fechaInicio: startDate,
+        fechaFin: now,
+        organizacionId: userData.organization_id
+      });
+
       if (reportsError) throw reportsError;
 
       // Obtener todas las organizaciones (usuarios enterprise)
@@ -323,10 +337,6 @@ export default function ReportsPage() {
       if (images.length > 0) {
         for (const image of images) {
           const fileExt = image.name.split('.').pop()?.toLowerCase();
-          if (!['jpg', 'jpeg', 'png', 'gif'].includes(fileExt || '')) {
-            throw new Error(`Formato de archivo no permitido: ${fileExt}. Use JPG, PNG o GIF`);
-          }
-
           const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
           const filePath = `${userData.organization_id}/${fileName}`;
 
@@ -341,7 +351,10 @@ export default function ReportsPage() {
               upsert: true
             });
 
-          if (uploadResult.error) throw uploadResult.error;
+          if (uploadResult.error) {
+            console.error('Error al subir imagen:', uploadResult.error);
+            throw uploadResult.error;
+          }
 
           const { data: { publicUrl } } = supabase.storage
             .from('Reports')
@@ -353,16 +366,13 @@ export default function ReportsPage() {
 
       // Crear el nuevo reporte con todos los campos requeridos
       const newReport = {
-        title: `Reporte de Contingencia - ${contingencyType}`,
+        title: contingencyType,
         description: description,
-        priority: 'urgent',
-        status: 'pending',
         area_id: selectedArea,
-        sala_id: selectedSala,
         organization_id: userData.organization_id,
         created_by: user.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        status: 'pending',
+        priority: 'urgent',
         attachments: uploadedUrls.map(url => ({
           type: 'image',
           url: url,
@@ -380,7 +390,12 @@ export default function ReportsPage() {
         .single();
 
       if (error) {
-        console.error('Error detallado al crear reporte:', error);
+        console.error('Error específico de Supabase:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
         throw error;
       }
 
@@ -399,22 +414,21 @@ export default function ReportsPage() {
 
       toast.success('Reporte creado exitosamente');
     } catch (error: any) {
-      console.error('Error al guardar el reporte:', error);
-      let errorMessage = 'Error al guardar el reporte';
+      console.error('Error detallado al guardar el reporte:', {
+        message: error?.message || 'Error desconocido',
+        details: error?.details || {},
+        hint: error?.hint || '',
+        code: error?.code || '',
+        fullError: JSON.stringify(error, null, 2)
+      });
       
-      if (error.message) {
-        if (error.message.includes('new row violates row-level security policy')) {
-          errorMessage = 'Error: No tienes permisos para crear reportes en esta organización';
-        } else if (error.message.includes('Bucket not found')) {
-          errorMessage = 'Error: El sistema de almacenamiento no está configurado correctamente';
-        } else if (error.message.includes('Permission denied')) {
-          errorMessage = 'Error: No tienes permisos para subir archivos';
-        } else {
-          errorMessage = `Error: ${error.message}`;
-        }
+      let errorMessage = 'Error al guardar el reporte';
+      if (error?.message) {
+        errorMessage = `Error: ${error.message}`;
       }
       
       toast.error(errorMessage);
+      setIsLoading(false);
     }
   };
 
@@ -439,78 +453,129 @@ export default function ReportsPage() {
     if (!selectedReport) return;
 
     try {
-      // Crear un elemento temporal para renderizar el reporte
       const reportElement = document.createElement('div');
-      reportElement.style.cssText = 'all: initial; font-family: Arial, sans-serif;';
+      reportElement.style.cssText = `
+        font-family: Arial, sans-serif;
+        background-color: #FFFFFF;
+        color: #000000;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      `;
+      
+      // Convertir las imágenes a base64
+      const loadImage = async (url) => {
+        try {
+          console.log('Intentando cargar imagen:', url);
+          const response = await fetch(url);
+          if (!response.ok) {
+            console.error('Error al cargar imagen:', url, response.status);
+            return null;
+          }
+          const blob = await response.blob();
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              console.log('Imagen cargada exitosamente:', url);
+              resolve(reader.result);
+            };
+            reader.onerror = () => {
+              console.error('Error al leer imagen:', url);
+              resolve(null);
+            };
+            reader.readAsDataURL(blob);
+          });
+        } catch (error) {
+          console.error('Error al cargar imagen:', url, error);
+          return null;
+        }
+      };
+
+      // Cargar las imágenes
+      console.log('Iniciando carga de imágenes...');
+      const [sgsIsoLogo, hbLogo, issaLogo] = await Promise.all([
+        loadImage('/sgs-iso.png'),
+        loadImage('/logo.jpg'),
+        loadImage('/issa.png')
+      ]);
+
+      console.log('Estado de carga de imágenes:', {
+        sgsIso: !!sgsIsoLogo,
+        hombresBlanco: !!hbLogo,
+        issa: !!issaLogo
+      });
+
+      // Solo incluir las imágenes que se cargaron correctamente
+      const logosHtml = [
+        sgsIsoLogo ? `<img src="${sgsIsoLogo}" alt="SGS ISO 9001" style="height: 100px; width: 100px; object-fit: contain;" />` : '',
+        issaLogo ? `<img src="${issaLogo}" alt="ISSA Member" style="height: 100px; width: 100px; object-fit: contain;" />` : ''
+      ].filter(Boolean).join('');
       
       reportElement.innerHTML = `
-        <div style="padding: 20px; font-family: Arial, sans-serif; background-color: #FFFFFF;">
-          <div style="text-align: center; margin-bottom: 20px;">
-            <h1 style="color: #1E40AF; font-size: 24px; margin-bottom: 10px; font-family: Arial, sans-serif;">Reporte de Contingencia</h1>
-            <p style="color: #6B7280; font-size: 14px; font-family: Arial, sans-serif;">Fecha: ${new Date(selectedReport.date).toLocaleDateString()}</p>
-          </div>
-
-          <div style="margin-bottom: 20px; padding: 15px; background-color: #FFFFFF; border: 1px solid #E5E7EB;">
-            <h2 style="color: #1E40AF; font-size: 18px; margin-bottom: 10px; font-family: Arial, sans-serif;">Información General</h2>
-            <table style="width: 100%; border-collapse: collapse; background-color: #FFFFFF;">
-              <tr>
-                <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; width: 150px; font-family: Arial, sans-serif;"><strong>Organización:</strong></td>
-                <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-family: Arial, sans-serif;">${selectedReport.organization.name}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-family: Arial, sans-serif;"><strong>Área:</strong></td>
-                <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-family: Arial, sans-serif;">${selectedReport.area}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-family: Arial, sans-serif;"><strong>Sala:</strong></td>
-                <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-family: Arial, sans-serif;">${selectedReport.sala}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-family: Arial, sans-serif;"><strong>Estado:</strong></td>
-                <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-family: Arial, sans-serif;">
-                  <span style="
-                    display: inline-block;
-                    padding: 4px 8px;
-                    border-radius: 12px;
-                    font-size: 12px;
-                    font-family: Arial, sans-serif;
-                    background-color: ${selectedReport.status === 'Pendiente' ? '#FEF3C7' : '#DCFCE7'};
-                    color: ${selectedReport.status === 'Pendiente' ? '#92400E' : '#166534'};
-                  ">
-                    ${selectedReport.status}
-                  </span>
-                </td>
-              </tr>
-            </table>
-          </div>
-
-          <div style="margin-bottom: 20px; padding: 15px; background-color: #FFFFFF; border: 1px solid #E5E7EB;">
-            <h2 style="color: #1E40AF; font-size: 18px; margin-bottom: 10px; font-family: Arial, sans-serif;">Detalles de la Contingencia</h2>
-            <table style="width: 100%; border-collapse: collapse; background-color: #FFFFFF;">
-              <tr>
-                <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-family: Arial, sans-serif;"><strong>Tipo:</strong></td>
-                <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-family: Arial, sans-serif;">${selectedReport.type}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-family: Arial, sans-serif;"><strong>Descripción:</strong></td>
-                <td style="padding: 8px; border-bottom: 1px solid #E5E7EB; font-family: Arial, sans-serif;">${selectedReport.description || 'No especificada'}</td>
-              </tr>
-            </table>
-          </div>
-
-          ${selectedReport.creator ? `
-            <div style="margin-bottom: 20px; padding: 15px; background-color: #FFFFFF; border: 1px solid #E5E7EB;">
-              <h2 style="color: #1E40AF; font-size: 18px; margin-bottom: 10px; font-family: Arial, sans-serif;">Información del Creador</h2>
-              <p style="margin: 0; color: #6B7280; font-family: Arial, sans-serif;">
-                ${selectedReport.creator.first_name || ''} ${selectedReport.creator.last_name || ''}
+        <div style="padding: 90px; font-family: Arial, sans-serif; background-color: #FFFFFF; border: 1px solid #E5E7EB;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
+            <div style="display: flex; align-items: center; gap: 30px;">
+              ${logosHtml}
+            </div>
+            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 10px;">
+              ${hbLogo ? `<img src="${hbLogo}" alt="Hombres de Blanco" style="height: 100px; width: 100px; object-fit: contain;" />` : ''}
+              <p style="color: #1F2937; font-size: 26px; margin: 0; font-family: Arial, sans-serif;">
+                Fecha: ${new Date(selectedReport.date).toLocaleDateString()}
               </p>
             </div>
-          ` : ''}
+          </div>
+
+          <div style="text-align: center; margin: 0 90px 40px 90px;">
+            <h1 style="color: #1F2937; font-size: 36px; margin: 0; font-family: Arial, sans-serif; font-weight: bold;">REPORTE DE CONTINGENCIA</h1>
+          </div>
+
+          <div style="text-align: center; margin: 0 90px 40px 90px;">
+            <h2 style="color: #1F2937; font-size: 32px; margin: 0; font-family: Arial, sans-serif; font-weight: bold;">${selectedReport.organization.name.replace(/\s*ENTERPRISE\s*/gi, '').trim()}</h2>
+          </div>
+
+          <div style="margin: 0 90px 40px 90px;">
+            <h2 style="color: #1F2937; font-size: 28px; margin-bottom: 20px; font-family: Arial, sans-serif; font-weight: bold;">INFORMACIÓN GENERAL</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 12px 0; width: 200px; font-family: Arial, sans-serif; font-size: 26px;"><strong>Organización:</strong></td>
+                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;">${selectedReport.organization.name.replace(/\s*ENTERPRISE\s*/gi, '').trim()}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;"><strong>Área:</strong></td>
+                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;">${selectedReport.area}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;"><strong>Sala:</strong></td>
+                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;">${selectedReport.sala}</td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="margin: 0 90px 40px 90px;">
+            <h2 style="color: #1F2937; font-size: 28px; margin-bottom: 20px; font-family: Arial, sans-serif; font-weight: bold;">DETALLES DE LA CONTINGENCIA</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;"><strong>Tipo:</strong></td>
+                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;">${selectedReport.type}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;"><strong>Descripción:</strong></td>
+                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;">${selectedReport.description || 'No especificada'}</td>
+              </tr>
+            </table>
+          </div>
 
           ${selectedReport.attachments && selectedReport.attachments.length > 0 ? `
-            <div style="margin-bottom: 20px; padding: 15px; background-color: #FFFFFF; border: 1px solid #E5E7EB;">
-              <h2 style="color: #1E40AF; font-size: 18px; margin-bottom: 10px; font-family: Arial, sans-serif;">Archivos Adjuntos</h2>
-              <p style="color: #6B7280; font-family: Arial, sans-serif;">Este reporte contiene ${selectedReport.attachments.length} archivo(s) adjunto(s)</p>
+            <div style="margin: 0 90px 40px 90px;">
+              <h2 style="color: #1F2937; font-size: 28px; margin-bottom: 20px; font-family: Arial, sans-serif; font-weight: bold;">EVIDENCIA FOTOGRÁFICA</h2>
+              <div style="display: flex; flex-direction: column; gap: 35px; align-items: center;">
+                ${selectedReport.attachments
+                  .filter(attachment => attachment.type === 'image')
+                  .map(attachment => `
+                    <div style="width: 100%; display: flex; justify-content: center;">
+                      <img src="${attachment.url}" alt="Evidencia" style="max-width: 90%; height: auto; object-fit: contain;" />
+                    </div>
+                  `).join('')}
+              </div>
             </div>
           ` : ''}
         </div>
@@ -518,39 +583,41 @@ export default function ReportsPage() {
 
       document.body.appendChild(reportElement);
 
-      // Convertir el elemento a canvas con configuración específica
       const canvas = await html2canvas(reportElement, {
         scale: 2,
         logging: false,
         useCORS: true,
         backgroundColor: '#FFFFFF',
-        removeContainer: true,
         onclone: (clonedDoc) => {
-          const element = clonedDoc.querySelector('div');
-          if (element) {
-            element.style.backgroundColor = '#FFFFFF';
+          const elements = clonedDoc.getElementsByTagName('*');
+          for (let i = 0; i < elements.length; i++) {
+            const el = elements[i] as HTMLElement;
+            if (el.style) {
+              const computedStyle = window.getComputedStyle(el);
+              if (computedStyle.backgroundColor && computedStyle.backgroundColor.includes('oklch')) {
+                el.style.backgroundColor = '#FFFFFF';
+              }
+              if (computedStyle.color && computedStyle.color.includes('oklch')) {
+                el.style.color = '#000000';
+              }
+            }
           }
         }
       });
 
-      // Remover el elemento temporal
       document.body.removeChild(reportElement);
 
-      // Crear el PDF
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4'
       });
 
-      // Agregar el canvas al PDF
       const imgData = canvas.toDataURL('image/png');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-
-      // Descargar el PDF
       pdf.save(`Reporte_Contingencia_${selectedReport.id}.pdf`);
 
       toast.success('PDF generado exitosamente');
@@ -764,159 +831,91 @@ export default function ReportsPage() {
 
   const renderReportList = () => {
     if (isLoading) {
-      return <div>Cargando...</div>;
+      return <div className="p-4 text-center">Cargando...</div>;
     }
 
     if (error) {
-      return <div>Error: {error}</div>;
+      return <div className="p-4 text-center text-red-500">Error: {error}</div>;
     }
 
     if (!reportes.length) {
-      return <div>No hay reportes para mostrar</div>;
+      return <div className="p-4 text-center">No hay reportes para mostrar</div>;
     }
 
     return (
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Fecha
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Organización
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Área
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Tipo
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Estado
-              </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Acciones
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {reportes.map((report) => (
-              <tr key={report.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(report.date).toLocaleDateString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {report.organization.name}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {report.area}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {report.type}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                    report.status === 'Pendiente' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
-                  }`}>
-                    {report.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button
-                    onClick={() => {
-                      setSelectedReport(report);
-                      setShowModal(true);
-                    }}
-                    className="text-indigo-600 hover:text-indigo-900 mr-4"
-                  >
-                    Ver detalles
-                  </button>
-                  {report.status === 'Pendiente' ? (
-                    <button
-                      onClick={() => handleUpdateStatus(report.id, 'Completada')}
-                      className="text-green-600 hover:text-green-900"
-                    >
-                      Marcar como resuelto
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleUpdateStatus(report.id, 'Pendiente')}
-                      className="text-yellow-600 hover:text-yellow-900"
-                    >
-                      Reabrir
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="divide-y divide-gray-100">
+        <div className="grid grid-cols-4 gap-2 p-3 text-xs font-medium text-gray-500 bg-gray-50">
+          <div className="flex items-center gap-1">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            FECHA
+          </div>
+          <div className="flex items-center gap-1">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+            SALA
+          </div>
+          <div className="flex items-center gap-1">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            ÁREA
+          </div>
+          <div className="text-center">ACCIONES</div>
+        </div>
+        {reportes.map((report) => (
+          <div
+            key={report.id}
+            className="grid grid-cols-4 gap-2 p-2 text-sm hover:bg-gray-50 items-center"
+          >
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${
+                report.status === 'Pendiente' ? 'bg-yellow-400' : 'bg-green-400'
+              }`} />
+              <span className="text-gray-600">{new Date(report.date).toLocaleDateString()}</span>
+            </div>
+            <div className="truncate text-gray-600" title={report.sala}>
+              {report.sala || 'No especificada'}
+            </div>
+            <div className="truncate text-gray-600" title={report.area}>
+              {report.area}
+            </div>
+            <div className="flex justify-center gap-4">
+              {/* Icono de ojo para ver detalles */}
+              <button
+                onClick={() => {
+                  setSelectedReport(report);
+                  setShowModal(true);
+                }}
+                className="text-blue-500 hover:text-blue-600"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              </button>
+              {/* Icono de check para marcar como completado */}
+              <button
+                onClick={() => handleUpdateStatus(report.id, report.status === 'Pendiente' ? 'Completada' : 'Pendiente')}
+                className={`${
+                  report.status === 'Pendiente' 
+                    ? 'text-gray-400 hover:text-green-500' 
+                    : 'text-green-500 hover:text-green-600'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     );
   };
-
-  // Función de prueba para verificar el bucket
-  const testBucketAccess = async () => {
-    try {
-      // 1. Verificar la URL de Supabase
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      alert(`URL de Supabase: ${supabaseUrl}\nPrimeros 10 caracteres de la key: ${supabaseKey?.substring(0, 10)}...`);
-
-      // 2. Verificar autenticación
-      const { data: { session }, error: authError } = await supabase.auth.getSession();
-      if (authError) {
-        alert(`Error de autenticación: ${authError.message}`);
-        return;
-      }
-      alert(`Usuario autenticado: ${!!session}\nID: ${session?.user?.id}`);
-
-      // 3. Verificar rol del usuario
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('role, organization_id')
-        .eq('id', session?.user?.id)
-        .single();
-
-      if (userError) {
-        alert(`Error al obtener rol: ${userError.message}`);
-        return;
-      }
-      alert(`Rol: ${userData.role}\nOrganización ID: ${userData.organization_id}`);
-
-      // 4. Intentar listar buckets
-      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-      if (bucketsError) {
-        alert(`Error al listar buckets: ${bucketsError.message}`);
-        return;
-      }
-      alert(`Buckets encontrados: ${buckets?.length || 0}\nNombres: ${buckets?.map(b => b.name).join(', ') || 'ninguno'}`);
-
-      // 5. Intentar acceder específicamente al bucket Reports
-      const { data: files, error: filesError } = await supabase.storage
-        .from('Reports')
-        .list('', {
-          limit: 1,
-          offset: 0,
-          sortBy: { column: 'name', order: 'asc' },
-        });
-
-      if (filesError) {
-        alert(`Error al acceder a Reports: ${filesError.message}`);
-        return;
-      }
-      alert(`Acceso exitoso al bucket Reports. Archivos encontrados: ${files?.length || 0}`);
-
-    } catch (error) {
-      alert(`Error general: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-    }
-  };
-
-  // Ejecutar el test al cargar el componente
-  useEffect(() => {
-    testBucketAccess();
-  }, []);
 
   if (error) {
     return (
@@ -943,16 +942,11 @@ export default function ReportsPage() {
             </h1>
             <p className="mt-2 text-gray-600">Sistema de gestión y seguimiento de incidentes</p>
           </div>
-          
-          {/* Selector de período con diseño mejorado */}
           <div className="mt-4 md:mt-0">
             <select
               value={timeFilter}
               onChange={(e) => setTimeFilter(e.target.value)}
-              className="bg-white border-2 border-blue-100 rounded-xl px-6 py-3 text-sm
-                        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                        transition-all duration-200 hover:border-blue-200 cursor-pointer
-                        shadow-sm hover:shadow-md"
+              className="bg-white border-2 border-blue-100 rounded-xl px-6 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-blue-200 cursor-pointer shadow-sm hover:shadow-md"
             >
               <option value="dia">Reportes de Hoy</option>
               <option value="semana">Reportes de la Semana</option>
@@ -961,88 +955,63 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Botón de diagnóstico */}
-        <button
-          type="button"
-          onClick={testBucketAccess}
-          className="mb-4 px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors"
-        >
-          Diagnosticar conexión con Storage
-        </button>
-
-        {/* Tarjetas de estadísticas con animación y mejor diseño */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {/* Total de Reportes */}
-          <div className="transform hover:scale-105 transition-all duration-300">
-            <div className="bg-white rounded-2xl shadow-sm hover:shadow-lg p-6 border-l-4 border-blue-500">
-              <div className="flex items-center">
-                <div className="p-3 bg-blue-100 rounded-xl hover:bg-blue-200 transition-colors">
-                  <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                      d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <h2 className="text-sm font-medium text-gray-600">Total Reportes</h2>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                    {stats.total}
-                  </p>
-                  <p className="text-xs text-blue-600 mt-1 font-medium">
-                    {timeFilter === 'dia' ? 'Hoy' : 
-                     timeFilter === 'semana' ? 'Esta Semana' : 
-                     'Este Mes'}
-                  </p>
-                </div>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          {/* Total Reportes */}
+          <div className="relative bg-white rounded-[2rem] shadow-sm p-6 overflow-hidden">
+            <div className="absolute left-0 top-2 bottom-2 w-1.5 bg-blue-500 rounded-r-full"></div>
+            <div className="flex items-start">
+              <div className="bg-blue-50 rounded-2xl p-3">
+                <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <div className="ml-4">
+                <h3 className="text-lg font-semibold text-gray-900">Total Reportes</h3>
+                <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
+                <p className="text-sm text-blue-500 mt-1">Hoy</p>
               </div>
             </div>
           </div>
 
-          {/* Reportes Pendientes */}
-          <div className="transform hover:scale-105 transition-all duration-300">
-            <div className="bg-white rounded-2xl shadow-sm hover:shadow-lg p-6 border-l-4 border-yellow-500">
-              <div className="flex items-center">
-                <div className="p-3 bg-yellow-100 rounded-xl hover:bg-yellow-200 transition-colors">
-                  <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <h2 className="text-sm font-medium text-gray-600">Pendientes</h2>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-yellow-600 to-yellow-800 bg-clip-text text-transparent">
-                    {stats.pendientes}
-                  </p>
-                  <p className="text-xs text-yellow-600 mt-1 font-medium">Requieren atención</p>
-                </div>
+          {/* Pendientes */}
+          <div className="relative bg-white rounded-[2rem] shadow-sm p-6 overflow-hidden">
+            <div className="absolute left-0 top-2 bottom-2 w-1.5 bg-yellow-500 rounded-r-full"></div>
+            <div className="flex items-start">
+              <div className="bg-yellow-50 rounded-2xl p-3">
+                <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-4">
+                <h3 className="text-lg font-semibold text-gray-900">Pendientes</h3>
+                <p className="text-3xl font-bold text-yellow-600">{stats.pendientes}</p>
+                <p className="text-sm text-yellow-500 mt-1">Requieren atención</p>
               </div>
             </div>
           </div>
 
-          {/* Reportes Resueltos */}
-          <div className="transform hover:scale-105 transition-all duration-300">
-            <div className="bg-white rounded-2xl shadow-sm hover:shadow-lg p-6 border-l-4 border-green-500">
-              <div className="flex items-center">
-                <div className="p-3 bg-green-100 rounded-xl hover:bg-green-200 transition-colors">
-                  <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <h2 className="text-sm font-medium text-gray-600">Resueltos</h2>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-green-600 to-green-800 bg-clip-text text-transparent">
-                    {stats.resueltos}
-                  </p>
-                  <p className="text-xs text-green-600 mt-1 font-medium">Completados</p>
-                </div>
+          {/* Resueltos */}
+          <div className="relative bg-white rounded-[2rem] shadow-sm p-6 overflow-hidden">
+            <div className="absolute left-0 top-2 bottom-2 w-1.5 bg-green-500 rounded-r-full"></div>
+            <div className="flex items-start">
+              <div className="bg-green-50 rounded-2xl p-3">
+                <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div className="ml-4">
+                <h3 className="text-lg font-semibold text-gray-900">Resueltos</h3>
+                <p className="text-3xl font-bold text-green-600">{stats.resueltos}</p>
+                <p className="text-sm text-green-500 mt-1">Completados</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Contenedor principal con diseño mejorado y compacto */}
+        {/* Contenedor principal */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Lista de Reportes - Versión compacta */}
+          {/* Lista de Reportes */}
           <div className="bg-white rounded-xl shadow-lg overflow-hidden">
             <div className="p-4 border-b border-gray-100">
               <div className="flex items-center space-x-2">
@@ -1052,80 +1021,10 @@ export default function ReportsPage() {
                 <h3 className="text-lg font-semibold text-gray-900">Reportes</h3>
               </div>
             </div>
-
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Fecha</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Área</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Tipo</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Estado</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {reportes.map((report) => (
-                    <tr key={report.id} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-sm text-gray-500">
-                        {new Date(report.date).toLocaleDateString()}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-gray-500">
-                        {report.area}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-gray-500">
-                        {report.type}
-                      </td>
-                      <td className="px-3 py-2">
-                        {report.status === 'Pendiente' ? 
-                          <span className="w-2 h-2 inline-block bg-yellow-400 rounded-full mr-1" /> :
-                          <span className="w-2 h-2 inline-block bg-green-400 rounded-full mr-1" />
-                        }
-                      </td>
-                      <td className="px-3 py-2 text-sm space-x-2">
-                        <button
-                          onClick={() => {
-                            setSelectedReport(report);
-                            setShowModal(true);
-                          }}
-                          className="text-blue-600 hover:text-blue-800"
-                          title="Ver detalles"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        </button>
-                        {report.status === 'Pendiente' ? (
-                          <button
-                            onClick={() => handleUpdateStatus(report.id, 'Completada')}
-                            className="text-green-600 hover:text-green-800"
-                            title="Marcar como resuelto"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                            </svg>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleUpdateStatus(report.id, 'Pendiente')}
-                            className="text-yellow-600 hover:text-yellow-800"
-                            title="Reabrir"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {renderReportList()}
           </div>
 
-          {/* Formulario de Nuevo Reporte - Versión compacta */}
+          {/* Formulario de Nuevo Reporte */}
           <div className="bg-white rounded-xl shadow-lg">
             <div className="p-4 border-b border-gray-100">
               <div className="flex items-center space-x-2">
@@ -1178,8 +1077,9 @@ export default function ReportsPage() {
                 <div className="col-span-2">
                   <div
                     {...getRootProps()}
-                    className={`border border-dashed rounded-lg p-3 text-center cursor-pointer
-                      ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}`}
+                    className={`border border-dashed rounded-lg p-3 text-center cursor-pointer ${
+                      isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                    }`}
                   >
                     <input {...getInputProps()} />
                     <FiUpload className="w-6 h-6 text-gray-400 mx-auto" />
@@ -1203,8 +1103,7 @@ export default function ReportsPage() {
                         <button
                           type="button"
                           onClick={() => removeImage(index)}
-                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1
-                                   opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <FiX className="w-3 h-3" />
                         </button>
@@ -1218,8 +1117,7 @@ export default function ReportsPage() {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700
-                             flex items-center space-x-2 text-sm disabled:opacity-50"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 text-sm disabled:opacity-50"
                   >
                     {isLoading ? (
                       <span className="animate-spin rounded-full h-4 w-4 border-2 border-white" />
@@ -1235,13 +1133,10 @@ export default function ReportsPage() {
             </form>
           </div>
         </div>
-
-        {/* Modal con diseño mejorado */}
-        {showModal && selectedReport && (
-          renderReportModal()
-        )}
       </div>
+
+      {/* Modal */}
+      {showModal && selectedReport && renderReportModal()}
     </div>
   );
 }
-  
