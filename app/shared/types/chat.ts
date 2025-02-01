@@ -4,7 +4,7 @@ export interface Message {
   room_id: string
   user_id: string
   content: string
-  type: 'text' | 'system'
+  type: 'text' | 'image' | 'file' | 'system'
   parent_id?: string
   is_edited: boolean
   created_at: string
