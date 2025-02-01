@@ -73,13 +73,9 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
     if (!user) return;
     try {
       await supabase
-        .from('chat_room_members')
-        .update({ 
-          last_read_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('room_id', roomId)
-        .eq('user_id', user.id);
+        .rpc('mark_chat_room_as_read', {
+          p_room_id: roomId
+        });
     } catch (error) {
       console.error('Error en updateLastRead:', error);
     }

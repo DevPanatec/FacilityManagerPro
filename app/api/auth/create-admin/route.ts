@@ -134,13 +134,35 @@ export async function POST(request: Request) {
       }, { status: 500 });
     }
 
-    // 4. Crear registro en chat_room_members para acceso al chat
+    // 4. Crear sala de chat por defecto para el admin
+    const { data: roomData, error: roomError } = await supabase
+      .from('chat_rooms')
+      .insert({
+        organization_id: organizationId,
+        name: 'General',
+        type: 'channel',
+        created_by: authData.user.id,
+        is_private: false
+      })
+      .select()
+      .single();
+
+    if (roomError) {
+      console.error('Error creando sala de chat:', roomError);
+      return NextResponse.json({ 
+        error: 'Error al crear la sala de chat' 
+      }, { status: 500 });
+    }
+
+    // 5. Agregar admin como miembro de la sala
     const { error: chatError } = await supabase
       .from('chat_room_members')
       .insert({
         user_id: authData.user.id,
         organization_id: organizationId,
-        role: 'admin'
+        room_id: roomData.id,
+        role: 'admin',
+        status: 'active'
       });
 
     if (chatError) {
