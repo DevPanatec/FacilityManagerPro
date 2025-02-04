@@ -319,6 +319,13 @@ export default function ReportsPage() {
   const handleSaveReport = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      console.log('Iniciando creación de reporte con datos:', {
+        selectedArea,
+        contingencyType,
+        description,
+        images
+      });
+
       if (!userData?.organization_id) {
         throw new Error('Usuario no tiene organización asignada');
       }
@@ -428,7 +435,6 @@ export default function ReportsPage() {
       }
       
       toast.error(errorMessage);
-      setIsLoading(false);
     }
   };
 
@@ -455,7 +461,7 @@ export default function ReportsPage() {
     try {
       const reportElement = document.createElement('div');
       reportElement.style.cssText = `
-        font-family: Arial, sans-serif;
+        font-family: 'Times New Roman', serif;
         background-color: #FFFFFF;
         color: #000000;
         -webkit-print-color-adjust: exact;
@@ -506,73 +512,72 @@ export default function ReportsPage() {
 
       // Solo incluir las imágenes que se cargaron correctamente
       const logosHtml = [
-        sgsIsoLogo ? `<img src="${sgsIsoLogo}" alt="SGS ISO 9001" style="height: 100px; width: 100px; object-fit: contain;" />` : '',
-        issaLogo ? `<img src="${issaLogo}" alt="ISSA Member" style="height: 100px; width: 100px; object-fit: contain;" />` : ''
+        sgsIsoLogo ? `<img src="${sgsIsoLogo}" alt="SGS ISO 9001" style="height: 80px; width: auto; object-fit: contain;" />` : '',
+        issaLogo ? `<img src="${issaLogo}" alt="ISSA Member" style="height: 80px; width: auto; object-fit: contain;" />` : ''
       ].filter(Boolean).join('');
       
       reportElement.innerHTML = `
-        <div style="padding: 90px; font-family: Arial, sans-serif; background-color: #FFFFFF; border: 1px solid #E5E7EB;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
+        <div style="padding: 90px; font-family: 'Times New Roman', serif; background-color: #FFFFFF;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
             <div style="display: flex; align-items: center; gap: 30px;">
               ${logosHtml}
             </div>
-            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 10px;">
-              ${hbLogo ? `<img src="${hbLogo}" alt="Hombres de Blanco" style="height: 100px; width: 100px; object-fit: contain;" />` : ''}
-              <p style="color: #1F2937; font-size: 26px; margin: 0; font-family: Arial, sans-serif;">
+            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
+              ${hbLogo ? `<img src="${hbLogo}" alt="Hombres de Blanco" style="height: 120px; width: auto; object-fit: contain;" />` : ''}
+              <p style="color: #1F2937; font-size: 32px; margin: 0; font-family: 'Times New Roman', serif;">
                 Fecha: ${new Date(selectedReport.date).toLocaleDateString()}
               </p>
             </div>
           </div>
 
-          <div style="text-align: center; margin: 0 90px 40px 90px;">
-            <h1 style="color: #1F2937; font-size: 36px; margin: 0; font-family: Arial, sans-serif; font-weight: bold;">REPORTE DE CONTINGENCIA</h1>
+          <div style="text-align: center; margin: 0 90px 30px 90px;">
+            <h1 style="color: #1F2937; font-size: 42px; margin: 0; font-family: 'Times New Roman', serif; font-weight: bold; letter-spacing: 1px;">REPORTE DE CONTINGENCIA</h1>
           </div>
 
-          <div style="text-align: center; margin: 0 90px 40px 90px;">
-            <h2 style="color: #1F2937; font-size: 32px; margin: 0; font-family: Arial, sans-serif; font-weight: bold;">${selectedReport.organization.name.replace(/\s*ENTERPRISE\s*/gi, '').trim()}</h2>
+          <div style="text-align: center; margin: 0 90px 30px 90px;">
+            <h2 style="color: #1F2937; font-size: 32px; margin: 0; font-family: 'Times New Roman', serif; font-weight: bold;">${selectedReport.organization.name.replace(/\s*ENTERPRISE\s*/gi, '').trim()}</h2>
           </div>
 
-          <div style="margin: 0 90px 40px 90px;">
-            <h2 style="color: #1F2937; font-size: 28px; margin-bottom: 20px; font-family: Arial, sans-serif; font-weight: bold;">INFORMACIÓN GENERAL</h2>
+          <div style="margin: 0 90px 30px 90px;">
+            <h2 style="color: #1F2937; font-size: 32px; margin-bottom: 15px; font-family: 'Times New Roman', serif; font-weight: bold;">INFORMACIÓN GENERAL</h2>
             <table style="width: 100%; border-collapse: collapse;">
               <tr>
-                <td style="padding: 12px 0; width: 200px; font-family: Arial, sans-serif; font-size: 26px;"><strong>Organización:</strong></td>
-                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;">${selectedReport.organization.name.replace(/\s*ENTERPRISE\s*/gi, '').trim()}</td>
+                <td style="padding: 8px 0; width: 200px; font-family: 'Times New Roman', serif; font-size: 32px;"><strong>Organización:</strong></td>
+                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;">${selectedReport.organization.name.replace(/\s*ENTERPRISE\s*/gi, '').trim()}</td>
               </tr>
               <tr>
-                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;"><strong>Área:</strong></td>
-                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;">${selectedReport.area}</td>
+                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;"><strong>Área:</strong></td>
+                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;">${selectedReport.area}</td>
               </tr>
               <tr>
-                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;"><strong>Sala:</strong></td>
-                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;">${selectedReport.sala}</td>
+                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;"><strong>Sala:</strong></td>
+                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;">${selectedReport.sala ? selectedReport.sala.charAt(0).toUpperCase() + selectedReport.sala.slice(1).toLowerCase() : ''}</td>
               </tr>
             </table>
           </div>
 
-          <div style="margin: 0 90px 40px 90px;">
-            <h2 style="color: #1F2937; font-size: 28px; margin-bottom: 20px; font-family: Arial, sans-serif; font-weight: bold;">DETALLES DE LA CONTINGENCIA</h2>
+          <div style="margin: 0 90px 30px 90px;">
+            <h2 style="color: #1F2937; font-size: 32px; margin-bottom: 15px; font-family: 'Times New Roman', serif; font-weight: bold;">DETALLES DE LA CONTINGENCIA</h2>
             <table style="width: 100%; border-collapse: collapse;">
               <tr>
-                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;"><strong>Tipo:</strong></td>
-                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;">${selectedReport.type}</td>
+                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;"><strong>Tipo:</strong></td>
+                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;">${selectedReport.type}</td>
               </tr>
               <tr>
-                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;"><strong>Descripción:</strong></td>
-                <td style="padding: 12px 0; font-family: Arial, sans-serif; font-size: 26px;">${selectedReport.description || 'No especificada'}</td>
+                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;"><strong>Descripción:</strong></td>
+                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px; line-height: 1.3;">${selectedReport.description || 'No especificada'}</td>
               </tr>
             </table>
           </div>
 
           ${selectedReport.attachments && selectedReport.attachments.length > 0 ? `
-            <div style="margin: 0 90px 40px 90px;">
-              <h2 style="color: #1F2937; font-size: 28px; margin-bottom: 20px; font-family: Arial, sans-serif; font-weight: bold;">EVIDENCIA FOTOGRÁFICA</h2>
-              <div style="display: flex; flex-direction: column; gap: 35px; align-items: center;">
+            <div style="margin: 0 90px 30px 90px;">
+              <div style="display: flex; flex-direction: column; gap: 25px; align-items: center;">
                 ${selectedReport.attachments
                   .filter(attachment => attachment.type === 'image')
                   .map(attachment => `
                     <div style="width: 100%; display: flex; justify-content: center;">
-                      <img src="${attachment.url}" alt="Evidencia" style="max-width: 90%; height: auto; object-fit: contain;" />
+                      <img src="${attachment.url}" alt="Evidencia" style="max-width: 80%; height: auto; object-fit: contain;" />
                     </div>
                   `).join('')}
               </div>
@@ -1040,8 +1045,14 @@ export default function ReportsPage() {
                 {/* Área */}
                 <div className="col-span-2 md:col-span-1">
                   <SalaAreaSelector
-                    onSalaChange={(sala) => setSelectedSala(sala?.id || null)}
-                    onAreaChange={(area) => setSelectedArea(area?.id || '')}
+                    onSalaChange={(sala) => {
+                      setSelectedSala(sala?.id || null);
+                      console.log('Sala seleccionada:', sala);
+                    }}
+                    onAreaChange={(area) => {
+                      setSelectedArea(area?.id || '');
+                      console.log('Área seleccionada:', area);
+                    }}
                     className="space-y-2"
                   />
                 </div>
@@ -1050,7 +1061,10 @@ export default function ReportsPage() {
                 <div className="col-span-2 md:col-span-1">
                   <select
                     value={contingencyType}
-                    onChange={(e) => setContingencyType(e.target.value)}
+                    onChange={(e) => {
+                      setContingencyType(e.target.value);
+                      console.log('Tipo de contingencia seleccionado:', e.target.value);
+                    }}
                     className="w-full rounded-lg border border-gray-200 text-sm focus:ring-blue-500"
                     required
                   >
@@ -1065,10 +1079,12 @@ export default function ReportsPage() {
                 <div className="col-span-2">
                   <textarea
                     value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Descripción del incidente"
-                    rows={3}
-                    className="w-full rounded-lg border border-gray-200 text-sm focus:ring-blue-500"
+                    onChange={(e) => {
+                      setDescription(e.target.value);
+                      console.log('Descripción actualizada:', e.target.value);
+                    }}
+                    placeholder="Descripción detallada de la contingencia..."
+                    className="w-full h-32 rounded-lg border border-gray-200 text-sm focus:ring-blue-500"
                     required
                   />
                 </div>
@@ -1116,17 +1132,10 @@ export default function ReportsPage() {
                 <div className="col-span-2 flex justify-end">
                   <button
                     type="submit"
-                    disabled={isLoading}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 text-sm disabled:opacity-50"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!selectedArea || !contingencyType || !description}
                   >
-                    {isLoading ? (
-                      <span className="animate-spin rounded-full h-4 w-4 border-2 border-white" />
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                      </svg>
-                    )}
-                    <span>{isLoading ? 'Enviando...' : 'Crear Reporte'}</span>
+                    Crear Reporte
                   </button>
                 </div>
               </div>
