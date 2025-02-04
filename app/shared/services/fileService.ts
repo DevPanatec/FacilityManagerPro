@@ -1,5 +1,6 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { Database } from '@/lib/types/database'
+import { validateFile, getFileTypeConfig } from '@/app/shared/utils/fileValidation'
 
 export type FileType = 'image' | 'document' | 'spreadsheet' | 'other'
 
@@ -29,8 +30,15 @@ export class FileService {
   private async uploadFile(
     file: File,
     organizationId: string,
+    bucket: string = 'contingency-files',
     onProgress?: (progress: number) => void
   ): Promise<UploadedFile> {
+    // Validar archivo
+    const error = validateFile(file, getFileTypeConfig(this.getFileType(file)));
+    if (error) {
+      throw new Error(error.message);
+    }
+
     const fileType = this.getFileType(file)
     const fileExt = file.name.split('.').pop()
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
@@ -42,8 +50,8 @@ export class FileService {
 
     try {
       // Subir el archivo con seguimiento de progreso
-      const { data, error } = await this.supabase.storage
-        .from('chat-attachments')
+      const { data, error: uploadError } = await this.supabase.storage
+        .from(bucket)
         .upload(filePath, file, {
           abortSignal: controller.signal,
           onUploadProgress: (progress) => {
@@ -53,11 +61,11 @@ export class FileService {
           }
         })
 
-      if (error) throw error
+      if (uploadError) throw uploadError
 
       // Obtener la URL pública del archivo
       const { data: { publicUrl } } = this.supabase.storage
-        .from('chat-attachments')
+        .from(bucket)
         .getPublicUrl(filePath)
 
       return {
@@ -74,17 +82,74 @@ export class FileService {
   async uploadFiles(
     files: File[],
     organizationId: string,
+    bucket: string = 'contingency-files',
     onProgress?: (fileName: string, progress: number) => void
   ): Promise<UploadedFile[]> {
     const uploadPromises = files.map(file =>
       this.uploadFile(
         file,
         organizationId,
+        bucket,
         progress => onProgress?.(file.name, progress)
       )
     )
 
     return Promise.all(uploadPromises)
+  }
+
+  async uploadContingencyFile(
+    file: File,
+    contingencyId: string,
+    organizationId: string,
+    userId: string,
+    onProgress?: (progress: number) => void
+  ): Promise<UploadedFile> {
+    const uploadedFile = await this.uploadFile(file, organizationId, 'contingency-files', onProgress);
+
+    // Registrar el archivo en la base de datos
+    const { error } = await this.supabase
+      .from('contingency_files')
+      .insert([{
+        contingency_id: contingencyId,
+        organization_id: organizationId,
+        user_id: userId,
+        file_name: file.name,
+        file_type: this.getFileType(file),
+        file_size: file.size,
+        file_url: uploadedFile.url
+      }]);
+
+    if (error) throw error;
+
+    return uploadedFile;
+  }
+
+  async getContingencyFiles(contingencyId: string) {
+    const { data, error } = await this.supabase
+      .from('contingency_files')
+      .select('*')
+      .eq('contingency_id', contingencyId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  }
+
+  async deleteContingencyFile(fileId: string, filePath: string) {
+    // Eliminar el archivo del storage
+    const { error: storageError } = await this.supabase.storage
+      .from('contingency-files')
+      .remove([filePath]);
+
+    if (storageError) throw storageError;
+
+    // Eliminar el registro de la base de datos
+    const { error: dbError } = await this.supabase
+      .from('contingency_files')
+      .delete()
+      .eq('id', fileId);
+
+    if (dbError) throw dbError;
   }
 
   cancelUpload(fileName: string) {
@@ -95,18 +160,9 @@ export class FileService {
     }
   }
 
-  async deleteFile(url: string): Promise<void> {
-    const path = url.split('/').pop()
-    if (!path) return
-
-    await this.supabase.storage
-      .from('chat-attachments')
-      .remove([path])
-  }
-
   getImageThumbnail(url: string, size: number = 200): string {
     const { data: { publicUrl } } = this.supabase.storage
-      .from('chat-attachments')
+      .from('contingency-files')
       .getPublicUrl(url, {
         transform: {
           width: size,
@@ -121,7 +177,7 @@ export class FileService {
   async getFileMetadata(url: string) {
     const path = url.split('/').slice(-2).join('/')
     const { data, error } = await this.supabase.storage
-      .from('chat-attachments')
+      .from('contingency-files')
       .list(path.split('/')[0], {
         search: path.split('/')[1]
       })

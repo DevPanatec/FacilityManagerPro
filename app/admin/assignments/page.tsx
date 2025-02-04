@@ -93,12 +93,19 @@ interface Sala {
   id: string;
   nombre: string;
   color: string;
-  tareas: Tarea[];
-  progreso: {
-    completadas: number;
-    total: number;
-  };
-  areas: Area[];
+  tareas: {
+    id: string;
+    titulo: string;
+    descripcion: string;
+    estado: string;
+    prioridad: string;
+    fechaCreacion: string;
+    fechaVencimiento: string;
+  }[];
+  areas: {
+    id: string;
+    name: string;
+  }[];
 }
 
 export default function AssignmentsPage() {
@@ -111,12 +118,11 @@ export default function AssignmentsPage() {
   const [selectedArea, setSelectedArea] = useState('');
   const [selectedSala, setSelectedSala] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState('');
+  const [selectedEndDate, setSelectedEndDate] = useState('');
   const [frecuencia, setFrecuencia] = useState('diario');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [selectedTurno, setSelectedTurno] = useState('');
   const [selectedShiftUser, setSelectedShiftUser] = useState('');
-  const [tasks, setTasks] = useState<{id: string, title: string}[]>([]);
-  const [selectedTask, setSelectedTask] = useState('');
   const [salas, setSalas] = useState<Sala[]>([]);
   const [userMap, setUserMap] = useState<Record<string, string>>({});
 
@@ -174,16 +180,22 @@ export default function AssignmentsPage() {
         .eq('status', 'active');
 
       if (usersData) {
-        setUsuarios(usersData.map(u => `${u.first_name} ${u.last_name}`));
-        const newUserMap = (usersData || []).reduce((acc, user) => ({
+        // Almacenar el ID junto con el nombre completo para referencia posterior
+        const userList = usersData.map(u => ({
+          id: u.id,
+          fullName: `${u.first_name} ${u.last_name}`
+        }));
+        setUsuarios(userList.map(u => u.fullName));
+        // Guardar el mapeo de nombre completo a ID
+        const newUserMap = userList.reduce((acc, user) => ({
           ...acc,
-          [user.id]: `${user.first_name} ${user.last_name}`
+          [user.fullName]: user.id
         }), {} as Record<string, string>);
         setUserMap(newUserMap);
       }
 
       // Cargar salas y sus tareas
-      const { data: salasData } = await supabase
+      const { data: salasData, error: salasError } = await supabase
         .from('salas')
         .select(`
           id,
@@ -194,7 +206,9 @@ export default function AssignmentsPage() {
             tasks (
               id,
               title,
+              description,
               status,
+              priority,
               assigned_to,
               created_at,
               due_date
@@ -204,63 +218,51 @@ export default function AssignmentsPage() {
         .eq('organization_id', userProfile.organization_id)
         .eq('estado', true);
 
+      console.log('Datos de salas cargados:', salasData);
+      console.log('Error al cargar salas:', salasError);
+
+      if (salasError) {
+        throw salasError;
+      }
+
       if (salasData) {
-        const salasFormatted = await Promise.all(salasData.map(async (sala) => {
+        const salasFormatted = salasData.map((sala) => {
           // Obtener todas las tareas de todas las áreas de la sala
-          const tareas = sala.areas.flatMap(area => area.tasks).filter(Boolean);
-          
-          const userIds = tareas.map(task => task.assigned_to).filter(Boolean);
-          const { data: usersData } = await supabase
-            .from('users')
-            .select('id, first_name, last_name')
-            .in('id', userIds);
+          const tareas = sala.areas
+            .flatMap(area => area.tasks || [])
+            .filter(task => task.status !== 'completed')
+            .map(task => ({
+              id: task.id,
+              titulo: task.title,
+              descripcion: task.description || '',
+              estado: task.status,
+              prioridad: task.priority || 'low',
+              fechaCreacion: new Date(task.created_at || new Date()).toLocaleDateString(),
+              fechaVencimiento: task.due_date ? new Date(task.due_date).toLocaleDateString() : 'Sin fecha'
+            }));
 
-          const userMap = (usersData || []).reduce((acc, user) => ({
-            ...acc,
-            [user.id]: `${user.first_name} ${user.last_name}`
-          }), {} as Record<string, string>);
-
-          const tareasFormatted: Tarea[] = tareas.map((task) => ({
-            id: task.id,
-            titulo: task.title,
-            asignadoA: task.assigned_to ? userMap[task.assigned_to] : 'Sin asignar',
-            inicio: task.created_at ? new Date(task.created_at).toLocaleString() : 'No iniciada',
-            finalizacion: task.due_date ? new Date(task.due_date).toLocaleString() : 'En progreso',
-            estado: task.status === 'completed' ? 'completada' : 
-                   task.status === 'in_progress' ? 'en_progreso' : 'no_iniciada'
-          }));
-
-          const salaFormatted: Sala = {
+          const salaFormateada = {
             id: sala.id,
             nombre: sala.nombre,
             color: getSalaColor(sala.nombre),
-            tareas: tareasFormatted,
-            progreso: {
-              completadas: tareasFormatted.filter(t => t.estado === 'completada').length,
-              total: tareasFormatted.length
-            },
+            tareas: tareas,
             areas: sala.areas.map(area => ({
               id: area.id,
-              name: area.name,
-              tasks: area.tasks.map(task => ({
-                id: task.id,
-                title: task.title,
-                status: task.status,
-                assigned_to: task.assigned_to,
-                created_at: task.created_at,
-                due_date: task.due_date
-              }))
+              name: area.name
             }))
           };
 
-          return salaFormatted;
-        }));
+          console.log('Sala formateada:', salaFormateada);
+          return salaFormateada;
+        });
 
+        console.log('Salas formateadas:', salasFormatted);
         setSalas(salasFormatted);
       }
 
     } catch (error) {
       console.error('Error loading data:', error);
+      toast.error('Error al cargar los datos: ' + (error.message || 'Error desconocido'));
     } finally {
       setLoading(false);
     }
@@ -269,9 +271,9 @@ export default function AssignmentsPage() {
   // Función auxiliar para asignar colores a las salas
   const getSalaColor = (salaNombre: string): string => {
     const colorMap: { [key: string]: string } = {
-      'Bioseguridad': '#FF6B6B',     // Color rojo/coral como en la imagen
-      'Inyección': '#4FD1C5',        // Color turquesa como en la imagen
-      'Cuarto Frío': '#63B3ED',      // Color azul claro como en la imagen
+      'Bioseguridad': '#FF6B6B',     // Color rojo/coral
+      'Inyección': '#4FD1C5',        // Color turquesa
+      'Cuarto Frío': '#63B3ED',      // Color azul claro
       'Producción': '#68D391',
       'Techos, Paredes y Pisos': '#F6AD55',
       'Canaletas y Rejillas': '#4299E1',
@@ -284,7 +286,7 @@ export default function AssignmentsPage() {
       'Almacén': '#667EEA'
     };
 
-    return colorMap[salaNombre] || '#6B7280';
+    return colorMap[salaNombre] || '#6B7280'; // Color gris por defecto si no se encuentra el nombre
   };
 
   const addUserToShift = async () => {
@@ -343,35 +345,28 @@ export default function AssignmentsPage() {
     }
   };
 
-  const loadTasks = async (salaId: string, areaId: string) => {
-    try {
-      const { data: tasksData, error } = await supabase
-        .from('tasks')
-        .select('id, title')
-        .eq('area_id', areaId)
-        .eq('status', 'pending');
-
-      if (error) throw error;
-
-      setTasks(tasksData || []);
-    } catch (error) {
-      console.error('Error loading tasks:', error);
-      toast.error('Error al cargar las tareas');
-    }
-  };
-
-  useEffect(() => {
-    if (selectedSala && selectedArea) {
-      loadTasks(selectedSala, selectedArea);
-    } else {
-      setTasks([]);
-    }
-  }, [selectedSala, selectedArea]);
-
   const handleCreateAssignment = async () => {
     try {
-      if (!selectedUser || !selectedSala || !selectedArea || !selectedDate || !selectedTask) {
+      console.log('Estado del formulario:', {
+        selectedUser,
+        selectedSala,
+        selectedArea,
+        selectedDate,
+        selectedEndDate,
+        userMap
+      });
+
+      if (!selectedUser || !selectedSala || !selectedArea || !selectedDate || !selectedEndDate) {
         toast.error('Por favor complete todos los campos');
+        return;
+      }
+
+      // Validar que la fecha de finalización sea posterior a la fecha de inicio
+      const startDate = new Date(selectedDate);
+      const endDate = new Date(selectedEndDate);
+      
+      if (endDate <= startDate) {
+        toast.error('La fecha de finalización debe ser posterior a la fecha de inicio');
         return;
       }
 
@@ -386,31 +381,41 @@ export default function AssignmentsPage() {
 
       if (!userProfile) throw new Error('Perfil no encontrado');
 
-      // Obtener el ID del usuario seleccionado
-      const { data: userData } = await supabase
-        .from('users')
-        .select('id')
-        .eq('organization_id', userProfile.organization_id)
-        .eq('first_name || \' \' || last_name', selectedUser)
-        .single();
+      // Obtener el ID del usuario seleccionado del mapa
+      const selectedUserId = userMap[selectedUser];
+      console.log('ID del usuario seleccionado:', {
+        selectedUser,
+        selectedUserId,
+        userMapKeys: Object.keys(userMap)
+      });
 
-      if (!userData) throw new Error('Usuario no encontrado');
+      if (!selectedUserId) {
+        throw new Error('Usuario no encontrado. Por favor, verifique la selección.');
+      }
 
-      const assignmentData = {
+      const workShiftData = {
         organization_id: userProfile.organization_id,
-        user_id: userData.id,
+        user_id: selectedUserId,
         sala_id: selectedSala,
         area_id: selectedArea,
-        task_id: selectedTask,
-        start_time: new Date(selectedDate).toISOString(),
+        start_time: startDate.toISOString(),
+        end_time: endDate.toISOString(),
         status: 'scheduled'
       };
 
-      const { error: insertError } = await supabase
-        .from('work_shifts')
-        .insert([assignmentData]);
+      console.log('Datos a insertar:', workShiftData);
 
-      if (insertError) throw insertError;
+      const { data: insertedData, error: insertError } = await supabase
+        .from('work_shifts')
+        .insert([workShiftData])
+        .select();
+
+      if (insertError) {
+        console.error('Error de inserción:', insertError);
+        throw insertError;
+      }
+
+      console.log('Datos insertados:', insertedData);
 
       toast.success('Asignación creada exitosamente');
 
@@ -419,14 +424,14 @@ export default function AssignmentsPage() {
       setSelectedSala(null);
       setSelectedArea('');
       setSelectedDate('');
-      setSelectedTask('');
+      setSelectedEndDate('');
 
       // Recargar los datos
       await loadData();
 
     } catch (error) {
       console.error('Error creating assignment:', error);
-      toast.error('Error al crear la asignación');
+      toast.error('Error al crear la asignación: ' + (error.message || 'Error desconocido'));
     }
   };
 
@@ -520,11 +525,14 @@ export default function AssignmentsPage() {
               <select 
                 className="w-full p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                 value={selectedUser}
-                onChange={(e) => setSelectedUser(e.target.value)}
+                onChange={(e) => {
+                  console.log('Usuario seleccionado:', e.target.value);
+                  setSelectedUser(e.target.value);
+                }}
               >
                 <option value="">Seleccionar Usuario</option>
                 {usuarios.map((usuario, index) => (
-                  <option key={index} value={usuario}>{usuario}</option>
+                  <option key={usuario} value={usuario}>{usuario}</option>
                 ))}
               </select>
             </div>
@@ -542,40 +550,35 @@ export default function AssignmentsPage() {
               className="space-y-4"
             />
 
-            {/* Tarea */}
-            <div>
-              <label className="flex items-center gap-2 text-sm font-medium text-blue-700 mb-2">
-                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-                Tarea
-              </label>
-              <select
-                className="w-full p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                value={selectedTask}
-                onChange={(e) => setSelectedTask(e.target.value)}
-                disabled={!selectedArea}
-              >
-                <option value="">Seleccionar Tarea</option>
-                {tasks.map((task) => (
-                  <option key={task.id} value={task.id}>{task.title}</option>
-                ))}
-              </select>
-            </div>
-
             {/* Fecha de Asignación */}
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-blue-700 mb-2">
                 <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                Fecha de Asignación
+                Fecha y Hora de Inicio
               </label>
               <input
                 type="datetime-local"
                 className="w-full p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
+              />
+            </div>
+
+            {/* Fecha de Finalización */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-blue-700 mb-2">
+                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Fecha y Hora de Finalización
+              </label>
+              <input
+                type="datetime-local"
+                className="w-full p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                value={selectedEndDate}
+                onChange={(e) => setSelectedEndDate(e.target.value)}
               />
             </div>
 
@@ -628,7 +631,7 @@ export default function AssignmentsPage() {
               <button
                 onClick={handleCreateAssignment}
                 className="w-full py-3 bg-[#4263eb] text-white rounded-lg hover:bg-[#364fc7] transition-colors"
-                disabled={!selectedUser || !selectedSala || !selectedArea || !selectedDate || !selectedTask}
+                disabled={!selectedUser || !selectedSala || !selectedArea || !selectedDate || !selectedEndDate}
               >
                 Crear Asignación
               </button>
@@ -649,109 +652,40 @@ export default function AssignmentsPage() {
             >
               {/* Encabezado de la sala */}
               <div className="p-4" style={{ backgroundColor: `${sala.color}10` }}>
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium" style={{ color: sala.color }}>{sala.nombre}</h3>
-                  <span className="text-sm font-medium px-3 py-1 rounded-full" 
-                    style={{ 
-                      backgroundColor: `${sala.color}20`,
-                      color: sala.color 
-                    }}
-                  >
-                    {sala.tareas.length} tareas
-                  </span>
-                </div>
+                <h3 className="font-semibold text-gray-800">{sala.nombre}</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {sala.tareas.length} tareas pendientes
+                </p>
               </div>
 
-              {/* Áreas y sus tareas */}
-              <div className="divide-y divide-gray-100 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-                {sala.areas?.map((area) => (
-                  <div key={area.id} className="p-4">
-                    <div className="flex items-center gap-2 mb-3">
+              {/* Lista de tareas */}
+              <div className="p-4 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+                {sala.tareas.length > 0 ? (
+                  <div className="space-y-3">
+                    {sala.tareas.map((tarea) => (
                       <div 
-                        className="w-2 h-2 rounded-full"
-                        style={{ backgroundColor: sala.color }}
-                      />
-                      <h4 className="font-medium" style={{ color: sala.color }}>
-                        {area.name}
-                      </h4>
-                      <span className="text-sm" style={{ color: `${sala.color}88` }}>
-                        ({area.tasks?.length || 0} tareas)
-                      </span>
-                    </div>
-
-                    {/* Lista de tareas del área */}
-                    <div className="space-y-2 ml-4">
-                      {area.tasks?.map((task) => (
-                        <div 
-                          key={task.id}
-                          className="rounded-lg p-3"
-                          style={{ 
-                            backgroundColor: `${sala.color}08`,
-                            borderLeft: `3px solid ${sala.color}40`
-                          }}
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <p className="text-sm font-medium mb-1" style={{ color: `${sala.color}` }}>
-                                {task.title}
-                              </p>
-                              <div className="flex items-center gap-2 text-xs" style={{ color: `${sala.color}88` }}>
-                                <span>
-                                  Asignado: {task.assigned_to ? 
-                                    userMap[task.assigned_to] || 'Sin asignar' : 
-                                    'Sin asignar'}
-                                </span>
-                                <span>•</span>
-                                <span>
-                                  {task.status === 'completed' ? 'Completada' :
-                                   task.status === 'in_progress' ? 'En Progreso' :
-                                   'No Iniciada'}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button 
-                                className="p-1 rounded hover:bg-gray-100"
-                                style={{ color: `${sala.color}88` }}
-                              >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
-                              <button 
-                                className="p-1 rounded hover:bg-gray-100"
-                                style={{ color: `${sala.color}88` }}
-                              >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
+                        key={tarea.id}
+                        className="p-3 bg-gray-50 rounded-lg"
+                      >
+                        <h4 className="font-medium text-gray-800">{tarea.titulo}</h4>
+                        <p className="text-sm text-gray-600 mt-1">{tarea.descripcion}</p>
+                        <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                          <span className={`px-2 py-1 rounded-full text-xs ${
+                            tarea.prioridad === 'high' ? 'bg-red-100 text-red-700' :
+                            tarea.prioridad === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                          }`}>
+                            {tarea.prioridad === 'high' ? 'Alta' :
+                             tarea.prioridad === 'medium' ? 'Media' : 'Baja'}
+                          </span>
+                          <span>Vence: {tarea.fechaVencimiento}</span>
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-
-              {/* Barra de progreso */}
-              <div className="px-4 py-3 sticky bottom-0 bg-white" style={{ borderTop: `1px solid ${sala.color}15` }}>
-                <div className="flex items-center justify-between text-sm mb-2">
-                  <span className="font-medium" style={{ color: sala.color }}>Progreso Total</span>
-                  <span className="font-medium" style={{ color: `${sala.color}dd` }}>
-                    {sala.progreso.completadas}/{sala.progreso.total}
-                  </span>
-                </div>
-                <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: `${sala.color}15` }}>
-                  <div
-                    className="h-full rounded-full transition-all duration-300"
-                    style={{
-                      width: `${(sala.progreso.completadas / sala.progreso.total) * 100}%`,
-                      background: `linear-gradient(to right, ${sala.color}88, ${sala.color})`
-                    }}
-                  />
-                </div>
+                ) : (
+                  <p className="text-center text-gray-500 py-4">No hay tareas pendientes</p>
+                )}
               </div>
             </div>
           ))}

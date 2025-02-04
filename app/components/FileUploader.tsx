@@ -6,19 +6,41 @@ import { FiUpload, FiFile, FiTrash2 } from 'react-icons/fi';
 import Image from 'next/image';
 import { uploadContingencyFile, deleteContingencyFile, getContingencyFiles } from '@/app/shared/services/fileService';
 import { useToast } from '@/app/hooks/useToast';
+import { validateFiles, getFileTypeConfig } from '@/app/shared/utils/fileValidation';
 
 interface FileUploaderProps {
   contingencyId: string;
   organizationId: string;
   userId: string;
   onFileUploaded?: () => void;
+  fileType?: 'image' | 'document' | 'all';
 }
 
-export default function FileUploader({ contingencyId, organizationId, userId, onFileUploaded }: FileUploaderProps) {
+export default function FileUploader({ 
+  contingencyId, 
+  organizationId, 
+  userId, 
+  onFileUploaded,
+  fileType = 'all' 
+}: FileUploaderProps) {
   const [isUploading, setIsUploading] = useState(false);
   const { showToast } = useToast();
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    // Validar archivos
+    const validationErrors = validateFiles(acceptedFiles, getFileTypeConfig(fileType));
+    
+    if (validationErrors.length > 0) {
+      validationErrors.forEach(error => {
+        showToast({
+          title: 'Error de validación',
+          description: error.message,
+          type: 'error'
+        });
+      });
+      return;
+    }
+
     try {
       setIsUploading(true);
       const file = acceptedFiles[0];
@@ -43,11 +65,14 @@ export default function FileUploader({ contingencyId, organizationId, userId, on
     } finally {
       setIsUploading(false);
     }
-  }, [contingencyId, organizationId, userId, onFileUploaded, showToast]);
+  }, [contingencyId, organizationId, userId, onFileUploaded, showToast, fileType]);
 
+  const config = getFileTypeConfig(fileType);
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    multiple: false
+    multiple: false,
+    maxSize: config.maxSize,
+    accept: config.allowedTypes?.reduce((acc, type) => ({ ...acc, [type]: [] }), {})
   });
 
   return (
@@ -70,7 +95,11 @@ export default function FileUploader({ contingencyId, organizationId, userId, on
                   : 'Arrastra y suelta un archivo aquí, o haz clic para seleccionar'}
               </p>
               <p className="text-xs text-gray-400">
-                Formatos permitidos: PDF, DOC, DOCX, TXT, JPG, PNG, GIF (máx. 5MB)
+                {fileType === 'image' 
+                  ? 'Formatos permitidos: JPG, PNG, GIF (máx. 5MB)'
+                  : fileType === 'document'
+                  ? 'Formatos permitidos: PDF, DOC, DOCX (máx. 10MB)'
+                  : 'Formatos permitidos: PDF, DOC, DOCX, JPG, PNG, GIF (máx. 5MB)'}
               </p>
             </>
           )}
