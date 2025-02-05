@@ -49,9 +49,9 @@ export default function TaskReportsPage() {
       if (!user) throw new Error('No autorizado');
 
       const { data: userProfile } = await supabase
-        .from('profiles')
+        .from('users')
         .select('organization_id')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single();
 
       if (!userProfile) throw new Error('Perfil no encontrado');
@@ -73,15 +73,15 @@ export default function TaskReportsPage() {
 
       // Obtener todas las tareas en el rango de fechas
       const { data: tasks, error: tasksError } = await supabase
-        .from('assignments')
+        .from('tasks')
         .select(`
           *,
-          users:user_id (
+          assignee:assigned_to (
             id,
             first_name,
             last_name
           ),
-          areas:area_id (
+          area:area_id (
             id,
             name
           )
@@ -122,12 +122,12 @@ export default function TaskReportsPage() {
 
       // Agrupar por usuario
       tasks?.forEach(task => {
-        const userId = task.user_id;
+        const userId = task.assigned_to;
         if (!taskStats.byUser[userId]) {
           taskStats.byUser[userId] = {
             total: 0,
             completed: 0,
-            name: `${task.users.first_name} ${task.users.last_name}`
+            name: `${task.assignee.first_name} ${task.assignee.last_name}`
           };
         }
         taskStats.byUser[userId].total++;
@@ -143,7 +143,7 @@ export default function TaskReportsPage() {
           taskStats.byArea[areaId] = {
             total: 0,
             completed: 0,
-            name: task.areas.name
+            name: task.area.name
           };
         }
         taskStats.byArea[areaId].total++;

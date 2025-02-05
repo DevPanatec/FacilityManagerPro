@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { FaClock, FaHourglassHalf } from 'react-icons/fa';
 
@@ -34,10 +35,21 @@ interface Task {
   };
 }
 
+interface CurrentTask {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'Alta' | 'Media' | 'Baja';
+  area: string;
+  checklist: string[];
+  start_time?: string;
+}
+
 export default function CurrentTaskPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = createClientComponentClient();
-  const [currentTask, setCurrentTask] = useState<Task | null>(null);
+  const [currentTask, setCurrentTask] = useState<CurrentTask | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,41 +65,60 @@ export default function CurrentTaskPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No autorizado');
 
-      const { data: userProfile } = await supabase
-        .from('profiles')
-        .select('organization_id')
-        .eq('user_id', user.id)
+      const { data: userProfile, error: userError } = await supabase
+        .from('users')
+        .select('organization_id, role')
+        .eq('id', user.id)
         .single();
+
+      if (userError) {
+        console.error('Error fetching user profile:', userError);
+        throw new Error('Error al obtener el perfil del usuario');
+      }
 
       if (!userProfile) throw new Error('Perfil no encontrado');
 
-      const { data: tasks, error } = await supabase
-        .from('assignments')
+      const { data: tasks, error: taskError } = await supabase
+        .from('tasks')
         .select(`
           *,
-          users:user_id (
-            id,
+          assignee:assigned_to (
             first_name,
             last_name
           ),
-          areas:area_id (
-            id,
+          area:area_id (
             name
           )
         `)
         .eq('organization_id', userProfile.organization_id)
         .eq('status', 'in_progress')
+        .eq('assigned_to', user.id)
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
 
-      if (error) throw error;
+      if (taskError && taskError.code !== 'PGRST116') {
+        console.error('Error fetching task:', taskError);
+        throw new Error('Error al obtener la tarea actual');
+      }
 
-      setCurrentTask(tasks);
-    } catch (error) {
+      if (tasks) {
+        setCurrentTask({
+          id: tasks.id,
+          title: tasks.title,
+          description: tasks.description,
+          priority: tasks.priority,
+          area: tasks.area?.name || '',
+          start_time: tasks.start_time,
+          checklist: tasks.checklist || []
+        });
+      } else {
+        setCurrentTask(null);
+      }
+    } catch (error: any) {
       console.error('Error loading current task:', error);
-      setError('Error al cargar la tarea actual');
-      toast.error('Error al cargar la tarea actual');
+      setError(error.message || 'Error al cargar la tarea actual');
+      toast.error(error.message || 'Error al cargar la tarea actual');
     } finally {
       setLoading(false);
     }
@@ -150,143 +181,98 @@ export default function CurrentTaskPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="bg-white shadow-2xl rounded-xl overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-8 py-6">
-          <div className="flex justify-between items-start">
-            <div className="text-white">
-              <h3 className="text-3xl font-bold tracking-tight">{currentTask.areas?.name}</h3>
-              <p className="mt-2 text-blue-100 text-lg">{currentTask.description}</p>
-              <p className="mt-2 text-blue-200">
-                Asignado a: {currentTask.users?.first_name} {currentTask.users?.last_name}
-              </p>
-            </div>
-            <div className="flex flex-col items-end">
-              <span className="px-4 py-2 rounded-full text-sm font-semibold bg-blue-500 text-white shadow-lg">
-                En Progreso
-              </span>
-              <span className="mt-2 text-blue-100">
-                ID: {currentTask.id}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-8">
-          <div className="space-y-8">
-            <div className="grid grid-cols-2 gap-8">
-              <div className="bg-gradient-to-br from-indigo-50 to-blue-50 p-6 rounded-2xl shadow-lg border border-indigo-100">
-                <div className="flex items-center space-x-4">
-                  <div className="p-3 bg-indigo-100 rounded-xl">
-                    <FaClock className="text-indigo-600 text-2xl" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-indigo-900">Hora de inicio</p>
-                    <p className="text-2xl font-bold text-indigo-700">
-                      {new Date(currentTask.start_time).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-6 rounded-2xl shadow-lg border border-purple-100">
-                <div className="flex items-center space-x-4">
-                  <div className="p-3 bg-purple-100 rounded-xl">
-                    <FaHourglassHalf className="text-purple-600 text-2xl" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-purple-900">Duración estimada</p>
-                    <p className="text-2xl font-bold text-purple-700">
-                      {currentTask.estimated_duration}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Checklist */}
-            {currentTask.checklist && (
-              <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">Lista de verificación</h4>
-                <div className="space-y-4">
-                  {currentTask.checklist.map((item) => (
-                    <div key={item.id} className="flex items-center space-x-3">
-                      <input
-                        type="checkbox"
-                        checked={item.completed}
-                        readOnly
-                        className="h-5 w-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                      />
-                      <span className={`text-gray-700 ${item.completed ? 'line-through' : ''}`}>
-                        {item.task}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Fotos */}
-            {currentTask.photos && (
-              <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">Documentación fotográfica</h4>
-                <div className="grid grid-cols-3 gap-6">
-                  <div>
-                    <h5 className="text-sm font-medium text-gray-700 mb-2">Antes</h5>
-                    {currentTask.photos.before ? (
-                      <div className="relative aspect-square">
-                        <Image
-                          src={currentTask.photos.before}
-                          alt="Antes"
-                          fill
-                          className="object-cover rounded-lg"
-                        />
-                      </div>
-                    ) : (
-                      <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
-                        <span className="text-gray-400">Pendiente</span>
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <h5 className="text-sm font-medium text-gray-700 mb-2">Durante</h5>
-                    {currentTask.photos.during ? (
-                      <div className="relative aspect-square">
-                        <Image
-                          src={currentTask.photos.during}
-                          alt="Durante"
-                          fill
-                          className="object-cover rounded-lg"
-                        />
-                      </div>
-                    ) : (
-                      <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
-                        <span className="text-gray-400">Pendiente</span>
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <h5 className="text-sm font-medium text-gray-700 mb-2">Después</h5>
-                    {currentTask.photos.after ? (
-                      <div className="relative aspect-square">
-                        <Image
-                          src={currentTask.photos.after}
-                          alt="Después"
-                          fill
-                          className="object-cover rounded-lg"
-                        />
-                      </div>
-                    ) : (
-                      <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
-                        <span className="text-gray-400">Pendiente</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+    <div className="container mx-auto px-4 py-6">
+      {/* Navbar secundario */}
+      <div className="mb-6 border-b">
+        <nav className="flex space-x-8">
+          <Link
+            href="/admin/tasks"
+            className={`pb-4 px-1 border-b-2 font-medium text-sm ${
+              pathname === '/admin/tasks'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Mis Asignaciones
+          </Link>
+          <Link
+            href="/admin/tasks/current"
+            className={`pb-4 px-1 border-b-2 font-medium text-sm ${
+              pathname === '/admin/tasks/current'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Tarea Actual
+          </Link>
+        </nav>
       </div>
+
+      {currentTask ? (
+        <div className="space-y-6">
+          {/* Encabezado con área y prioridad */}
+          <div className="bg-blue-600 text-white p-4 rounded-lg flex justify-between items-center">
+            <div>
+              <h1 className="text-xl font-semibold">{currentTask.area}</h1>
+              <p className="mt-1">{currentTask.title}</p>
+            </div>
+            <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm">
+              Prioridad {currentTask.priority}
+            </span>
+          </div>
+
+          {/* Información de tiempo */}
+          <div className="flex items-center space-x-8">
+            <div className="flex items-center space-x-2">
+              <div className="text-blue-600">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Hora de inicio</p>
+                <p className="font-medium">{currentTask.start_time}</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="text-purple-600">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Duración estimada</p>
+                <p className="font-medium">--:--:--</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Lista de verificación */}
+          <div>
+            <h2 className="text-lg font-medium mb-4 flex items-center">
+              <svg className="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              Lista de verificación
+            </h2>
+            <div className="space-y-3">
+              {currentTask.checklist.map((item, index) => (
+                <div key={index} className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    className="w-5 h-5 border-2 border-gray-300 rounded-sm focus:ring-blue-500"
+                  />
+                  <span className="text-gray-700">{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center text-gray-500 py-8">
+          No hay tarea activa en este momento
+        </div>
+      )}
     </div>
   );
 } 

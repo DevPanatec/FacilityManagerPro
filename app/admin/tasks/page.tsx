@@ -5,6 +5,8 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 
 interface Task {
   id: string
@@ -30,6 +32,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const supabase = createClientComponentClient()
+  const pathname = usePathname()
 
   useEffect(() => {
     fetchTasks()
@@ -50,7 +53,7 @@ export default function TasksPage() {
 
       if (!userProfile) throw new Error('Perfil no encontrado')
 
-      let query = supabase
+      const { data, error } = await supabase
         .from('tasks')
         .select(`
           *,
@@ -62,13 +65,23 @@ export default function TasksPage() {
             name
           )
         `)
+        .eq('organization_id', userProfile.organization_id)
         .eq('assigned_to', user.id)
+        .neq('status', 'completed')
         .order('created_at', { ascending: false })
 
-      const { data, error } = await query
-
       if (error) throw error
-      setTasks(data || [])
+      
+      const formattedTasks = data?.map(task => ({
+        ...task,
+        title: task.title || 'Sin título',
+        description: task.description || 'Sin descripción',
+        priority: task.priority || 'low',
+        status: task.status || 'pending',
+        area: task.area?.name || 'Sin área'
+      })) || []
+
+      setTasks(formattedTasks)
     } catch (error) {
       console.error('Error fetching tasks:', error)
       toast.error('Error al cargar las tareas')
@@ -79,6 +92,32 @@ export default function TasksPage() {
 
   return (
     <main className="container mx-auto px-4 py-6">
+      {/* Navbar secundario */}
+      <div className="mb-6 border-b">
+        <nav className="flex space-x-8">
+          <Link
+            href="/admin/tasks"
+            className={`pb-4 px-1 border-b-2 font-medium text-sm ${
+              pathname === '/admin/tasks'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Mis Asignaciones
+          </Link>
+          <Link
+            href="/admin/tasks/current"
+            className={`pb-4 px-1 border-b-2 font-medium text-sm ${
+              pathname === '/admin/tasks/current'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Tarea Actual
+          </Link>
+        </nav>
+      </div>
+
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-xl font-semibold text-gray-800">Mis Asignaciones</h1>
         <button className="p-2 hover:bg-gray-100 rounded-full">

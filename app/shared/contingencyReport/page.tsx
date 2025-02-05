@@ -171,32 +171,21 @@ export default function ReportsPage() {
 
       // Cargar reportes
       let reportsQuery = supabase
-        .from('tasks')
+        .from('contingencies')
         .select(`
-          id,
-          title,
-          description,
-          created_at,
-          status,
-          priority,
-          area_id,
-          organization_id,
-          created_by,
-          attachments,
-          creator:users!tasks_created_by_fkey (
-            id,
-            first_name,
-            last_name
-          ),
-          area:areas!inner (
-            id,
+          *,
+          creator:user_profiles!created_by(id, first_name, last_name),
+          assignee:user_profiles!assigned_to(id, first_name, last_name),
+          area:areas!area_id(
+            id, 
             name,
-            sala:salas!areas_sala_id_fkey (
+            sala:salas!sala_id(
               id,
               nombre
             )
-          )
-        `, { count: 'exact' })
+          ),
+          organization:organizations!organization_id(id, name)
+        `)
         .gte('created_at', startDate.toISOString())
         .lte('created_at', now.toISOString())
         .order('created_at', { ascending: false });
@@ -209,70 +198,54 @@ export default function ReportsPage() {
         reportsQuery = reportsQuery.eq('organization_id', userData.organization_id);
       }
 
-      const { data: reports, error: reportsError, count } = await reportsQuery;
+      const { data: reports, error: reportsError } = await reportsQuery;
+
+      if (reportsError) {
+        console.error('Error en la consulta de reportes:', reportsError);
+        throw reportsError;
+      }
+
+      if (!reports) {
+        console.log('No se encontraron reportes');
+        setReportes([]);
+        setTotalPages(0);
+        setStats({ pendientes: 0, resueltos: 0, total: 0 });
+        return;
+      }
 
       console.log('Resultado de la consulta:', {
-        totalReportes: count,
-        reportesEncontrados: reports?.length,
+        reportesEncontrados: reports.length,
         fechaInicio: startDate,
         fechaFin: now,
         organizacionId: userData.organization_id
       });
 
-      if (reportsError) throw reportsError;
-
-      // Obtener todas las organizaciones (usuarios enterprise)
-      const { data: organizations, error: orgsError } = await supabase
-        .from('users')
-        .select('id, organization_id, first_name, last_name')
-        .eq('role', 'enterprise')
-        .not('organization_id', 'is', null);
-
-      if (orgsError) throw orgsError;
-
-      // Crear un mapa de organizaciones para acceso más rápido
-      const organizationsMap = new Map(
-        organizations.map(org => [org.organization_id, {
-          id: org.organization_id,
-          name: `${org.first_name} ${org.last_name || ''}`.trim()
-        }])
-      );
-
-      // Mapear los reportes con la información de la organización
-      const reportsWithOrgs = (reports || []).map((report: any) => {
-        const typedReport: SupabaseReport = {
-          ...report,
-          creator: report.creator || null,
-          area: {
-            ...report.area,
-            sala: report.area?.sala || null
-          }
-        };
-
+      // Mapear los reportes con la información
+      const reportsWithOrgs = reports.map((report: any) => {
         return {
-          id: typedReport.id,
-          title: typedReport.title,
-          description: typedReport.description,
-          date: typedReport.created_at,
-          status: typedReport.status === 'completed' ? 'Completada' : 'Pendiente',
-          type: contingencyType || 'No especificado',
-          area: typedReport.area?.name || 'No especificada',
-          sala: typedReport.area?.sala?.nombre || 'No especificada',
-          attachments: typedReport.attachments || [],
-          creator: typedReport.creator,
-          organization: organizationsMap.get(typedReport.organization_id) || {
-            id: typedReport.organization_id,
-            name: 'Organización Desconocida'
+          id: report.id,
+          title: report.title,
+          description: report.description,
+          date: report.created_at,
+          status: report.status === 'completed' ? 'Completada' : 'Pendiente',
+          type: report.title || 'No especificado',
+          area: report.area?.name || 'No especificada',
+          sala: report.area?.sala?.nombre || 'No especificada',
+          attachments: report.attachments || [],
+          creator: report.creator,
+          organization: {
+            id: report.organization?.id || report.organization_id,
+            name: report.organization?.name || 'Organización Desconocida'
           }
         };
       }) as ContingencyReport[];
 
       setReportes(reportsWithOrgs);
-      setTotalPages(Math.ceil((count || 0) / 10));
+      setTotalPages(Math.ceil(reportsWithOrgs.length / 10));
 
       // Calcular estadísticas
-      const pendientes = reports?.filter(r => r.status !== 'completed').length || 0;
-      const resueltos = reports?.filter(r => r.status === 'completed').length || 0;
+      const pendientes = reportsWithOrgs.filter(r => r.status === 'Pendiente').length;
+      const resueltos = reportsWithOrgs.filter(r => r.status === 'Completada').length;
       setStats({
         pendientes,
         resueltos,
@@ -379,19 +352,14 @@ export default function ReportsPage() {
         organization_id: userData.organization_id,
         created_by: user.id,
         status: 'pending',
-        priority: 'urgent',
-        attachments: uploadedUrls.map(url => ({
-          type: 'image',
-          url: url,
-          created_at: new Date().toISOString()
-        }))
+        priority: 'medium'
       };
 
       console.log('Intentando crear reporte con datos:', newReport);
 
       // Insertar el reporte usando el cliente autenticado
       const { data, error } = await supabase
-        .from('tasks')
+        .from('contingencies')
         .insert([newReport])
         .select('*')
         .single();
@@ -441,7 +409,7 @@ export default function ReportsPage() {
   const handleUpdateStatus = async (reportId: string, newStatus: string) => {
     try {
       const { error } = await supabase
-        .from('tasks')
+        .from('contingencies')
         .update({ status: newStatus === 'Completada' ? 'completed' : 'pending' })
         .eq('id', reportId);
 
