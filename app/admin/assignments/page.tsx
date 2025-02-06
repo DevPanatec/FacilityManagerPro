@@ -195,22 +195,22 @@ export default function AssignmentsPage() {
 
   const getSalaColor = (salaNombre: string): string => {
     const colorMap: { [key: string]: string } = {
-      'Bioseguridad': '#FF6B6B',
-      'Inyección': '#4FD1C5',
-      'Cuarto Frío': '#63B3ED',
-      'Producción': '#68D391',
-      'Techos, Paredes y Pisos': '#F6AD55',
-      'Canaletas y Rejillas': '#4299E1',
-      'Áreas Comunes': '#9F7AEA',
-      'Áreas Verdes': '#ED64A6',
-      'Estacionamiento': '#F687B3',
-      'Oficinas': '#48BB78',
-      'Recepción': '#38B2AC',
-      'Baños': '#4C51BF',
-      'Almacén': '#667EEA'
+      'Bioseguridad': '#FF6B6B',             // Coral rojizo (como en la imagen)
+      'Inyección': '#40C4AA',                // Turquesa brillante
+      'Cuarto Frío': '#4CB8D4',              // Azul celeste brillante
+      'Producción': '#98D8BE',               // Verde menta suave
+      'Techos, Paredes y Pisos': '#FFB443',  // Naranja cálido
+      'Canaletas y Rejillas': '#90C2E7',     // Azul claro suave
+      'Áreas Comunes': '#B784ED',            // Púrpura suave
+      'Áreas Verdes': '#7CCCB9',             // Verde agua
+      'Estacionamiento': '#FFA07A',          // Salmón claro
+      'Oficinas': '#82D4BB',                 // Verde menta
+      'Recepción': '#FF8BA7',                // Rosa suave
+      'Baños': '#9B6EDC',                    // Púrpura medio
+      'Almacén': '#738AE6'                   // Azul medio
     };
 
-    return colorMap[salaNombre] || '#6B7280';
+    return colorMap[salaNombre] || '#6B7280'; // Color por defecto
   };
 
   const handleCreateAssignment = async () => {
@@ -347,8 +347,8 @@ export default function AssignmentsPage() {
         created_by: user.id,
         sala_id: selectedSala,
         frequency: frecuencia,
-        start_time: startDateTime.toISOString(),
-        end_time: endDateTime.toISOString()
+        start_time: startTime,
+        end_time: endTime
       };
 
       console.log('Intentando crear tarea con datos:', taskData);

@@ -14,8 +14,8 @@ export class RealtimeListener<T extends DatabaseRecord> {
   constructor(table: string, callback: (payload: RealtimePostgresChangesPayload<T>) => void) {
     this.table = table
     this.callback = callback
-    this.channel = supabaseService.db
-      .channel('db-changes')
+    this.channel = supabaseService
+      .channel(`db-changes-${table}`)
       .on(
         'postgres_changes',
         {

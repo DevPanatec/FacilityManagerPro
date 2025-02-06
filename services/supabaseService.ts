@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/config'
+import { supabase } from '@/lib/supabase/client'
 import { errorHandler } from '@/utils/errorHandler'
 
 // Exportamos el cliente de Supabase directamente
