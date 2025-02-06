@@ -214,64 +214,175 @@ export default function AssignmentsPage() {
   };
 
   const handleCreateAssignment = async () => {
+    console.log('=== INICIO DE CREACIÓN DE ASIGNACIÓN ===');
     try {
+      console.log('Iniciando creación de asignación con datos:', {
+        selectedUser,
+        selectedSala,
+        selectedArea,
+        selectedDate,
+        startTime,
+        endTime,
+        frecuencia
+      });
+
+      // Validación de campos requeridos
       if (!selectedUser || !selectedSala || !selectedArea || !selectedDate || !startTime || !endTime) {
+        console.log('Validación fallida - campos faltantes:', {
+          selectedUser: !!selectedUser,
+          selectedSala: !!selectedSala,
+          selectedArea: !!selectedArea,
+          selectedDate: !!selectedDate,
+          startTime: !!startTime,
+          endTime: !!endTime
+        });
         toast.error('Por favor complete todos los campos');
         return;
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No autorizado');
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        console.error('Error de autenticación:', authError);
+        toast.error('No autorizado');
+        return;
+      }
 
-      const { data: userProfile } = await supabase
+      console.log('Usuario autenticado:', user.id);
+
+      // Obtener el perfil del usuario y verificar rol
+      const { data: userProfile, error: profileError } = await supabase
         .from('users')
-        .select('organization_id')
+        .select('organization_id, role')
         .eq('id', user.id)
         .single();
 
-      if (!userProfile) throw new Error('Perfil no encontrado');
+      if (profileError || !userProfile) {
+        console.error('Error al obtener el perfil:', profileError);
+        toast.error('Error al obtener el perfil del usuario');
+        return;
+      }
+
+      // Verificar si el usuario tiene permisos para crear tareas
+      if (!['admin', 'enterprise'].includes(userProfile.role)) {
+        console.error('Usuario sin permisos suficientes:', userProfile.role);
+        toast.error('No tiene permisos para crear tareas');
+        return;
+      }
+
+      console.log('Perfil de usuario obtenido:', userProfile);
 
       const selectedUserId = userMap[selectedUser];
       if (!selectedUserId) {
+        console.error('Usuario seleccionado no encontrado en userMap:', {
+          selectedUser,
+          userMap
+        });
         toast.error('Error: Usuario no encontrado');
         return;
       }
 
-      // Crear la tarea
-      const taskData = {
-        organization_id: userProfile.organization_id,
-        title: `Asignación: ${selectedUser}`,
-        description: `Turno asignado de ${startTime} a ${endTime}`,
-        status: 'pending',
-        priority: 'medium',
-        assigned_to: selectedUserId,
-        area_id: selectedArea,
-        sala_id: selectedSala,
-        created_at: new Date().toISOString(),
-        due_date: new Date(selectedDate).toISOString()
-      };
+      console.log('ID de usuario seleccionado:', selectedUserId);
 
-      const { error: taskError } = await supabase
-        .from('tasks')
-        .insert([taskData]);
+      // Crear la fecha completa combinando fecha y hora
+      const startDateTime = new Date(selectedDate);
+      const [startHours, startMinutes] = startTime.split(':');
+      startDateTime.setHours(parseInt(startHours), parseInt(startMinutes));
 
-      if (taskError) {
-        console.error('Error creating task:', taskError);
-        throw taskError;
+      const endDateTime = new Date(selectedDate);
+      const [endHours, endMinutes] = endTime.split(':');
+      endDateTime.setHours(parseInt(endHours), parseInt(endMinutes));
+
+      console.log('Fechas procesadas:', {
+        startDateTime: startDateTime.toISOString(),
+        endDateTime: endDateTime.toISOString()
+      });
+
+      if (endDateTime <= startDateTime) {
+        console.log('Error: Fecha de fin anterior o igual a fecha de inicio');
+        toast.error('La hora de fin debe ser posterior a la hora de inicio');
+        return;
       }
 
+      // Obtener información de la sala y área
+      const { data: salaData, error: salaError } = await supabase
+        .from('salas')
+        .select('nombre')
+        .eq('id', selectedSala)
+        .single();
+
+      if (salaError) {
+        console.error('Error al obtener datos de la sala:', salaError);
+        toast.error('Error al obtener datos de la sala');
+        return;
+      }
+
+      const { data: areaData, error: areaError } = await supabase
+        .from('areas')
+        .select('name')
+        .eq('id', selectedArea)
+        .single();
+
+      if (areaError) {
+        console.error('Error al obtener datos del área:', areaError);
+        toast.error('Error al obtener datos del área');
+        return;
+      }
+
+      console.log('Datos obtenidos:', {
+        sala: salaData,
+        area: areaData
+      });
+
+      // Crear la tarea con la estructura correcta de la tabla
+      const taskData = {
+        organization_id: userProfile.organization_id,
+        area_id: selectedArea,
+        title: `Turno ${startTime} - ${endTime}`,
+        description: `Turno asignado para ${salaData?.nombre} (${areaData?.name}) de ${startTime} a ${endTime}`,
+        assigned_to: selectedUserId,
+        status: 'pending',
+        priority: 'medium',
+        start_date: startDateTime.toISOString(),
+        due_date: endDateTime.toISOString(),
+        created_by: user.id,
+        sala_id: selectedSala,
+        frequency: frecuencia,
+        start_time: startDateTime.toISOString(),
+        end_time: endDateTime.toISOString()
+      };
+
+      console.log('Intentando crear tarea con datos:', taskData);
+
+      // Insertar la tarea
+      const { data: newTask, error: taskError } = await supabase
+        .from('tasks')
+        .insert([taskData])
+        .select();
+
+      if (taskError) {
+        console.error('Error al crear la tarea:', taskError);
+        toast.error(`Error al crear la tarea: ${taskError.message}`);
+        return;
+      }
+
+      console.log('Tarea creada exitosamente:', newTask);
       toast.success('Asignación creada exitosamente');
+      
+      // Limpiar el formulario
       setSelectedUser('');
       setSelectedSala(null);
       setSelectedArea('');
       setSelectedDate('');
       setStartTime('');
       setEndTime('');
+      setFrecuencia('diario');
+      
+      // Recargar los datos
       await loadData();
 
-    } catch (error) {
-      console.error('Error creating assignment:', error);
-      toast.error('Error al crear la asignación');
+    } catch (error: any) {
+      console.error('Error al crear la asignación:', error);
+      toast.error(error.message || 'Error al crear la asignación');
     }
   };
 
@@ -473,9 +584,12 @@ export default function AssignmentsPage() {
             {/* Botón de Crear Asignación */}
             <div className="mt-6">
               <button
-                onClick={handleCreateAssignment}
+                onClick={() => {
+                  console.log('Botón Crear Asignación clickeado');
+                  handleCreateAssignment();
+                }}
                 className="w-full py-3 bg-[#4263eb] text-white rounded-lg hover:bg-[#364fc7] transition-colors"
-                disabled={!selectedUser || !selectedSala || !selectedArea || !selectedDate || !startTime || !endTime}
+                type="button"
               >
                 Crear Asignación
               </button>
@@ -509,11 +623,11 @@ export default function AssignmentsPage() {
                     {sala.tareas.map((tarea) => (
                       <div 
                         key={tarea.id}
-                        className="p-3 bg-gray-50 rounded-lg"
+                        className="p-4 bg-gray-50 rounded-lg border-l-4"
+                        style={{ borderLeftColor: sala.color }}
                       >
-                        <h4 className="font-medium text-gray-800">{tarea.titulo}</h4>
-                        <p className="text-sm text-gray-600 mt-1">{tarea.descripcion}</p>
-                        <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                        <div className="flex justify-between items-start">
+                          <h4 className="font-medium text-gray-800">{tarea.titulo}</h4>
                           <span className={`px-2 py-1 rounded-full text-xs ${
                             tarea.prioridad === 'high' ? 'bg-red-100 text-red-700' :
                             tarea.prioridad === 'medium' ? 'bg-yellow-100 text-yellow-700' :
@@ -522,7 +636,24 @@ export default function AssignmentsPage() {
                             {tarea.prioridad === 'high' ? 'Alta' :
                              tarea.prioridad === 'medium' ? 'Media' : 'Baja'}
                           </span>
-                          <span>Vence: {tarea.fechaVencimiento}</span>
+                        </div>
+                        <p className="text-sm text-gray-600 mt-2">{tarea.descripcion}</p>
+                        <div className="flex items-center justify-between mt-3 text-sm">
+                          <div className="flex items-center gap-2 text-gray-500">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span>Creada: {tarea.fechaCreacion}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-gray-500">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>Vence: {tarea.fechaVencimiento}</span>
+                          </div>
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <span className="text-sm text-gray-500">Estado: {tarea.estado === 'pending' ? 'Pendiente' : tarea.estado === 'in_progress' ? 'En Progreso' : 'Completada'}</span>
                         </div>
                       </div>
                     ))}
