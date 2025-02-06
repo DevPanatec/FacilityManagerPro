@@ -4,9 +4,12 @@ import { useEffect, useState } from 'react'
 export interface User {
   id: string
   email: string
-  role: 'admin' | 'enterprise' | 'support'
+  role: 'superadmin' | 'admin' | 'enterprise' | 'usuario'
   organization_id: string
   avatar_url?: string | null
+  first_name?: string | null
+  last_name?: string | null
+  status?: 'active' | 'inactive' | 'pending'
 }
 
 export function useUser() {
@@ -30,7 +33,7 @@ export function useUser() {
         // Get user details including role and organization
         const { data: userData, error: userError } = await supabase
           .from('users')
-          .select('id, email, role, organization_id, avatar_url')
+          .select('id, email, role, organization_id, avatar_url, first_name, last_name, status')
           .eq('id', session.user.id)
           .single()
 

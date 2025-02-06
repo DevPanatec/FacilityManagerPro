@@ -12,7 +12,7 @@ import type { Database } from '@/app/lib/supabase/types';
 
 const supabase = createClient();
 
-type ChatMessage = Database['public']['Functions']['get_chat_room_messages_v1']['Returns'][0];
+type ChatMessage = Database['public']['Functions']['get_chat_messages_v2']['Returns'][0];
 
 interface Message {
   id: string;
@@ -85,7 +85,7 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
     if (!user) return;
     try {
       const { data, error } = await supabase
-        .rpc('get_chat_room_messages_v1', {
+        .rpc('get_chat_messages_v2', {
           room_uuid: roomId,
           msg_limit: 100,
           msg_offset: 0

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MessageCircle, X } from 'lucide-react';
 import { useUser } from '@/app/shared/hooks/useUser';
 import { cn } from '@/app/lib/utils';
@@ -23,16 +23,44 @@ interface ChatWidgetProps {
   isEnterprise?: boolean;
 }
 
+// Rutas donde el chat no debe mostrarse
+const EXCLUDED_ROUTES = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/inactive',
+  '/auth',
+  '/login',
+  '/register'
+];
+
 export function ChatWidget({ className, isEnterprise = false }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState<'list' | 'new' | 'chat'>('list');
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [chats, setChats] = useState<ChatRoom[]>([]);
-  const { user } = useUser();
+  const { user, loading } = useUser();
   const pathname = usePathname();
 
-  // No mostrar el chat en la página de login
-  if (!user || pathname === '/login' || pathname === '/register') return null;
+  // Efecto para cerrar el chat cuando se cierra sesión o se cambia de ruta
+  useEffect(() => {
+    if (!user || !pathname || EXCLUDED_ROUTES.some(route => pathname.startsWith(route))) {
+      setIsOpen(false);
+      setView('list');
+      setActiveRoomId(null);
+    }
+  }, [user, pathname]);
+
+  // No renderizar el chat en rutas excluidas o cuando no hay usuario
+  if (
+    !user || 
+    loading || 
+    !pathname ||
+    EXCLUDED_ROUTES.some(route => pathname.startsWith(route))
+  ) {
+    return null;
+  }
 
   function handleNewChat(roomId: string) {
     setActiveRoomId(roomId);
@@ -49,6 +77,10 @@ export function ChatWidget({ className, isEnterprise = false }: ChatWidgetProps)
     setActiveRoomId(null);
   }
 
+  function handleStartNewChat() {
+    setView('new');
+  }
+
   return (
     <div className={cn("fixed bottom-4 right-4 z-50", className)}>
       {/* Botón flotante modernizado */}
@@ -57,48 +89,40 @@ export function ChatWidget({ className, isEnterprise = false }: ChatWidgetProps)
         className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all duration-200 hover:scale-105"
         aria-label={isOpen ? "Cerrar chat" : "Abrir chat"}
       >
-        <MessageCircle className="h-6 w-6" />
+        {isOpen ? (
+          <X className="h-6 w-6" />
+        ) : (
+          <MessageCircle className="h-6 w-6" />
+        )}
       </button>
 
-      {/* Panel de chat modernizado */}
       {isOpen && (
-        <div className="absolute bottom-16 right-0 w-[400px] rounded-2xl border border-gray-200 shadow-2xl bg-white/95 backdrop-blur-sm transition-all duration-200">
-          <div className="flex flex-col h-[600px]">
-            {/* Header modernizado */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white rounded-t-2xl">
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col">
-                  <h2 className="text-lg font-semibold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                    {view === 'list' && 'Mensajes'}
-                    {view === 'new' && 'Nuevo Chat'}
-                    {view === 'chat' && 'Chat'}
-                  </h2>
-                  {view === 'list' && (
-                    <span className="text-xs text-gray-500">
-                      {chats.length} conversaciones
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {view === 'list' && isEnterprise && (
-                  <button
-                    className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
-                    onClick={() => setView('new')}
-                  >
-                    <span>Nuevo</span>
-                    <MessageCircle className="h-4 w-4" />
-                  </button>
-                )}
-                {(view === 'new' || view === 'chat') && (
-                  <button
-                    className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-                    onClick={handleBackToList}
-                  >
-                    <X className="h-5 w-5 text-gray-500" />
-                  </button>
-                )}
-              </div>
+        <div className="absolute bottom-20 right-0 w-96 rounded-lg bg-background shadow-xl border border-border overflow-hidden">
+          {/* Header con título y botón de cerrar */}
+          <div className="flex flex-col h-[32rem]">
+            <div className="border-b px-4 py-3 flex items-center justify-between bg-primary/5">
+              <h2 className="font-semibold text-foreground">
+                {view === 'list' && 'Chats'}
+                {view === 'new' && 'Nuevo Chat'}
+                {view === 'chat' && 'Conversación'}
+              </h2>
+              {view === 'list' && user?.role === 'enterprise' && (
+                <button
+                  onClick={handleStartNewChat}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Nuevo Chat
+                </button>
+              )}
+              {(view === 'new' || view === 'chat') && (
+                <button
+                  onClick={handleBackToList}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              )}
             </div>
 
             {/* Contenido principal con fondo modernizado */}
@@ -107,6 +131,7 @@ export function ChatWidget({ className, isEnterprise = false }: ChatWidgetProps)
                 <ChatList 
                   onSelectChat={handleSelectChat} 
                   onChatsLoaded={setChats}
+                  onNewChat={user?.role === 'enterprise' ? handleStartNewChat : undefined}
                 />
               )}
               {view === 'new' && (

@@ -5,6 +5,7 @@ import { supabase } from '@/app/lib/supabase/client';
 import { useUser } from '@/app/shared/hooks/useUser';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { MessageCircle } from 'lucide-react';
 
 interface ChatRoom {
   room_id: string;
@@ -13,14 +14,17 @@ interface ChatRoom {
   last_message: string;
   last_message_at: string;
   unread_count: number;
+  other_user_id?: string;
+  other_user_name?: string;
 }
 
 interface ChatListProps {
   onSelectChat: (roomId: string) => void;
   onChatsLoaded: (chats: ChatRoom[]) => void;
+  onNewChat?: () => void;
 }
 
-export function ChatList({ onSelectChat, onChatsLoaded }: ChatListProps) {
+export function ChatList({ onSelectChat, onChatsLoaded, onNewChat }: ChatListProps) {
   const { user } = useUser();
   const [chats, setChats] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,9 +42,21 @@ export function ChatList({ onSelectChat, onChatsLoaded }: ChatListProps) {
           });
 
         if (error) throw error;
-        const loadedChats = data || [];
-        setChats(loadedChats);
-        onChatsLoaded(loadedChats);
+
+        // Procesar los chats según el rol del usuario
+        const processedChats = (data || []).map(chat => {
+          if (user.role === 'enterprise' && !chat.is_group) {
+            // Para usuarios enterprise en chats directos, mostrar solo el nombre del admin
+            return {
+              ...chat,
+              room_name: chat.other_user_name || chat.room_name
+            };
+          }
+          return chat;
+        });
+
+        setChats(processedChats);
+        onChatsLoaded(processedChats);
       } catch (error) {
         console.error('Error cargando chats:', error);
       } finally {
@@ -91,6 +107,17 @@ export function ChatList({ onSelectChat, onChatsLoaded }: ChatListProps) {
 
   return (
     <div className="p-4 space-y-2">
+      {/* Botón de nuevo chat para enterprise */}
+      {user?.role === 'enterprise' && onNewChat && (
+        <button
+          onClick={onNewChat}
+          className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-primary text-white hover:bg-primary/90 transition-all duration-200 font-medium mb-4"
+        >
+          <MessageCircle className="w-5 h-5" />
+          Nuevo Chat
+        </button>
+      )}
+
       {chats.map((chat) => (
         <button
           key={chat.room_id}

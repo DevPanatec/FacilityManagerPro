@@ -11,6 +11,7 @@ interface Admin {
   first_name: string;
   last_name: string;
   email: string;
+  role: string;
 }
 
 interface ChatSuggestion {
@@ -58,15 +59,22 @@ export function NewChatView({ onClose, onChatCreated }: NewChatViewProps) {
   const [loading, setLoading] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const loadAdmins = useCallback(async () => {
     if (!user?.organization_id) {
-      toast.error('No se pudo cargar los administradores');
+      setError('No se encontró la organización del usuario');
+      return;
+    }
+
+    if (user.role !== 'enterprise') {
+      setError('Solo los usuarios enterprise pueden iniciar nuevos chats');
       return;
     }
 
     try {
       setLoading(true);
+      setError(null);
       const { data, error } = await supabase
         .rpc('get_org_admins', {
           org_id: user.organization_id
@@ -75,27 +83,29 @@ export function NewChatView({ onClose, onChatCreated }: NewChatViewProps) {
       if (error) throw error;
       
       if (!data || data.length === 0) {
-        toast.error('No hay administradores disponibles');
+        setError('No hay administradores disponibles en este momento');
         return;
       }
 
+      console.log('Admins cargados:', data);
       setAdmins(data);
     } catch (error) {
       console.error('Error loading admins:', error);
-      toast.error('Error al cargar administradores');
+      setError('Error al cargar administradores');
     } finally {
       setLoading(false);
     }
-  }, [user?.organization_id]);
+  }, [user?.organization_id, user?.role]);
 
   const handleSelectAdmin = async (adminId: string) => {
     if (!user?.id) {
-      toast.error('Debes iniciar sesión');
+      setError('Debes iniciar sesión');
       return;
     }
 
     try {
       setLoading(true);
+      setError(null);
       const { data: roomId, error: roomError } = await supabase
         .rpc('get_or_create_direct_chat', {
           target_user_id: adminId
@@ -112,7 +122,7 @@ export function NewChatView({ onClose, onChatCreated }: NewChatViewProps) {
       onChatCreated(roomId);
     } catch (error) {
       console.error('Error in handleSelectAdmin:', error);
-      toast.error('Error al crear el chat');
+      setError('Error al crear el chat');
     } finally {
       setLoading(false);
     }
@@ -147,6 +157,20 @@ export function NewChatView({ onClose, onChatCreated }: NewChatViewProps) {
             {selectedSuggestion ? 'Cargando administradores...' : 'Cargando...'}
           </p>
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8">
+        <div className="text-red-500 mb-4">{error}</div>
+        <button
+          onClick={onClose}
+          className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+        >
+          Volver
+        </button>
       </div>
     );
   }
@@ -225,9 +249,18 @@ export function NewChatView({ onClose, onChatCreated }: NewChatViewProps) {
                 </span>
               </div>
               <div className="flex-1 text-left">
-                <h4 className="font-medium text-gray-900 group-hover:text-primary transition-colors">
-                  {admin.first_name} {admin.last_name}
-                </h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-medium text-gray-900 group-hover:text-primary transition-colors">
+                    {admin.first_name} {admin.last_name}
+                  </h4>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    admin.role === 'superadmin' 
+                      ? 'bg-purple-100 text-purple-700'
+                      : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {admin.role === 'superadmin' ? 'Super Admin' : 'Admin'}
+                  </span>
+                </div>
                 <p className="text-sm text-gray-500">{admin.email}</p>
               </div>
             </button>

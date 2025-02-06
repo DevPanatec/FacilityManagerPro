@@ -619,6 +619,27 @@ export type Database = {
           avatar_url: string | null
         }[]
       }
+      get_chat_messages_v2: {
+        Args: {
+          room_uuid: string
+          msg_limit?: number
+          msg_offset?: number
+        }
+        Returns: {
+          id: string
+          content: string
+          type: string
+          status: string
+          created_at: string
+          updated_at: string
+          user_id: string
+          room_id: string
+          organization_id: string
+          first_name: string
+          last_name: string
+          avatar_url: string | null
+        }[]
+      }
       get_chat_room_messages_v1: {
         Args: {
           room_uuid: string
