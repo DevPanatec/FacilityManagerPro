@@ -165,6 +165,44 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
     }
   }, [user, updateLastRead]);
 
+  const ensureChatMembership = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      // Usar la función RPC para asegurar la membresía
+      const { data, error } = await supabase
+        .rpc('ensure_chat_membership', {
+          p_room_id: roomId,
+          p_user_id: user.id
+        });
+
+      if (error) {
+        console.error('Error asegurando membresía:', error);
+        if (error.message.includes('Chat room no encontrado')) {
+          toast.error('El chat room no existe o no tienes acceso');
+        } else if (error.message.includes('Usuario no encontrado')) {
+          toast.error('Error de autenticación');
+        } else {
+          toast.error('Error al unirse al chat');
+        }
+        return;
+      }
+
+      if (data?.is_new) {
+        console.log('Nueva membresía creada:', data.membership);
+        toast.success('Te has unido al chat exitosamente');
+      } else {
+        console.log('Membresía existente:', data?.membership);
+      }
+
+      // Cargar mensajes después de asegurar la membresía
+      await loadMessages();
+    } catch (error) {
+      console.error('Error en ensureChatMembership:', error);
+      toast.error('Error al procesar la membresía del chat');
+    }
+  }, [user, roomId, loadMessages]);
+
   useEffect(() => {
     if (!user || userLoading) return;
 
@@ -182,12 +220,14 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
       .subscribe();
 
     channelRef.current = channel;
-    loadMessages();
+    
+    // Asegurar membresía primero
+    ensureChatMembership();
 
     return () => {
       channelRef.current?.unsubscribe();
     };
-  }, [roomId, user, userLoading, loadMessages, handleNewMessage]);
+  }, [roomId, user, userLoading, handleNewMessage, ensureChatMembership]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -195,9 +235,17 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (!newMessage.trim() || !user) return;
 
     try {
+      console.log('Intentando enviar mensaje con:', {
+        room_id: roomId,
+        user_id: user.id,
+        organization_id: user.organization_id,
+        content: newMessage.trim()
+      });
+
       const { error } = await supabase
         .from('chat_messages')
         .insert({
@@ -211,7 +259,11 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
 
       if (error) {
         console.error('Error enviando mensaje:', error);
-        toast.error('Error al enviar el mensaje');
+        if (error.code === 'PGRST301') {
+          toast.error('No tienes permiso para enviar mensajes en este chat');
+        } else {
+          toast.error('Error al enviar el mensaje');
+        }
         return;
       }
 

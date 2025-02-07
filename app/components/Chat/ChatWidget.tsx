@@ -12,10 +12,20 @@ import { usePathname } from 'next/navigation';
 interface ChatRoom {
   room_id: string;
   room_name: string;
-  is_group: boolean;
-  last_message: string;
-  last_message_at: string;
+  room_type: 'direct' | 'group';
+  last_message: {
+    content: string;
+    created_at: string;
+    user: {
+      first_name: string;
+      last_name: string;
+    };
+  } | null;
   unread_count: number;
+  other_user_id?: string;
+  other_user_name?: string;
+  other_user_avatar?: string;
+  is_group: boolean;
 }
 
 interface ChatWidgetProps {
@@ -106,7 +116,7 @@ export function ChatWidget({ className, isEnterprise = false }: ChatWidgetProps)
                 {view === 'new' && 'Nuevo Chat'}
                 {view === 'chat' && 'Conversación'}
               </h2>
-              {view === 'list' && user?.role === 'enterprise' && (
+              {view === 'list' && (
                 <button
                   onClick={handleStartNewChat}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
