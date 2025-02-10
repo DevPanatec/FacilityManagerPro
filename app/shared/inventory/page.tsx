@@ -99,37 +99,22 @@ export default function InventoryPage() {
 
       const { data: userData } = await supabase
         .from('users')
-        .select('role, organization_id')
+        .select('organization_id')
         .eq('id', user.id)
         .single()
 
       if (!userData) throw new Error('Usuario no encontrado')
+      if (!userData.organization_id) throw new Error('Usuario no tiene organización asignada')
 
-      console.log('User role:', userData.role); // Debug log
-
-      let query = supabase
+      const { data: items, error } = await supabase
         .from('inventory_items')
-        .select(`
-          *,
-          organization:organizations(
-            id,
-            name
-          )
-        `)
-
-      // Si no es superadmin, filtrar por organization_id
-      if (userData.role !== 'superadmin') {
-        if (!userData.organization_id) {
-          throw new Error('Usuario no tiene organización asignada')
-        }
-        query = query.eq('organization_id', userData.organization_id)
+        .select('*, organization:organizations(id, name)')
+        .eq('organization_id', userData.organization_id)
+      
+      if (error) {
+        console.error('Error detallado:', error)
+        throw error
       }
-
-      const { data: items, error } = await query
-      
-      console.log('Query result:', { items, error }); // Debug log
-      
-      if (error) throw error
       
       setItems(items || [])
     } catch (error) {
@@ -149,8 +134,8 @@ export default function InventoryPage() {
           name: item.name,
           description: item.description,
           quantity: item.quantity,
-          minimum_quantity: item.minimum_quantity,
-          unit_of_measure: item.unit_of_measure,
+          min_stock: item.min_stock,
+          unit: item.unit,
           status: item.status,
           updated_at: new Date().toISOString()
         })
@@ -184,8 +169,8 @@ export default function InventoryPage() {
         name: item.name,
         description: item.description || null,
         quantity: item.quantity || 0,
-        minimum_quantity: item.minimum_quantity || 0,
-        unit_of_measure: item.unit_of_measure,
+        min_stock: item.min_stock || 0,
+        unit: item.unit,
         organization_id: userData.organization_id,
         status: item.quantity === 0 ? 'discontinued' : 'active',
         created_at: new Date().toISOString(),
@@ -212,42 +197,189 @@ export default function InventoryPage() {
   }
 
   // Función para registrar uso de item
-  const registerItemUsage = async (itemId: string, quantity: number) => {
+  const registerItemUsage = async (itemId: string, data: { quantity: number, user: string, date: string, type: 'use' | 'restock' }) => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No autorizado')
 
-      // Registrar uso
-      const { error: usageError } = await supabase
-        .from('inventory_usage')
-        .insert([{
-          inventory_id: itemId,
-          quantity,
-          user_id: user.id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }])
-
-      if (usageError) throw usageError
-
-      // Actualizar cantidad en inventario
+      // Obtener el item actual
       const item = items.find(i => i.id === itemId)
       if (!item) throw new Error('Item no encontrado')
 
-      const newQuantity = item.quantity - quantity
-      const newStatus = newQuantity > item.min_stock ? 'available' : 
-                       newQuantity === 0 ? 'out_of_stock' : 'low'
+      const now = new Date().toISOString()
+      const isRestock = data.type === 'restock'
 
-      await updateInventoryItem({
-        ...item,
-        quantity: newQuantity,
-        status: newStatus
-      })
+      // Validar cantidad
+      if (!data.quantity || data.quantity <= 0) {
+        throw new Error('La cantidad debe ser mayor a 0')
+      }
 
-      toast.success('Uso registrado correctamente')
-    } catch (error) {
-      console.error('Error registering usage:', error)
-      toast.error('Error al registrar el uso')
+      if (!isRestock && data.quantity > item.quantity) {
+        throw new Error('La cantidad no puede ser mayor al stock disponible')
+      }
+
+      // Registrar movimiento
+      if (isRestock) {
+        try {
+          const timestamp = new Date(data.date).toISOString();
+          
+          // Validar datos básicos
+          if (!data.quantity || data.quantity <= 0) {
+            throw new Error('La cantidad debe ser mayor a 0')
+          }
+          if (!data.user || data.user.trim() === '') {
+            throw new Error('Proveedor es requerido')
+          }
+
+          const restockData = {
+            inventory_id: itemId,
+            quantity: parseInt(data.quantity.toString()),
+            supplier: data.user.trim(),
+            date: timestamp,
+            created_at: now,
+            updated_at: now
+          };
+
+          console.log('Intentando insertar reposición con datos:', restockData);
+
+          const { error: restockError } = await supabase
+            .from('inventory_restock')
+            .insert([restockData])
+
+          if (restockError) {
+            console.error('Error completo:', restockError);
+            throw new Error(`Error al registrar reposición: ${restockError.message}`);
+          }
+
+          // Actualizar la cantidad en inventory_items
+          const newQuantity = item.quantity + parseInt(data.quantity.toString());
+          
+          const { error: updateItemsError } = await supabase
+            .from('inventory_items')
+            .update({
+              quantity: newQuantity,
+              updated_at: now
+            })
+            .eq('id', itemId);
+
+          if (updateItemsError) {
+            console.error('Error al actualizar cantidad en inventory_items:', updateItemsError);
+            throw new Error('Error al actualizar la cantidad en inventory_items');
+          }
+
+          await loadInventoryItems();
+          return restockData;
+
+        } catch (error: any) {
+          console.error('Error completo de reposición:', {
+            message: error.message,
+            code: error?.code,
+            details: error?.details,
+            hint: error?.hint,
+            stack: error?.stack
+          });
+          throw error;
+        }
+      } else {
+        try {
+          const timestamp = new Date(data.date).toISOString();
+          
+          // Obtener el perfil del usuario con su organización
+          const { data: userData } = await supabase
+            .from('users')
+            .select('organization_id')
+            .eq('id', user.id)
+            .single();
+
+          if (!userData?.organization_id) {
+            throw new Error('Usuario no tiene una organización asignada');
+          }
+
+          // Validar que el item pertenezca a la organización del usuario
+          const { data: itemData } = await supabase
+            .from('inventory_items')
+            .select('organization_id')
+            .eq('id', itemId)
+            .single();
+
+          if (!itemData || itemData.organization_id !== userData.organization_id) {
+            throw new Error('No tienes permiso para modificar este item');
+          }
+
+          // Validar datos antes de insertar
+          if (!itemId) {
+            throw new Error('ID del item es requerido')
+          }
+          if (!data.quantity || isNaN(data.quantity)) {
+            throw new Error('Cantidad inválida')
+          }
+          if (!user.id) {
+            throw new Error('Usuario no autorizado')
+          }
+          if (!timestamp) {
+            throw new Error('Fecha inválida')
+          }
+
+          const usageData = {
+            inventory_id: itemId,
+            quantity: parseInt(data.quantity.toString()),
+            user_id: user.id,
+            date: timestamp
+          };
+
+          console.log('Datos de uso a insertar:', usageData);
+
+          const { data: insertedData, error: usageError } = await supabase
+            .from('inventory_usage')
+            .insert(usageData)
+            .select()
+
+          if (usageError) {
+            console.error('Error detallado de uso:', {
+              code: usageError.code,
+              message: usageError.message,
+              details: usageError.details,
+              hint: usageError.hint
+            })
+            throw new Error(`Error al registrar uso: ${usageError.message}`)
+          }
+
+          // Actualizar la cantidad en inventory_items
+          const newQuantity = item.quantity - parseInt(data.quantity.toString());
+          
+          const { error: updateError } = await supabase
+            .from('inventory_items')
+            .update({
+              quantity: newQuantity,
+              updated_at: now
+            })
+            .eq('id', itemId);
+
+          if (updateError) {
+            console.error('Error al actualizar cantidad:', updateError);
+            throw new Error('Error al actualizar la cantidad');
+          }
+
+          console.log('Uso registrado:', insertedData)
+
+        } catch (error: any) {
+          console.error('Error completo de uso:', {
+            message: error.message,
+            code: error?.code,
+            details: error?.details,
+            hint: error?.hint,
+            stack: error?.stack
+          });
+          throw error;
+        }
+      }
+
+      await loadInventoryItems()
+      toast.success(isRestock ? 'Reposición registrada correctamente' : 'Uso registrado correctamente')
+    } catch (error: any) {
+      console.error('Error en operación de inventario:', error)
+      toast.error(error.message || 'Error al procesar la operación')
+      throw error
     }
   }
 
@@ -292,6 +424,13 @@ export default function InventoryPage() {
     return items.filter(item => item.quantity <= item.min_stock)
   }, [items])
 
+  // Calcular estado basado en la cantidad
+  const calculateItemStatus = (item: InventoryItem) => {
+    if (item.quantity === 0) return 'out_of_stock';
+    if (item.quantity <= item.min_stock) return 'low_stock';
+    return 'available';
+  };
+
   // Filtrar y ordenar items
   const filteredItems = useMemo(() => {
     let result = [...items]
@@ -299,11 +438,9 @@ export default function InventoryPage() {
     // Aplicar filtro de estado
     if (filters.status !== 'all') {
       result = result.filter(item => {
-        if (filters.status === 'available') return item.quantity > item.min_stock
-        if (filters.status === 'low') return item.quantity <= item.min_stock && item.quantity > 0
-        if (filters.status === 'out_of_stock') return item.quantity === 0
-        return true
-      })
+        const currentStatus = calculateItemStatus(item);
+        return currentStatus === filters.status;
+      });
     }
 
     // Aplicar búsqueda
@@ -340,7 +477,7 @@ export default function InventoryPage() {
   const handleModalSubmit = async (formData: any) => {
     try {
       if (modalMode === 'use' && selectedItem) {
-        await registerItemUsage(selectedItem.id, formData.quantity)
+        await registerItemUsage(selectedItem.id, formData)
       } else if (modalMode === 'edit' && selectedItem) {
         await updateInventoryItem({
           ...selectedItem,
@@ -581,14 +718,14 @@ export default function InventoryPage() {
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                          ${item.status === 'active'
+                          ${calculateItemStatus(item) === 'available'
                             ? 'bg-green-100 text-green-800'
-                            : item.status === 'discontinued'
+                            : calculateItemStatus(item) === 'out_of_stock'
                             ? 'bg-red-100 text-red-800'
                             : 'bg-yellow-100 text-yellow-800'
                           }`}>
-                          {item.status === 'active' ? 'Disponible' :
-                           item.status === 'discontinued' ? 'Sin Stock' : 'Stock Bajo'}
+                          {calculateItemStatus(item) === 'available' ? 'Disponible' :
+                           calculateItemStatus(item) === 'out_of_stock' ? 'Sin Stock' : 'Stock Bajo'}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">

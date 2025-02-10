@@ -1,21 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
-
-interface Sala {
-  id: string
-  nombre: string
-  estado: boolean
-  organization_id: string
-}
-
-interface Area {
-  id: string
-  name: string
-  sala_id: string
-  status: 'active' | 'inactive'
-  organization_id: string
-}
+import { Task } from '@/lib/types/tasks'
+import SalaAreaSelector from '@/app/shared/components/componentes/SalaAreaSelector'
+import { Sala, Area } from '@/lib/types/database'
 
 interface User {
   id: string
@@ -26,19 +14,23 @@ interface User {
 interface TaskModalProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (taskData: any) => void
-  selectedDate: string
-  organizationId: string
+  onSave: (taskData: Partial<Task>) => Promise<void>
+  task?: Task | null
 }
 
-export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizationId }: TaskModalProps) {
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [priority, setPriority] = useState('media')
-  const [status, setStatus] = useState('pendiente')
-  const [assignedTo, setAssignedTo] = useState('')
-  const [selectedSala, setSelectedSala] = useState('')
-  const [selectedArea, setSelectedArea] = useState('')
+export function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
+  const [title, setTitle] = useState(task?.title || '')
+  const [description, setDescription] = useState(task?.description || '')
+  const [priority, setPriority] = useState<Task['priority']>(task?.priority || 'medium')
+  const [status, setStatus] = useState<Task['status']>(task?.status || 'pending')
+  const [dueDate, setDueDate] = useState(task?.due_date || new Date().toISOString().split('T')[0])
+  const [selectedSala, setSelectedSala] = useState(task?.sala_id || '')
+  const [selectedArea, setSelectedArea] = useState(task?.area_id || '')
+  const [assignedTo, setAssignedTo] = useState(task?.assigned_to || '')
+  const [startTime, setStartTime] = useState(task?.start_time || '')
+  const [endTime, setEndTime] = useState(task?.end_time || '')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [salas, setSalas] = useState<Sala[]>([])
   const [areas, setAreas] = useState<Area[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -47,37 +39,27 @@ export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizatio
     areas: false,
     users: false
   })
-  const [error, setError] = useState<{
-    salas: string | null,
-    areas: string | null,
-    users: string | null
-  }>({
-    salas: null,
-    areas: null,
-    users: null
-  })
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!organizationId) {
+      if (!task?.organization_id) {
         return
       }
 
       setLoading(prev => ({ ...prev, salas: true, users: true }))
-      setError(prev => ({ ...prev, salas: null, users: null }))
 
       try {
         // Obtener salas
         const { data: salasData, error: salasError } = await supabase
           .from('salas')
           .select('id, nombre, estado, organization_id')
-          .eq('organization_id', organizationId)
+          .eq('organization_id', task.organization_id)
           .eq('estado', true)
           .order('nombre')
 
         if (salasError) {
           console.error('Error fetching salas:', salasError)
-          setError(prev => ({ ...prev, salas: 'Error al cargar las salas' }))
+          setError('Error al cargar las salas')
           return
         }
 
@@ -87,12 +69,12 @@ export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizatio
         const { data: usersData, error: usersError } = await supabase
           .from('profiles')
           .select('id, first_name, last_name')
-          .eq('organization_id', organizationId)
+          .eq('organization_id', task.organization_id)
           .eq('status', 'active')
 
         if (usersError) {
           console.error('Error fetching users:', usersError)
-          setError(prev => ({ ...prev, users: 'Error al cargar los usuarios' }))
+          setError('Error al cargar los usuarios')
           return
         }
 
@@ -107,7 +89,7 @@ export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizatio
     if (isOpen) {
       fetchData()
     }
-  }, [isOpen, organizationId])
+  }, [isOpen, task])
 
   // Efecto para cargar áreas cuando se selecciona una sala
   useEffect(() => {
@@ -118,20 +100,19 @@ export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizatio
       }
 
       setLoading(prev => ({ ...prev, areas: true }))
-      setError(prev => ({ ...prev, areas: null }))
 
       try {
         const { data: areasData, error: areasError } = await supabase
           .from('areas')
           .select('id, name, sala_id, status, organization_id')
-          .eq('organization_id', organizationId)
+          .eq('organization_id', task?.organization_id)
           .eq('sala_id', selectedSala)
           .eq('status', 'active')
           .order('name')
 
         if (areasError) {
           console.error('Error fetching areas:', areasError)
-          setError(prev => ({ ...prev, areas: 'Error al cargar las áreas' }))
+          setError('Error al cargar las áreas')
           return
         }
 
@@ -144,47 +125,75 @@ export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizatio
     }
 
     fetchAreas()
-  }, [selectedSala, organizationId])
+  }, [selectedSala, task])
 
-  const handleSalaChange = (salaId: string) => {
-    setSelectedSala(salaId)
-    setSelectedArea('') // Resetear el área seleccionada cuando cambia la sala
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
+    setIsSubmitting(true)
 
-    if (!selectedSala) {
-      setError(prev => ({ ...prev, salas: 'Debe seleccionar una sala' }))
-      return
+    try {
+      // Validar campos requeridos
+      if (!title.trim()) {
+        throw new Error('El título es requerido')
+      }
+
+      if (!selectedArea) {
+        throw new Error('Debe seleccionar un área')
+      }
+
+      if (!dueDate) {
+        throw new Error('La fecha de vencimiento es requerida')
+      }
+
+      // Crear objeto de tarea
+      const taskData: Partial<Task> = {
+        title: title.trim(),
+        description: description.trim(),
+        priority,
+        status,
+        due_date: dueDate,
+        area_id: selectedArea,
+        sala_id: selectedSala || undefined,
+        assigned_to: assignedTo || undefined,
+        start_time: startTime || undefined,
+        end_time: endTime || undefined
+      }
+
+      await onSave(taskData)
+      onClose()
+    } catch (err) {
+      console.error('Error al guardar la tarea:', err)
+      setError(err instanceof Error ? err.message : 'Error al guardar la tarea')
+    } finally {
+      setIsSubmitting(false)
     }
-
-    if (!selectedArea) {
-      setError(prev => ({ ...prev, areas: 'Debe seleccionar un área' }))
-      return
-    }
-
-    onSubmit({
-      titulo: title,
-      descripcion: description,
-      sala_id: selectedSala,
-      area_id: selectedArea,
-      fecha: selectedDate,
-      prioridad: priority,
-      status: status,
-      asignado_a: assignedTo ? [assignedTo] : [],
-      organization_id: organizationId
-    })
-    onClose()
   }
 
-  if (!isOpen || !organizationId) return null
+  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-md">
-        <h2 className="text-xl font-bold mb-4">Nueva Tarea</h2>
-        
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">{task ? 'Editar Tarea' : 'Nueva Tarea'}</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+            disabled={isSubmitting}
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-md">
+            {error}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">Título</label>
@@ -208,55 +217,35 @@ export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizatio
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Fecha</label>
+            <label className="block text-sm font-medium text-gray-700">Fecha de vencimiento</label>
             <input
-              type="datetime-local"
-              value={selectedDate}
-              disabled
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              required
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Sala</label>
-            <select
-              value={selectedSala}
-              onChange={(e) => handleSalaChange(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              required
-              disabled={loading.salas}
-            >
-              <option value="">
-                {loading.salas ? 'Cargando salas...' : 'Seleccionar sala'}
-              </option>
-              {salas.map(sala => (
-                <option key={sala.id} value={sala.id}>{sala.nombre}</option>
-              ))}
-            </select>
-            {error.salas && (
-              <p className="mt-1 text-sm text-red-600">{error.salas}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Área</label>
-            <select
-              value={selectedArea}
-              onChange={(e) => setSelectedArea(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              required
-              disabled={loading.areas || !selectedSala}
-            >
-              <option value="">
-                {loading.areas ? 'Cargando áreas...' : 'Seleccionar área'}
-              </option>
-              {areas.map(area => (
-                <option key={area.id} value={area.id}>{area.name}</option>
-              ))}
-            </select>
-            {error.areas && (
-              <p className="mt-1 text-sm text-red-600">{error.areas}</p>
-            )}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Hora de inicio</label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Hora de fin</label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -264,12 +253,13 @@ export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizatio
               <label className="block text-sm font-medium text-gray-700">Prioridad</label>
               <select
                 value={priority}
-                onChange={(e) => setPriority(e.target.value)}
+                onChange={(e) => setPriority(e.target.value as Task['priority'])}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               >
-                <option value="baja">Baja</option>
-                <option value="media">Media</option>
-                <option value="alta">Alta</option>
+                <option value="low">Baja</option>
+                <option value="medium">Media</option>
+                <option value="high">Alta</option>
+                <option value="urgent">Urgente</option>
               </select>
             </div>
 
@@ -277,52 +267,49 @@ export function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizatio
               <label className="block text-sm font-medium text-gray-700">Estado</label>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value)}
+                onChange={(e) => setStatus(e.target.value as Task['status'])}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               >
-                <option value="pendiente">Pendiente</option>
-                <option value="en_progreso">En Progreso</option>
-                <option value="completado">Completado</option>
-                <option value="cancelado">Cancelado</option>
+                <option value="pending">Pendiente</option>
+                <option value="in_progress">En Progreso</option>
+                <option value="completed">Completado</option>
+                <option value="cancelled">Cancelado</option>
               </select>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Asignado a</label>
-            <select
-              value={assignedTo}
-              onChange={(e) => setAssignedTo(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              disabled={loading.users}
-            >
-              <option value="">
-                {loading.users ? 'Cargando usuarios...' : 'Sin asignar'}
-              </option>
-              {users.map(user => (
-                <option key={user.id} value={user.id}>
-                  {user.first_name} {user.last_name}
-                </option>
-              ))}
-            </select>
-            {error.users && (
-              <p className="mt-1 text-sm text-red-600">{error.users}</p>
-            )}
-          </div>
+          <SalaAreaSelector
+            onSalaChange={(sala) => setSelectedSala(sala?.id || '')}
+            onAreaChange={(area) => setSelectedArea(area?.id || '')}
+            initialSalaId={selectedSala}
+            initialAreaId={selectedArea}
+          />
 
           <div className="flex justify-end space-x-3 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md disabled:opacity-50"
+              disabled={isSubmitting}
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 flex items-center space-x-2"
+              disabled={isSubmitting}
             >
-              Crear
+              {isSubmitting ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Guardando...</span>
+                </>
+              ) : (
+                <span>{task ? 'Actualizar' : 'Crear'}</span>
+              )}
             </button>
           </div>
         </form>

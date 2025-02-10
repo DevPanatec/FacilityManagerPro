@@ -93,50 +93,69 @@ export default function RRHHPage() {
       setIsLoading(true);
       setError(null);
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw new Error(`Error de autenticación: ${authError.message}`);
       if (!user) throw new Error('No autorizado');
 
-      const { data: userData } = await supabase
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role, organization_id')
         .eq('id', user.id)
         .single();
 
+      if (userError) throw new Error(`Error al obtener datos del usuario: ${userError.message}`);
       if (!userData) throw new Error('Usuario no encontrado');
+      if (!userData.organization_id) throw new Error('Usuario no tiene organización asignada');
 
-      let query = supabase
+      // Consulta simplificada que solo obtiene usuarios de la misma organización
+      const { data: employeesData, error: employeesError } = await supabase
         .from('users')
-        .select(`
-          *,
-          organization:organizations(name)
-        `)
-        .neq('role', 'superadmin') // No mostrar superadmins en la lista
+        .select('*')
+        .eq('organization_id', userData.organization_id);
 
-      // Si no es superadmin, filtrar por organization_id
-      if (userData.role !== 'superadmin') {
-        if (!userData.organization_id) {
-          throw new Error('Usuario no tiene organización asignada')
-        }
-        query = query.eq('organization_id', userData.organization_id)
+      if (employeesError) {
+        console.error('Error detallado:', {
+          message: employeesError.message,
+          code: employeesError.code,
+          details: employeesError.details,
+          hint: employeesError.hint
+        });
+        throw new Error(`Error al cargar empleados: ${employeesError.message}`);
       }
 
-      const { data: employeesData, error: employeesError } = await query;
+      // Filtrar superadmins después de obtener los datos
+      const filteredEmployees = (employeesData || []).filter(emp => emp.role !== 'superadmin');
 
-      if (employeesError) throw employeesError;
+      const formattedEmployees = filteredEmployees.map(emp => ({
+        ...emp,
+        position: 'Usuario',
+        department: 'General',
+        work_shift: 'morning',
+        hire_date: emp.created_at,
+        contact_info: {
+          email: emp.email,
+          phone: ''
+        }
+      }));
 
-      setEmployees(employeesData || []);
+      setEmployees(formattedEmployees);
       
       // Actualizar estadísticas
       setStats({
-        totalEmployees: employeesData?.length || 0,
-        activeEmployees: employeesData?.filter(e => e.status === 'active').length || 0,
-        shiftsToday: employeesData?.filter(e => e.work_shift === 'morning').length || 0
+        totalEmployees: formattedEmployees.length || 0,
+        activeEmployees: formattedEmployees.filter(e => e.status === 'active').length || 0,
+        shiftsToday: formattedEmployees.filter(e => e.work_shift === 'morning').length || 0
       });
 
     } catch (error) {
       console.error('Error loading employees:', error);
-      setError(error instanceof Error ? error.message : 'Error al cargar empleados');
-      toast.error('Error al cargar empleados');
+      if (error instanceof Error) {
+        setError(error.message);
+        toast.error(error.message);
+      } else {
+        setError('Error desconocido al cargar empleados');
+        toast.error('Error desconocido al cargar empleados');
+      }
     } finally {
       setIsLoading(false);
     }

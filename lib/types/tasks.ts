@@ -4,27 +4,30 @@ export interface Task {
   description?: string;
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   priority: 'low' | 'medium' | 'high' | 'urgent';
-  due_date?: string;
+  due_date: string;
   assigned_to?: string;
   created_by: string;
+  organization_id: string;
+  area_id: string;
+  sala_id?: string;
   category_id?: string;
   department_id?: string;
-  area_id?: string;
   parent_task_id?: string;
   recurrence?: RecurrencePattern;
   created_at: string;
   updated_at: string;
+  start_time?: string;
+  end_time?: string;
+}
+
+export interface TaskInsert extends Omit<Task, 'id'> {
+  id?: string;
 }
 
 export interface RecurrencePattern {
-  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  frequency: 'daily' | 'weekly' | 'monthly';
   interval: number;
-  weekdays?: number[];  // 0 = Sunday, 1 = Monday, etc.
-  monthDay?: number;    // 1-31
-  endDate?: string;     // ISO date string
-  skipWeekends?: boolean;
-  skipHolidays?: boolean; // Saltar días festivos
-  maxOccurrences?: number; // Máximo número de instancias a generar
+  end_date?: string;
 }
 
 export interface TaskCategory {

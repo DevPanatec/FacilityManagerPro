@@ -99,6 +99,22 @@ export default function SchedulePage() {
 
       if (!userProfile) throw new Error('Usuario no encontrado')
 
+      // Asegurar que todos los campos requeridos estén presentes
+      const requiredFields = {
+        title: taskData.title,
+        area_id: taskData.area_id,
+        status: taskData.status || 'pending',
+        priority: taskData.priority || 'medium',
+        due_date: taskData.due_date
+      }
+
+      // Verificar campos requeridos
+      for (const [field, value] of Object.entries(requiredFields)) {
+        if (!value) {
+          throw new Error(`El campo ${field} es requerido`)
+        }
+      }
+
       if (selectedTask) {
         // Actualizar tarea existente
         const { error: updateError } = await supabase
@@ -109,21 +125,31 @@ export default function SchedulePage() {
           })
           .eq('id', selectedTask.id)
 
-        if (updateError) throw updateError
+        if (updateError) {
+          console.error('Error de actualización:', updateError)
+          throw new Error('Error al actualizar la tarea: ' + updateError.message)
+        }
         toast.success('Tarea actualizada correctamente')
       } else {
         // Crear nueva tarea
+        const newTask = {
+          ...taskData,
+          organization_id: userProfile.organization_id,
+          created_by: user.id,
+          status: taskData.status || 'pending',
+          priority: taskData.priority || 'medium',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+
         const { error: insertError } = await supabase
           .from('tasks')
-          .insert({
-            ...taskData,
-            organization_id: userProfile.organization_id,
-            created_by: user.id,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
+          .insert(newTask)
 
-        if (insertError) throw insertError
+        if (insertError) {
+          console.error('Error de inserción:', insertError)
+          throw new Error('Error al crear la tarea: ' + insertError.message)
+        }
         toast.success('Tarea creada correctamente')
       }
 
@@ -132,7 +158,7 @@ export default function SchedulePage() {
       setSelectedTask(null)
     } catch (error) {
       console.error('Error saving task:', error)
-      toast.error('Error al guardar la tarea')
+      toast.error(error instanceof Error ? error.message : 'Error al guardar la tarea')
     }
   }
 

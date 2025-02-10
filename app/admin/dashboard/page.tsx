@@ -33,6 +33,11 @@ interface DashboardData {
     frecuencia: number;
     porcentaje: number;
   }[];
+  estadoTareas: {
+    completadas: number;
+    enProgreso: number;
+    pendientes: number;
+  };
 }
 
 interface Room {
@@ -93,7 +98,12 @@ export default function Dashboard() {
     },
     alertasInventario: [],
     estadoAsignaciones: [],
-    frecuenciaLimpieza: []
+    frecuenciaLimpieza: [],
+    estadoTareas: {
+      completadas: 0,
+      enProgreso: 0,
+      pendientes: 0
+    }
   });
 
   useEffect(() => {
@@ -106,7 +116,6 @@ export default function Dashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No autorizado');
 
-      // Obtener organización del usuario
       const { data: userProfile } = await supabase
         .from('users')
         .select('organization_id')
@@ -118,29 +127,25 @@ export default function Dashboard() {
       // Calcular fechas para el período seleccionado
       const now = new Date();
       let startDate = new Date();
-      switch (selectedPeriod) {
-        case 'dia':
-          startDate.setHours(0, 0, 0, 0);
-          break;
-        case 'semana':
-          startDate.setDate(now.getDate() - 7);
-          break;
-        case 'mes':
-          startDate.setMonth(now.getMonth() - 1);
-          break;
-      }
+      startDate.setDate(now.getDate() - 7); // Siempre mostramos los últimos 7 días
 
-      // Obtener asignaciones
-      const { data: assignments } = await supabase
-        .from('assignments')
+      // Obtener todas las tareas de la última semana
+      const { data: taskData } = await supabase
+        .from('tasks')
         .select(`
-          *,
+          id,
+          title,
+          status_id,
+          created_at,
+          start_time,
+          completed_at,
           sala_id
         `)
         .eq('organization_id', userProfile.organization_id)
-        .gte('created_at', startDate.toISOString());
+        .gte('created_at', startDate.toISOString())
+        .lte('created_at', now.toISOString());
 
-      console.log('Asignaciones obtenidas:', assignments);
+      console.log('Tareas obtenidas:', taskData);
 
       // Obtener personal activo
       const { data: activeUsers } = await supabase
@@ -184,30 +189,35 @@ export default function Dashboard() {
         .select('*')
         .eq('organization_id', userProfile.organization_id);
 
+      // Preparar datos de estado de asignaciones por día
+      const diasSemana = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie'];
+      const estadoAsignaciones = diasSemana.map(dia => {
+        const tareasDia = taskData?.filter(task => {
+          const fecha = new Date(task.created_at);
+          const nombreDia = fecha.toLocaleDateString('es-ES', { weekday: 'short' }).substring(0, 3);
+          return nombreDia === dia;
+        }) || [];
+
+        const completadas = tareasDia.filter(t => t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c').length;
+        const pendientes = tareasDia.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length;
+
+        return {
+          dia,
+          completadas,
+          pendientes
+        };
+      });
+
+      console.log('Estado de asignaciones por día:', estadoAsignaciones);
+
       // Calcular métricas
-      const pendientes = assignments?.filter(a => a.status === 'pending').length || 0;
-      const completadas = assignments?.filter(a => a.status === 'completed').length || 0;
-      const total = assignments?.length || 0;
-
-      // Calcular variación de pendientes vs día anterior
-      const yesterdayStart = new Date(startDate);
-      yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-      const { data: yesterdayAssignments } = await supabase
-        .from('assignments')
-        .select('*')
-        .eq('organization_id', userProfile.organization_id)
-        .eq('status', 'pending')
-        .gte('created_at', yesterdayStart.toISOString())
-        .lt('created_at', startDate.toISOString());
-
-      const yesterdayPendientes = yesterdayAssignments?.length || 0;
-      const variacion = yesterdayPendientes > 0 
-        ? ((pendientes - yesterdayPendientes) / yesterdayPendientes) * 100 
-        : 0;
+      const pendientes = taskData?.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length || 0;
+      const completadas = taskData?.filter(t => t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c').length || 0;
+      const total = taskData?.length || 0;
 
       // Calcular tiempo promedio por tarea
-      const completedWithTimes = assignments?.filter(a => 
-        a.status === 'completed' && a.start_time && a.completed_at
+      const completedWithTimes = taskData?.filter(t => 
+        t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c' && t.start_time && t.completed_at
       ) || [];
 
       let tiempoPromedio = '0min';
@@ -221,35 +231,20 @@ export default function Dashboard() {
       }
 
       // Calcular productividad por turno
-      const turnoManana = assignments?.filter(a => {
-        const hora = new Date(a.created_at).getHours();
+      const turnoManana = taskData?.filter(t => {
+        const hora = new Date(t.created_at).getHours();
         return hora >= 6 && hora < 14;
       }).length || 0;
 
-      const turnoTarde = assignments?.filter(a => {
-        const hora = new Date(a.created_at).getHours();
+      const turnoTarde = taskData?.filter(t => {
+        const hora = new Date(t.created_at).getHours();
         return hora >= 14 && hora < 22;
       }).length || 0;
 
-      const turnoNoche = assignments?.filter(a => {
-        const hora = new Date(a.created_at).getHours();
+      const turnoNoche = taskData?.filter(t => {
+        const hora = new Date(t.created_at).getHours();
         return hora >= 22 || hora < 6;
       }).length || 0;
-
-      // Preparar datos de estado de asignaciones por día
-      const diasSemana = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie'];
-      const estadoAsignaciones = diasSemana.map(dia => {
-        const asignacionesDia = assignments?.filter(a => {
-          const fecha = new Date(a.created_at);
-          return fecha.toLocaleDateString('es-ES', { weekday: 'short' }).startsWith(dia);
-        }) || [];
-
-        return {
-          dia,
-          completadas: asignacionesDia.filter(a => a.status === 'completed').length,
-          pendientes: asignacionesDia.filter(a => a.status === 'pending').length
-        };
-      });
 
       // Preparar datos de frecuencia de limpieza
       const { data: salas } = await supabase
@@ -263,7 +258,7 @@ export default function Dashboard() {
       const typedSalas = salas as Room[] | null;
 
       const frecuenciaLimpieza = typedSalas?.map(sala => {
-        const asignacionesSala = assignments?.filter(a => a.sala_id === sala.id) || [];
+        const asignacionesSala = taskData?.filter(a => a.sala_id === sala.id) || [];
         console.log('Asignaciones para sala', sala.nombre, ':', asignacionesSala);
         
         const frecuencia = Math.round(asignacionesSala.length / (selectedPeriod === 'dia' ? 1 : selectedPeriod === 'semana' ? 7 : 30));
@@ -276,10 +271,27 @@ export default function Dashboard() {
 
       console.log('Frecuencia de limpieza calculada:', frecuenciaLimpieza);
 
+      // Contar tareas por estado
+      const tareasCompletadas = taskData?.filter(t => t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c').length || 0;
+      const tareasEnProgreso = taskData?.filter(t => t.status_id === '906c6c3b-80a2-46ca-ab1a-2efc95bf1852').length || 0;
+      const tareasPendientes = taskData?.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length || 0;
+
+      console.log('Conteo de tareas:', { tareasCompletadas, tareasEnProgreso, tareasPendientes });
+
+      // Actualizar el estado con los conteos de tareas
+      setDashboardData(prevData => ({
+        ...prevData,
+        estadoTareas: {
+          completadas: tareasCompletadas,
+          enProgreso: tareasEnProgreso,
+          pendientes: tareasPendientes
+        }
+      }));
+
       setDashboardData({
         asignacionesPendientes: {
           cantidad: pendientes,
-          variacion: Math.round(variacion)
+          variacion: Math.round((pendientes - (taskData?.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length || 0)) / (taskData?.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length || 0) * 100)
         },
         personalActivo: activeUsers?.length || 0,
         tiempoPromedio,
@@ -291,12 +303,21 @@ export default function Dashboard() {
         },
         alertasInventario,
         estadoAsignaciones,
-        frecuenciaLimpieza
+        frecuenciaLimpieza,
+        estadoTareas: {
+          completadas: tareasCompletadas,
+          enProgreso: tareasEnProgreso,
+          pendientes: tareasPendientes
+        }
       });
 
     } catch (error) {
-      console.error('Error loading dashboard data:', error);
-      setError('Error al cargar los datos del dashboard');
+      console.error('Error loading data:', error);
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('Error al cargar los datos del dashboard');
+      }
     } finally {
       setLoading(false);
     }
@@ -559,20 +580,26 @@ export default function Dashboard() {
           </div>
           <div className="p-6">
             <div className="relative h-64">
-              <div className="flex justify-between h-full">
+              <div className="flex justify-between items-end h-full">
                 {dashboardData.estadoAsignaciones.map((dia, index) => (
-                  <div key={index} className="flex flex-col justify-end items-center gap-2 w-1/6">
+                  <div key={index} className="flex flex-col items-center gap-2 w-1/6 relative group">
                     <div className="w-full flex flex-col gap-1">
                       <div 
                         className="bg-blue-500 rounded-t-lg transition-all duration-300" 
-                        style={{ height: `${dia.completadas * 8}px` }} 
+                        style={{ height: `${Math.max(dia.completadas * 20, 0)}px` }} 
                       />
                       <div 
                         className="bg-red-500 rounded-b-lg transition-all duration-300" 
-                        style={{ height: `${dia.pendientes * 8}px` }} 
+                        style={{ height: `${Math.max(dia.pendientes * 20, 0)}px` }} 
                       />
                     </div>
                     <span className="text-sm font-medium text-gray-600">{dia.dia}</span>
+                    
+                    {/* Tooltip */}
+                    <div className="absolute bottom-full mb-2 bg-white p-2 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                      <p className="text-sm text-blue-600">Completadas: {dia.completadas}</p>
+                      <p className="text-sm text-red-600">Pendientes: {dia.pendientes}</p>
+                    </div>
                   </div>
                 ))}
               </div>

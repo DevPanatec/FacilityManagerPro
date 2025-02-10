@@ -6,6 +6,7 @@ import { Dialog } from '@headlessui/react';
 import { User } from '@supabase/supabase-js';
 import SalaAreaSelector from '@/app/shared/components/componentes/SalaAreaSelector';
 import { toast } from 'react-hot-toast';
+import { errorHandler } from '@/utils/errorHandler';
 
 interface WorkShiftData {
   id: string;
@@ -69,6 +70,8 @@ export default function AssignmentsPage() {
   const loadData = async () => {
     try {
       setLoading(true);
+      const supabase = createClientComponentClient();
+      
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No autorizado');
 
@@ -132,62 +135,47 @@ export default function AssignmentsPage() {
       }
 
       // Cargar salas y sus tareas
-      const { data: salasData } = await supabase
+      const { data: salasData, error: salasError } = await supabase
         .from('salas')
         .select(`
           id,
           nombre,
-          areas (
+          estado,
+          organization_id,
+          areas:areas (
             id,
             name,
-            tasks (
-              id,
-              title,
-              description,
-              status,
-              priority,
-              assigned_to,
-              created_at,
-              due_date
-            )
+            status
           )
         `)
         .eq('organization_id', userProfile.organization_id)
         .eq('estado', true);
 
+      if (salasError) throw salasError;
+
       if (salasData) {
         const salasFormatted = salasData.map((sala) => {
-          const tareas = sala.areas
-            .flatMap(area => area.tasks || [])
-            .filter(task => task.status !== 'completed')
-            .map(task => ({
-              id: task.id,
-              titulo: task.title,
-              descripcion: task.description || '',
-              estado: task.status,
-              prioridad: task.priority || 'low',
-              fechaCreacion: new Date(task.created_at || new Date()).toLocaleDateString(),
-              fechaVencimiento: task.due_date ? new Date(task.due_date).toLocaleDateString() : 'Sin fecha'
-            }));
-
           return {
             id: sala.id,
             nombre: sala.nombre,
             color: getSalaColor(sala.nombre),
-            tareas: tareas,
-            areas: sala.areas.map(area => ({
-              id: area.id,
-              name: area.name
-            }))
+            tareas: [], // Inicialmente vacío, se puede cargar bajo demanda
+            areas: (sala.areas || [])
+              .filter(area => area.status === 'active')
+              .map(area => ({
+                id: area.id,
+                name: area.name
+              }))
           };
         });
 
+        console.log('Salas formateadas:', salasFormatted);
         setSalas(salasFormatted);
       }
 
     } catch (error) {
       console.error('Error loading data:', error);
-      toast.error('Error al cargar los datos');
+      toast.error(errorHandler(error));
     } finally {
       setLoading(false);
     }
@@ -214,76 +202,34 @@ export default function AssignmentsPage() {
   };
 
   const handleCreateAssignment = async () => {
-    console.log('=== INICIO DE CREACIÓN DE ASIGNACIÓN ===');
     try {
-      console.log('Iniciando creación de asignación con datos:', {
-        selectedUser,
-        selectedSala,
-        selectedArea,
-        selectedDate,
-        startTime,
-        endTime,
-        frecuencia
-      });
-
       // Validación de campos requeridos
-      if (!selectedUser || !selectedSala || !selectedArea || !selectedDate || !startTime || !endTime) {
-        console.log('Validación fallida - campos faltantes:', {
-          selectedUser: !!selectedUser,
-          selectedSala: !!selectedSala,
-          selectedArea: !!selectedArea,
-          selectedDate: !!selectedDate,
-          startTime: !!startTime,
-          endTime: !!endTime
-        });
+      if (!selectedUser || !selectedArea || !selectedDate || !startTime || !endTime) {
         toast.error('Por favor complete todos los campos');
         return;
       }
 
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
-        console.error('Error de autenticación:', authError);
-        toast.error('No autorizado');
-        return;
-      }
+      if (!user) throw new Error('No autorizado');
 
-      console.log('Usuario autenticado:', user.id);
-
-      // Obtener el perfil del usuario y verificar rol
-      const { data: userProfile, error: profileError } = await supabase
+      const { data: userProfile } = await supabase
         .from('users')
-        .select('organization_id, role')
+        .select('organization_id')
         .eq('id', user.id)
         .single();
 
-      if (profileError || !userProfile) {
-        console.error('Error al obtener el perfil:', profileError);
-        toast.error('Error al obtener el perfil del usuario');
-        return;
-      }
+      if (!userProfile) throw new Error('Perfil no encontrado');
 
-      // Verificar si el usuario tiene permisos para crear tareas
-      if (!['admin', 'enterprise'].includes(userProfile.role)) {
-        console.error('Usuario sin permisos suficientes:', userProfile.role);
-        toast.error('No tiene permisos para crear tareas');
-        return;
-      }
+      // 1. Obtener información del área
+      const { data: areaData } = await supabase
+        .from('areas')
+        .select('name, sala_id')
+        .eq('id', selectedArea)
+        .single();
 
-      console.log('Perfil de usuario obtenido:', userProfile);
+      if (!areaData) throw new Error('Área no encontrada');
 
-      const selectedUserId = userMap[selectedUser];
-      if (!selectedUserId) {
-        console.error('Usuario seleccionado no encontrado en userMap:', {
-          selectedUser,
-          userMap
-        });
-        toast.error('Error: Usuario no encontrado');
-        return;
-      }
-
-      console.log('ID de usuario seleccionado:', selectedUserId);
-
-      // Crear la fecha completa combinando fecha y hora
+      // 2. Crear la tarea principal (asignación del área)
       const startDateTime = new Date(selectedDate);
       const [startHours, startMinutes] = startTime.split(':');
       startDateTime.setHours(parseInt(startHours), parseInt(startMinutes));
@@ -292,93 +238,86 @@ export default function AssignmentsPage() {
       const [endHours, endMinutes] = endTime.split(':');
       endDateTime.setHours(parseInt(endHours), parseInt(endMinutes));
 
-      console.log('Fechas procesadas:', {
-        startDateTime: startDateTime.toISOString(),
-        endDateTime: endDateTime.toISOString()
-      });
-
-      if (endDateTime <= startDateTime) {
-        console.log('Error: Fecha de fin anterior o igual a fecha de inicio');
-        toast.error('La hora de fin debe ser posterior a la hora de inicio');
-        return;
-      }
-
-      // Obtener información de la sala y área
-      const { data: salaData, error: salaError } = await supabase
-        .from('salas')
-        .select('nombre')
-        .eq('id', selectedSala)
-        .single();
-
-      if (salaError) {
-        console.error('Error al obtener datos de la sala:', salaError);
-        toast.error('Error al obtener datos de la sala');
-        return;
-      }
-
-      const { data: areaData, error: areaError } = await supabase
-        .from('areas')
-        .select('name')
-        .eq('id', selectedArea)
-        .single();
-
-      if (areaError) {
-        console.error('Error al obtener datos del área:', areaError);
-        toast.error('Error al obtener datos del área');
-        return;
-      }
-
-      console.log('Datos obtenidos:', {
-        sala: salaData,
-        area: areaData
-      });
-
-      // Crear la tarea con la estructura correcta de la tabla
-      const taskData = {
+      const mainTaskData = {
         organization_id: userProfile.organization_id,
-        area_id: selectedArea,
-        title: `Turno ${startTime} - ${endTime}`,
-        description: `Turno asignado para ${salaData?.nombre} (${areaData?.name}) de ${startTime} a ${endTime}`,
-        assigned_to: selectedUserId,
+        title: areaData.name,
+        description: `Asignación de tareas para ${areaData.name}`,
         status: 'pending',
-        priority: 'medium',
+        assigned_to: userMap[selectedUser],
+        area_id: selectedArea,
+        sala_id: areaData.sala_id,
+        start_date: startDateTime.toISOString(),
+        due_date: endDateTime.toISOString(),
+        start_time: startTime,
+        end_time: endTime,
+        created_by: user.id,
+        type: 'assignment',
+        frequency: frecuencia
+      };
+
+      const { data: newMainTask, error: mainTaskError } = await supabase
+        .from('tasks')
+        .insert([mainTaskData])
+        .select()
+        .single();
+
+      if (mainTaskError) throw mainTaskError;
+
+      // 3. Obtener las tareas predefinidas del área
+      const { data: predefinedTasks, error: predefinedError } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('area_id', selectedArea)
+        .eq('type', 'template')
+        .eq('status', 'active');
+
+      if (predefinedError) throw predefinedError;
+
+      if (!predefinedTasks || predefinedTasks.length === 0) {
+        toast('No hay tareas predefinidas para esta área', {
+          icon: '⚠️',
+          style: {
+            background: '#FEF3C7',
+            color: '#92400E',
+            border: '1px solid #F59E0B'
+          }
+        });
+        return;
+      }
+
+      // 4. Crear las subtareas basadas en las tareas predefinidas
+      const subtasksData = predefinedTasks.map(template => ({
+        organization_id: userProfile.organization_id,
+        title: template.title,
+        description: template.description,
+        status: 'pending',
+        assigned_to: userMap[selectedUser],
+        area_id: selectedArea,
+        sala_id: areaData.sala_id,
+        parent_task_id: newMainTask.id,
         start_date: startDateTime.toISOString(),
         due_date: endDateTime.toISOString(),
         created_by: user.id,
-        sala_id: selectedSala,
-        frequency: frecuencia,
-        start_time: startTime,
-        end_time: endTime
-      };
+        type: 'subtask',
+        estimated_hours: template.estimated_hours,
+        priority: template.priority
+      }));
 
-      console.log('Intentando crear tarea con datos:', taskData);
-
-      // Insertar la tarea
-      const { data: newTask, error: taskError } = await supabase
+      const { error: subtasksError } = await supabase
         .from('tasks')
-        .insert([taskData])
-        .select();
+        .insert(subtasksData);
 
-      if (taskError) {
-        console.error('Error al crear la tarea:', taskError);
-        toast.error(`Error al crear la tarea: ${taskError.message}`);
-        return;
-      }
+      if (subtasksError) throw subtasksError;
 
-      console.log('Tarea creada exitosamente:', newTask);
       toast.success('Asignación creada exitosamente');
       
       // Limpiar el formulario
       setSelectedUser('');
-      setSelectedSala(null);
       setSelectedArea('');
       setSelectedDate('');
       setStartTime('');
       setEndTime('');
       setFrecuencia('diario');
-      
-      // Recargar los datos
-      await loadData();
 
     } catch (error: any) {
       console.error('Error al crear la asignación:', error);
@@ -423,7 +362,7 @@ export default function AssignmentsPage() {
       {/* Header */}
       <div className="bg-[#4263eb] -mx-6 -mt-6 px-6 py-4">
         <h1 className="text-xl font-bold text-white">Gestión de Asignaciones</h1>
-        <p className="text-sm text-blue-100">Turnos del personal</p>
+        <p className="text-sm text-blue-100">Administra las asignaciones del personal</p>
       </div>
 
       <div className="grid grid-cols-2 gap-8">
@@ -509,32 +448,28 @@ export default function AssignmentsPage() {
                 Fecha y Hora
               </label>
               <div className="flex gap-2 items-center">
-                <div className="flex-1">
-                  <input
-                    type="time"
-                    className="w-full p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    placeholder="Hora inicio"
-                  />
-                </div>
+                <input
+                  type="date"
+                  className="flex-1 p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                />
+                <input
+                  type="time"
+                  className="w-32 p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  placeholder="Inicio"
+                />
                 <span className="text-gray-500">a</span>
-                <div className="flex-1">
-                  <input
-                    type="time"
-                    className="w-full p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    placeholder="Hora fin"
-                  />
-                </div>
+                <input
+                  type="time"
+                  className="w-32 p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  placeholder="Fin"
+                />
               </div>
-              <input
-                type="date"
-                className="w-full mt-2 p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-              />
             </div>
 
             {/* Frecuencia */}
