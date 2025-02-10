@@ -84,19 +84,32 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
   const loadMessages = useCallback(async () => {
     if (!user) return;
     try {
+      console.log('Cargando mensajes para sala:', roomId);
+      
       const { data, error } = await supabase
-        .rpc('get_chat_messages_v2', {
-          room_uuid: roomId,
-          msg_limit: 100,
-          msg_offset: 0
-        });
+        .from('chat_messages')
+        .select(`
+          *,
+          users:user_id (
+            first_name,
+            last_name,
+            avatar_url
+          )
+        `)
+        .eq('room_id', roomId)
+        .order('created_at', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error cargando mensajes:', error);
+        throw error;
+      }
 
       if (!data) {
         setMessages([]);
         return;
       }
+
+      console.log('Mensajes cargados:', data);
 
       const typedMessages = data.map((msg): Message => ({
         id: msg.id,
@@ -109,17 +122,17 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
         room_id: msg.room_id,
         organization_id: msg.organization_id,
         user: {
-          first_name: msg.first_name || 'Usuario',
-          last_name: msg.last_name || 'Desconocido',
-          avatar_url: msg.avatar_url
+          first_name: msg.users?.first_name || 'Usuario',
+          last_name: msg.users?.last_name || 'Desconocido',
+          avatar_url: msg.users?.avatar_url
         }
       }));
 
       setMessages(typedMessages);
       await updateLastRead();
     } catch (error) {
-      console.error('Error cargando chat:', error);
-      toast.error('Error cargando los mensajes');
+      console.error('Error cargando mensajes:', error);
+      toast.error('Error al cargar los mensajes');
     } finally {
       setLoading(false);
     }
@@ -129,105 +142,211 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
     if (!payload.new || !user) return;
     
     try {
-      // Obtener los datos del usuario que envió el mensaje
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('first_name, last_name, avatar_url')
-        .eq('id', payload.new.user_id)
-        .single();
-
-      if (userError) throw userError;
-
-      const newMessage: Message = {
-        id: payload.new.id,
-        content: payload.new.content,
-        type: payload.new.type,
-        status: payload.new.status,
-        created_at: payload.new.created_at,
-        updated_at: payload.new.updated_at,
-        user_id: payload.new.user_id,
-        room_id: payload.new.room_id,
-        organization_id: payload.new.organization_id,
-        user: {
-          first_name: userData?.first_name || 'Usuario',
-          last_name: userData?.last_name || 'Desconocido',
-          avatar_url: userData?.avatar_url || null
+        console.log('Nuevo mensaje recibido:', payload.new);
+        
+        // Si el mensaje es del usuario actual, usar sus datos directamente
+        if (payload.new.user_id === user.id) {
+            const newMessage: Message = {
+                id: payload.new.id,
+                content: payload.new.content,
+                type: payload.new.type,
+                status: payload.new.status,
+                created_at: payload.new.created_at,
+                updated_at: payload.new.updated_at,
+                user_id: payload.new.user_id,
+                room_id: payload.new.room_id,
+                organization_id: payload.new.organization_id,
+                user: {
+                    first_name: user.first_name || '',
+                    last_name: user.last_name || '',
+                    avatar_url: user.avatar_url || null
+                }
+            };
+            
+            setMessages(prev => {
+                const exists = prev.some(msg => msg.id === newMessage.id);
+                if (!exists) {
+                    return [...prev, newMessage];
+                }
+                return prev;
+            });
+            return;
         }
-      };
 
-      setMessages(prev => [...prev, newMessage]);
-      
-      if (payload.new.user_id !== user.id) {
+        // Si el mensaje es de otro usuario, obtener sus datos
+        const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('first_name, last_name, avatar_url')
+            .eq('id', payload.new.user_id)
+            .single();
+
+        if (userError) {
+            console.error('Error obteniendo datos del usuario:', userError);
+            return;
+        }
+
+        const newMessage: Message = {
+            id: payload.new.id,
+            content: payload.new.content,
+            type: payload.new.type,
+            status: payload.new.status,
+            created_at: payload.new.created_at,
+            updated_at: payload.new.updated_at,
+            user_id: payload.new.user_id,
+            room_id: payload.new.room_id,
+            organization_id: payload.new.organization_id,
+            user: {
+                first_name: userData?.first_name || '',
+                last_name: userData?.last_name || '',
+                avatar_url: userData?.avatar_url || null
+            }
+        };
+
+        setMessages(prev => {
+            const exists = prev.some(msg => msg.id === newMessage.id);
+            if (!exists) {
+                return [...prev, newMessage];
+            }
+            return prev;
+        });
+        
+        // Solo marcar como leído si el mensaje es de otro usuario
         await updateLastRead();
-      }
     } catch (error) {
-      console.error('Error procesando nuevo mensaje:', error);
+        console.error('Error procesando nuevo mensaje:', error);
     }
-  }, [user, updateLastRead]);
+}, [user, updateLastRead]);
 
   const ensureChatMembership = useCallback(async () => {
-    if (!user) return;
+    if (!user) return false;
 
     try {
-      // Usar la función RPC para asegurar la membresía
-      const { data, error } = await supabase
-        .rpc('ensure_chat_membership', {
-          p_room_id: roomId,
-          p_user_id: user.id
-        });
+      // Verificar si ya existe una membresía (activa o inactiva)
+      const { data: existingMembership, error: membershipError } = await supabase
+        .from('chat_room_members')
+        .select('*')
+        .eq('room_id', roomId)
+        .eq('user_id', user.id)
+        .single();
 
-      if (error) {
-        console.error('Error asegurando membresía:', error);
-        if (error.message.includes('Chat room no encontrado')) {
-          toast.error('El chat room no existe o no tienes acceso');
-        } else if (error.message.includes('Usuario no encontrado')) {
-          toast.error('Error de autenticación');
-        } else {
-          toast.error('Error al unirse al chat');
+      if (membershipError && membershipError.code !== 'PGRST116') {
+        console.error('Error verificando membresía:', membershipError);
+        return false;
+      }
+
+      if (existingMembership) {
+        console.log('Membresía encontrada:', existingMembership);
+        
+        // Si la membresía existe pero está inactiva, activarla
+        if (existingMembership.status !== 'active') {
+          const { error: updateError } = await supabase
+            .from('chat_room_members')
+            .update({ status: 'active', updated_at: new Date().toISOString() })
+            .eq('id', existingMembership.id);
+
+          if (updateError) {
+            console.error('Error activando membresía:', updateError);
+            return false;
+          }
+          console.log('Membresía reactivada');
         }
-        return;
+        
+        return true;
       }
 
-      if (data?.is_new) {
-        console.log('Nueva membresía creada:', data.membership);
-        toast.success('Te has unido al chat exitosamente');
-      } else {
-        console.log('Membresía existente:', data?.membership);
+      // Si no existe membresía, crear una nueva
+      const { data: newMembership, error: insertError } = await supabase
+        .from('chat_room_members')
+        .insert({
+          room_id: roomId,
+          user_id: user.id,
+          organization_id: user.organization_id,
+          role: 'member',
+          status: 'active'
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('Error creando membresía:', insertError);
+        if (insertError.code === '23505') { // Error de duplicado
+          // Intentar actualizar en lugar de insertar
+          const { error: updateError } = await supabase
+            .from('chat_room_members')
+            .update({ status: 'active', updated_at: new Date().toISOString() })
+            .eq('room_id', roomId)
+            .eq('user_id', user.id);
+
+          if (updateError) {
+            console.error('Error actualizando membresía:', updateError);
+            return false;
+          }
+          console.log('Membresía actualizada después de conflicto');
+          return true;
+        }
+        return false;
       }
 
-      // Cargar mensajes después de asegurar la membresía
-      await loadMessages();
+      console.log('Nueva membresía creada:', newMembership);
+      return true;
     } catch (error) {
       console.error('Error en ensureChatMembership:', error);
       toast.error('Error al procesar la membresía del chat');
+      return false;
     }
-  }, [user, roomId, loadMessages]);
+  }, [user, roomId]);
 
   useEffect(() => {
     if (!user || userLoading) return;
 
-    const channel = supabase.channel(`room:${roomId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `room_id=eq.${roomId}`
-        },
-        handleNewMessage
-      )
-      .subscribe();
+    let isSubscribed = true;
+    let channel: RealtimeChannel | null = null;
 
-    channelRef.current = channel;
-    
-    // Asegurar membresía primero
-    ensureChatMembership();
+    const initializeChat = async () => {
+        if (!isSubscribed) return;
+        
+        try {
+            setLoading(true);
+            const membershipSuccess = await ensureChatMembership();
+            
+            if (membershipSuccess && isSubscribed) {
+                await loadMessages();
+                
+                // Crear el canal solo si la membresía es exitosa
+                channel = supabase.channel(`room:${roomId}`)
+                    .on(
+                        'postgres_changes',
+                        {
+                            event: 'INSERT',
+                            schema: 'public',
+                            table: 'chat_messages',
+                            filter: `room_id=eq.${roomId}`
+                        },
+                        handleNewMessage
+                    )
+                    .subscribe();
+                
+                channelRef.current = channel;
+            }
+        } catch (error) {
+            console.error('Error inicializando chat:', error);
+        } finally {
+            if (isSubscribed) {
+                setLoading(false);
+            }
+        }
+    };
+
+    initializeChat();
 
     return () => {
-      channelRef.current?.unsubscribe();
+        isSubscribed = false;
+        if (channel) {
+            channel.unsubscribe();
+        }
+        channelRef.current = null;
     };
-  }, [roomId, user, userLoading, handleNewMessage, ensureChatMembership]);
+}, [roomId, user, userLoading, handleNewMessage, ensureChatMembership, loadMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -238,39 +357,123 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
     
     if (!newMessage.trim() || !user) return;
 
-    try {
-      console.log('Intentando enviar mensaje con:', {
-        room_id: roomId,
-        user_id: user.id,
-        organization_id: user.organization_id,
-        content: newMessage.trim()
-      });
+    const maxRetries = 3;
+    let retryCount = 0;
 
-      const { error } = await supabase
-        .from('chat_messages')
-        .insert({
-          room_id: roomId,
-          user_id: user.id,
-          content: newMessage.trim(),
-          organization_id: user.organization_id,
-          type: 'text',
-          status: 'sent'
-        });
+    const attemptSend = async (): Promise<boolean> => {
+        try {
+            console.log(`Intento ${retryCount + 1} de enviar mensaje:`, {
+                room_id: roomId,
+                user_id: user.id,
+                organization_id: user.organization_id,
+                content: newMessage.trim()
+            });
 
-      if (error) {
-        console.error('Error enviando mensaje:', error);
-        if (error.code === 'PGRST301') {
-          toast.error('No tienes permiso para enviar mensajes en este chat');
-        } else {
-          toast.error('Error al enviar el mensaje');
+            // Verificar membresía antes de enviar
+            const { data: membership, error: membershipError } = await supabase
+                .from('chat_room_members')
+                .select('id, status')
+                .eq('room_id', roomId)
+                .eq('user_id', user.id)
+                .single();
+
+            if (membershipError) {
+                console.error('Error verificando membresía:', membershipError);
+                return false;
+            }
+
+            if (!membership || membership.status !== 'active') {
+                console.error('No hay membresía activa');
+                await ensureChatMembership();
+                return false;
+            }
+
+            const messageContent = newMessage.trim();
+            setNewMessage(''); // Limpiar el input inmediatamente
+
+            const { data, error } = await supabase
+                .from('chat_messages')
+                .insert({
+                    room_id: roomId,
+                    user_id: user.id,
+                    content: messageContent,
+                    organization_id: user.organization_id,
+                    type: 'text',
+                    status: 'sent'
+                })
+                .select(`
+                    id,
+                    content,
+                    type,
+                    status,
+                    created_at,
+                    updated_at,
+                    user_id,
+                    room_id,
+                    organization_id
+                `)
+                .single();
+
+            if (error) {
+                console.error('Error enviando mensaje:', error);
+                setNewMessage(messageContent); // Restaurar el mensaje si hay error
+                if (error.code === '42P17' || error.code === 'PGRST301') {
+                    toast.error('Error de permisos en el chat. Reintentando...');
+                    await ensureChatMembership();
+                    return false;
+                } else if (error.message?.includes('timeout') || error.message?.includes('connect error')) {
+                    console.log('Error de conexión, reintentando...');
+                    return false;
+                } else {
+                    toast.error('Error al enviar el mensaje: ' + error.message);
+                    return false;
+                }
+            }
+
+            // Agregar el mensaje al estado local inmediatamente
+            if (data) {
+                const newMessage: Message = {
+                    ...data,
+                    user: {
+                        first_name: user.first_name || '',
+                        last_name: user.last_name || '',
+                        avatar_url: user.avatar_url || null
+                    }
+                };
+
+                console.log('Mensaje local formateado:', newMessage);
+                setMessages(prevMessages => {
+                    // Verificar si el mensaje ya existe
+                    const exists = prevMessages.some(msg => msg.id === newMessage.id);
+                    if (!exists) {
+                        return [...prevMessages, newMessage];
+                    }
+                    return prevMessages;
+                });
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }
+
+            console.log('Mensaje enviado exitosamente:', data);
+            return true;
+        } catch (error) {
+            console.error('Error en attemptSend:', error);
+            return false;
         }
+    };
+
+    while (retryCount < maxRetries) {
+      const success = await attemptSend();
+      if (success) {
         return;
       }
+      retryCount++;
+      if (retryCount < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+      }
+    }
 
-      setNewMessage('');
-    } catch (error) {
-      console.error('Error en handleSendMessage:', error);
-      toast.error('Error al enviar el mensaje');
+    if (retryCount === maxRetries) {
+      toast.error('No se pudo enviar el mensaje después de varios intentos. Por favor, verifica tu conexión.');
     }
   };
 
@@ -414,19 +617,19 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full bg-gray-50">
       {/* Header Mejorado */}
-      <div className="border-b bg-white px-6 py-4 sticky top-0 z-10">
+      <div className="border-b bg-white px-6 py-4 sticky top-0 z-10 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="relative">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center ring-2 ring-primary/20">
-                <span className="text-primary text-lg font-bold">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500/20 to-blue-600/10 flex items-center justify-center ring-2 ring-blue-500/20 shadow-lg">
+                <span className="text-blue-600 text-lg font-bold">
                   {chatTitle?.[0]?.toUpperCase() || '?'}
                 </span>
               </div>
               {isTyping && (
-                <div className="absolute -bottom-1 -right-1 bg-primary text-white text-xs px-2 py-0.5 rounded-full animate-pulse">
+                <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full animate-pulse shadow-md">
                   escribiendo...
                 </div>
               )}
@@ -443,12 +646,12 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
           <div className="flex items-center gap-2">
             <button 
               onClick={() => setShowSearch(!showSearch)}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-full transition-all duration-200 hover:shadow-md active:scale-95"
             >
-              <Search className="w-5 h-5 text-gray-500" />
+              <Search className="w-5 h-5 text-gray-600" />
             </button>
-            <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-              <MoreVertical className="w-5 h-5 text-gray-500" />
+            <button className="p-2 hover:bg-gray-100 rounded-full transition-all duration-200 hover:shadow-md active:scale-95">
+              <MoreVertical className="w-5 h-5 text-gray-600" />
             </button>
           </div>
         </div>
@@ -488,22 +691,22 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
       </div>
 
       {/* Área de mensajes con resultados de búsqueda */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 bg-gradient-to-b from-gray-50/50 to-white">
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 bg-gradient-to-b from-gray-50 to-white">
         {groupMessages(isSearching ? filteredMessages : messages).map((group, groupIndex) => (
           <div key={`${group.userId}-${group.date}-${groupIndex}`} 
             className={`space-y-4 ${
-              isSearching ? 'opacity-60 hover:opacity-100 transition-opacity' : ''
+              isSearching ? 'opacity-60 hover:opacity-100 transition-opacity duration-200' : ''
             }`}
           >
             {/* Separador de fecha */}
             <div className="flex items-center justify-center">
-              <div className="bg-gray-100 text-gray-500 text-xs px-3 py-1 rounded-full">
+              <div className="bg-white text-gray-600 text-xs px-4 py-1.5 rounded-full shadow-sm border border-gray-200/50">
                 {formatDateHeader(group.date)}
               </div>
             </div>
 
             {/* Grupo de mensajes */}
-            <div className="space-y-1">
+            <div className="space-y-2">
               {group.messages.map((message, messageIndex) => (
                 <div
                   key={message.id}
@@ -513,9 +716,9 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
                 >
                   {message.user_id !== user?.id && messageIndex === 0 && (
                     <div className="flex flex-col items-center gap-1">
-                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ring-2 ring-primary/10">
-                        <span className="text-sm font-semibold text-primary">
-                          {message.user.first_name[0]}
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500/20 to-blue-600/5 flex items-center justify-center ring-2 ring-blue-500/10 shadow-md">
+                        <span className="text-sm font-semibold text-blue-600">
+                          {message.user.first_name?.[0] || '?'}
                         </span>
                       </div>
                     </div>
@@ -525,20 +728,32 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
                       message.user_id === user?.id ? 'ml-4' : 'mr-4'
                     }`}
                   >
+                    {/* Nombre del remitente */}
+                    {messageIndex === 0 && (
+                      <div className={`text-sm mb-1 ${
+                        message.user_id === user?.id 
+                          ? 'text-right text-gray-600 font-medium' 
+                          : 'text-left text-gray-600 font-medium'
+                      }`}>
+                        {message.user_id === user?.id 
+                          ? 'Tú' 
+                          : `${message.user.first_name || ''} ${message.user.last_name || ''}`}
+                      </div>
+                    )}
                     <div
                       className={`rounded-2xl px-4 py-3 ${
                         message.user_id === user?.id
-                          ? 'bg-gradient-to-br from-primary to-primary/90 text-white rounded-br-md'
-                          : 'bg-white text-gray-800 shadow-sm rounded-bl-md'
-                      } transition-all duration-200 hover:shadow-md`}
+                          ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-br-md shadow-md hover:shadow-lg'
+                          : 'bg-white text-gray-800 shadow-md hover:shadow-lg rounded-bl-md border border-gray-100'
+                      } transition-all duration-200`}
                     >
                       <p className="whitespace-pre-wrap leading-relaxed">
                         {message.content}
                       </p>
                       <div className={`mt-1 text-[11px] ${
                         message.user_id === user?.id
-                          ? 'text-white/70'
-                          : 'text-gray-400'
+                          ? 'text-blue-100'
+                          : 'text-gray-500'
                       } text-right`}>
                         {formatDistanceToNow(new Date(message.created_at), {
                           addSuffix: true,
@@ -556,26 +771,26 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
       </div>
 
       {/* Área de input mejorada */}
-      <div className="border-t bg-white p-6">
+      <div className="border-t bg-white p-4 shadow-lg">
         <div className="max-w-4xl mx-auto">
-          <div className="relative bg-gray-50 rounded-2xl shadow-sm ring-1 ring-gray-200/50">
+          <div className="relative bg-white rounded-2xl shadow-md ring-1 ring-gray-200">
             {/* Barra de herramientas */}
             <div className="absolute left-2 bottom-3 flex items-center gap-1">
               <button
                 onClick={() => setShowEmojis(!showEmojis)}
-                className="p-2 rounded-lg hover:bg-gray-200/50 transition-colors text-gray-500 hover:text-gray-700"
+                className="p-2 rounded-lg hover:bg-gray-100 transition-all duration-200 text-gray-600 hover:text-gray-800 hover:shadow-md active:scale-95"
               >
                 <Smile className="w-5 h-5" />
               </button>
               <button
                 onClick={() => handleAttachment('image')}
-                className="p-2 rounded-lg hover:bg-gray-200/50 transition-colors text-gray-500 hover:text-gray-700"
+                className="p-2 rounded-lg hover:bg-gray-100 transition-all duration-200 text-gray-600 hover:text-gray-800 hover:shadow-md active:scale-95"
               >
                 <Image className="w-5 h-5" />
               </button>
               <button
                 onClick={() => handleAttachment('file')}
-                className="p-2 rounded-lg hover:bg-gray-200/50 transition-colors text-gray-500 hover:text-gray-700"
+                className="p-2 rounded-lg hover:bg-gray-100 transition-all duration-200 text-gray-600 hover:text-gray-800 hover:shadow-md active:scale-95"
               >
                 <Paperclip className="w-5 h-5" />
               </button>
@@ -588,7 +803,7 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
               onChange={handleMessageChange}
               onKeyDown={handleKeyDown}
               placeholder="Escribe un mensaje..."
-              className="w-full bg-transparent rounded-2xl border-0 pt-4 pb-4 pl-[7.5rem] pr-14 focus:ring-2 focus:ring-primary/20 focus:outline-none text-gray-800 resize-none placeholder:text-gray-400 min-h-[52px]"
+              className="w-full bg-transparent rounded-2xl border-0 pt-4 pb-4 pl-[7.5rem] pr-14 focus:ring-2 focus:ring-blue-500/20 focus:outline-none text-gray-800 resize-none placeholder:text-gray-400 min-h-[52px]"
               rows={1}
             />
 
@@ -596,7 +811,7 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
             <button
               onClick={handleSendMessage}
               disabled={!newMessage.trim()}
-              className="absolute right-3 bottom-3 p-2 rounded-xl bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:hover:bg-primary transition-all duration-200 hover:scale-105 hover:shadow-lg disabled:hover:scale-100 disabled:hover:shadow-none"
+              className="absolute right-3 bottom-3 p-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:shadow-lg disabled:opacity-50 disabled:hover:bg-blue-500 transition-all duration-200 hover:scale-105 disabled:hover:scale-100 disabled:hover:shadow-none active:scale-95"
             >
               <Send className="w-5 h-5" />
             </button>

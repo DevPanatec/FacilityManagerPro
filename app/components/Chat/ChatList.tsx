@@ -19,25 +19,26 @@ interface Admin {
 interface ChatRoom {
   room_id: string;
   room_name: string;
-  room_type: 'direct' | 'group';
+  room_type: string;
+  room_description: string | null;
   organization_id: string;
+  created_by: string;
   created_at: string;
   updated_at: string;
   last_message: {
+    id: string;
     content: string;
     created_at: string;
-    user: {
-      id: string;
-      first_name: string;
-      last_name: string;
-    };
+    user_id: string;
   } | null;
   unread_count: number;
-  member_count: number;
-  other_user_id?: string;
-  other_user_name?: string;
-  other_user_avatar?: string;
-  is_group: boolean;
+  members: {
+    user_id: string;
+    email: string;
+    first_name: string | null;
+    last_name: string | null;
+    role: string;
+  }[];
 }
 
 interface ChatListProps {
@@ -72,16 +73,14 @@ export function ChatList({ onSelectChat, onChatsLoaded, onNewChat }: ChatListPro
           room_id: chat.room_id,
           room_name: chat.room_name,
           room_type: chat.room_type,
+          room_description: chat.room_description,
           organization_id: chat.organization_id,
+          created_by: chat.created_by,
           created_at: chat.created_at,
           updated_at: chat.updated_at,
           last_message: chat.last_message,
           unread_count: chat.unread_count,
-          member_count: chat.member_count,
-          other_user_id: chat.other_user_id,
-          other_user_name: chat.other_user_name,
-          other_user_avatar: chat.other_user_avatar,
-          is_group: chat.room_type === 'group'
+          members: chat.members
         }));
 
         setChats(transformedChats);
@@ -131,7 +130,7 @@ export function ChatList({ onSelectChat, onChatsLoaded, onNewChat }: ChatListPro
     try {
       // Verificar si ya existe un chat directo con este admin
       const existingChat = chats.find(
-        chat => !chat.is_group && chat.other_user_id === adminId
+        chat => chat.room_type === 'direct' && chat.members.some(m => m.user_id === adminId)
       );
 
       if (existingChat) {
@@ -262,20 +261,11 @@ export function ChatList({ onSelectChat, onChatsLoaded, onNewChat }: ChatListPro
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-4">
         <p className="text-muted-foreground">No tienes chats activos</p>
-        {user?.role === 'enterprise' && (
-          <>
-            <p className="text-sm mt-2">
-              Inicia una conversación con un administrador
-            </p>
-            <button
-              onClick={handleNewChat}
-              className="mt-4 flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-primary text-white hover:bg-primary/90 transition-all duration-200 font-medium"
-            >
-              <MessageCircle className="w-5 h-5" />
-              Nuevo Chat
-            </button>
-          </>
-        )}
+        <p className="text-sm mt-2">
+          {user?.role === 'enterprise' 
+            ? 'Inicia una conversación con un administrador'
+            : 'Espera a que un usuario inicie una conversación'}
+        </p>
       </div>
     );
   }
@@ -299,24 +289,16 @@ export function ChatList({ onSelectChat, onChatsLoaded, onNewChat }: ChatListPro
           onClick={() => onSelectChat(chat.room_id)}
         >
           <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-            {chat.other_user_avatar ? (
-              <img
-                src={chat.other_user_avatar}
-                alt={chat.room_name}
-                className="w-full h-full rounded-full object-cover"
-              />
-            ) : (
-              <span className="text-primary font-semibold text-lg">
-                {chat.room_name[0].toUpperCase()}
-              </span>
-            )}
+            <span className="text-primary font-semibold text-lg">
+              {chat.room_name[0].toUpperCase()}
+            </span>
           </div>
           <div className="flex-1 min-w-0 text-left">
             <div className="flex justify-between items-start">
               <h3 className="font-medium text-gray-900 truncate group-hover:text-primary transition-colors">
                 {chat.room_name}
               </h3>
-              {chat.last_message && (
+              {chat.last_message && chat.last_message.created_at && (
                 <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
                   {formatDistanceToNow(new Date(chat.last_message.created_at), {
                     addSuffix: true,
@@ -325,7 +307,7 @@ export function ChatList({ onSelectChat, onChatsLoaded, onNewChat }: ChatListPro
                 </span>
               )}
             </div>
-            {chat.last_message && (
+            {chat.last_message?.content && (
               <p className="text-sm text-gray-500 truncate mt-1">
                 {chat.last_message.content}
               </p>

@@ -4,7 +4,11 @@ import { Providers } from '@/app/providers'
 import RealtimeManager from './components/RealtimeManager'
 import { ChatWidget } from '@/app/components/Chat/ChatWidget'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ 
+  subsets: ['latin'],
+  display: 'swap',
+  adjustFontFallback: false
+})
 
 export const metadata = {
   title: 'Facility Manager Pro',
