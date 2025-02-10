@@ -27,6 +27,8 @@ interface ContingencyReport {
   type: string;
   area: string;
   sala?: string;
+  start_time?: string;
+  end_time?: string;
   attachments: Array<{
     type: 'image' | 'documento';
     url: string;
@@ -75,6 +77,21 @@ interface SupabaseReport {
       id: string;
       nombre: string;
     } | null;
+  };
+}
+
+interface ReportData {
+  title: string;
+  area: string;
+  sala: string;
+  fecha: string;
+  horaInicio?: string;
+  horaFin?: string;
+  actividades: string[];
+  imagenes: {
+    inicial?: string;
+    durante?: string;
+    final?: string;
   };
 }
 
@@ -423,176 +440,302 @@ export default function ReportsPage() {
     }
   };
 
+  const orderedTaskDescriptions: string[] = [
+    "SE REALIZA HIGIENE DE MANOS Y SE COLOCA EL EQUIPO DE PROTECCION PERSONAL",
+    "SE CLASIFICA EL AREA SEGUN EL TIPO DE LIMPIEZA PROFUNDA",
+    "SE LIMPIA LA UNIDAD DEL PACIENTE CON WAYPALL EN METODO DE FRICCION Y ARRASTRE",
+    "SE LIMPIA LAS SUPERFICIES HORIZONTALES DEBEMOS LIMPIARLOS CON UN PAÑO EMBEBIDO DE DESINFECTANTES COMO MESAS, MOBILIARIOS DE MEDICAMENTOS, ESTACION DE ENFERMERIA, DISPENSADORES DE PAPEL TOALLA E HIGIENICO",
+    "SE ENJUAGA UNIDAD DE PACIENTE CON AGUA Y SE REALIZA METODO DE FRICCION CON WAYPALL",
+    "SE SELLO EN PISO BARRIDO HUMEDO, LIMPIEZA Y DESINFECCION CON TECNICA ZIGZAG",
+    "SE REALIZA DESINFECCION DE LA UNIDAD DEL PACIENTE CON VIRUGUAT Y WAYPALL METODO DE FRICCION",
+    "SE LIMPIA PISOS CON METODO DE DOS BALDES, BARRIDO HUMEDO Y TRAPEADO ENJABONADO Y LUEGO ENJUAGAR",
+    "AL ENTRAR AL AREA HOSPITALARIA REALIZAMOS LIMPIEZA INICIANDO POR EL TECHO, ELIMINANDO MANCHAS EN CIELO RASO",
+    "SE LIMPIA PUERTAS Y PERILLAS CON ATOMIZADOR, WAYPALL Y SEPTIN",
+    "SE REALIZA LIMPIEZA DE RODAPIES CON PAÑO Y DESINFECTANTE PANO DE MICROFIBRA",
+    "SE LIMPIA CORTINAS DE BAÑO Y SI ESTA EN MAL ESTADO SE REPORTA AL ENCARGADO DEL SERVICIO SU PRONTO CAMBIO",
+    "SE REALIZA LIMPIEZA DE VENTANAS FIJAS O PERSIANAS CON PAÑOS DE MICROFIBRA Y CRYSTAL MIX",
+    "LA SOLUCION DESINFECTANTE SE DEBE PREPARAR EN EL MOMENTO DE USO Y DESCARTAR LUEGO DE 24 HORAS",
+    "EN LAS AREAS DE AISLAMIENTO REALIZAMOS PROCEDIMIENTO CON EQUIPO EXCLUSIVO ADECUADO Y SE INICIA LA LIMPIEZA DE LIMPIO A LO SUCIO"
+  ];
+
   const handleDownloadPDF = async () => {
     if (!selectedReport) return;
 
     try {
-      const reportElement = document.createElement('div');
-      reportElement.style.cssText = `
-        font-family: 'Times New Roman', serif;
-        background-color: #FFFFFF;
-        color: #000000;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      `;
-      
-      // Convertir las imágenes a base64
-      const loadImage = async (url) => {
-        try {
-          console.log('Intentando cargar imagen:', url);
-          const response = await fetch(url);
-          if (!response.ok) {
-            console.error('Error al cargar imagen:', url, response.status);
-            return null;
-          }
-          const blob = await response.blob();
-          return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              console.log('Imagen cargada exitosamente:', url);
-              resolve(reader.result);
-            };
-            reader.onerror = () => {
-              console.error('Error al leer imagen:', url);
-              resolve(null);
-            };
-            reader.readAsDataURL(blob);
-          });
-        } catch (error) {
-          console.error('Error al cargar imagen:', url, error);
-          return null;
-        }
+      const iframe = document.createElement('iframe');
+      iframe.style.visibility = 'hidden';
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      document.body.appendChild(iframe);
+
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!iframeDoc) throw new Error('No se pudo crear el iframe');
+
+      let reportData: ReportData = {
+        title: selectedReport.title,
+        area: selectedReport.area,
+        sala: selectedReport.sala,
+        fecha: new Date(selectedReport.date).toLocaleDateString(),
+        horaInicio: selectedReport.start_time,
+        horaFin: selectedReport.end_time,
+        actividades: [],
+        imagenes: {}
       };
 
-      // Cargar las imágenes
-      console.log('Iniciando carga de imágenes...');
-      const [sgsIsoLogo, hbLogo, issaLogo] = await Promise.all([
-        loadImage('/sgs-iso.png'),
-        loadImage('/logo.jpg'),
-        loadImage('/issa.png')
-      ]);
-
-      console.log('Estado de carga de imágenes:', {
-        sgsIso: !!sgsIsoLogo,
-        hombresBlanco: !!hbLogo,
-        issa: !!issaLogo
-      });
-
-      // Solo incluir las imágenes que se cargaron correctamente
-      const logosHtml = [
-        sgsIsoLogo ? `<img src="${sgsIsoLogo}" alt="SGS ISO 9001" style="height: 80px; width: auto; object-fit: contain;" />` : '',
-        issaLogo ? `<img src="${issaLogo}" alt="ISSA Member" style="height: 80px; width: auto; object-fit: contain;" />` : ''
-      ].filter(Boolean).join('');
-      
-      reportElement.innerHTML = `
-        <div style="padding: 90px; font-family: 'Times New Roman', serif; background-color: #FFFFFF;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
-            <div style="display: flex; align-items: center; gap: 30px;">
-              ${logosHtml}
-            </div>
-            <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
-              ${hbLogo ? `<img src="${hbLogo}" alt="Hombres de Blanco" style="height: 120px; width: auto; object-fit: contain;" />` : ''}
-              <p style="color: #1F2937; font-size: 32px; margin: 0; font-family: 'Times New Roman', serif;">
-                Fecha: ${new Date(selectedReport.date).toLocaleDateString()}
-              </p>
-            </div>
-          </div>
-
-          <div style="text-align: center; margin: 0 90px 30px 90px;">
-            <h1 style="color: #1F2937; font-size: 42px; margin: 0; font-family: 'Times New Roman', serif; font-weight: bold; letter-spacing: 1px;">REPORTE DE CONTINGENCIA</h1>
-          </div>
-
-          <div style="text-align: center; margin: 0 90px 30px 90px;">
-            <h2 style="color: #1F2937; font-size: 32px; margin: 0; font-family: 'Times New Roman', serif; font-weight: bold;">${selectedReport.organization.name.replace(/\s*ENTERPRISE\s*/gi, '').trim()}</h2>
-          </div>
-
-          <div style="margin: 0 90px 30px 90px;">
-            <h2 style="color: #1F2937; font-size: 32px; margin-bottom: 15px; font-family: 'Times New Roman', serif; font-weight: bold;">INFORMACIÓN GENERAL</h2>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 8px 0; width: 200px; font-family: 'Times New Roman', serif; font-size: 32px;"><strong>Organización:</strong></td>
-                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;">${selectedReport.organization.name.replace(/\s*ENTERPRISE\s*/gi, '').trim()}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;"><strong>Área:</strong></td>
-                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;">${selectedReport.area}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;"><strong>Sala:</strong></td>
-                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;">${selectedReport.sala ? selectedReport.sala.charAt(0).toUpperCase() + selectedReport.sala.slice(1).toLowerCase() : ''}</td>
-              </tr>
-            </table>
-          </div>
-
-          <div style="margin: 0 90px 30px 90px;">
-            <h2 style="color: #1F2937; font-size: 32px; margin-bottom: 15px; font-family: 'Times New Roman', serif; font-weight: bold;">DETALLES DE LA CONTINGENCIA</h2>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;"><strong>Tipo:</strong></td>
-                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;">${selectedReport.type}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px;"><strong>Descripción:</strong></td>
-                <td style="padding: 8px 0; font-family: 'Times New Roman', serif; font-size: 32px; line-height: 1.3;">${selectedReport.description || 'No especificada'}</td>
-              </tr>
-            </table>
-          </div>
-
-          ${selectedReport.attachments && selectedReport.attachments.length > 0 ? `
-            <div style="margin: 0 90px 30px 90px;">
-              <div style="display: flex; flex-direction: column; gap: 25px; align-items: center;">
-                ${selectedReport.attachments
-                  .filter(attachment => attachment.type === 'image')
-                  .map(attachment => `
-                    <div style="width: 100%; display: flex; justify-content: center;">
-                      <img src="${attachment.url}" alt="Evidencia" style="max-width: 80%; height: auto; object-fit: contain;" />
-                    </div>
-                  `).join('')}
-              </div>
-            </div>
-          ` : ''}
-        </div>
-      `;
-
-      document.body.appendChild(reportElement);
-
-      const canvas = await html2canvas(reportElement, {
-        scale: 2,
-        logging: false,
-        useCORS: true,
-        backgroundColor: '#FFFFFF',
-        onclone: (clonedDoc) => {
-          const elements = clonedDoc.getElementsByTagName('*');
-          for (let i = 0; i < elements.length; i++) {
-            const el = elements[i] as HTMLElement;
-            if (el.style) {
-              const computedStyle = window.getComputedStyle(el);
-              if (computedStyle.backgroundColor && computedStyle.backgroundColor.includes('oklch')) {
-                el.style.backgroundColor = '#FFFFFF';
-              }
-              if (computedStyle.color && computedStyle.color.includes('oklch')) {
-                el.style.color = '#000000';
-              }
-            }
-          }
+      if (selectedReport.description) {
+        try {
+          const parsedData = JSON.parse(selectedReport.description);
+          reportData = { ...reportData, ...parsedData };
+        } catch (e) {
+          console.error('Error parsing description:', e);
         }
-      });
+      }
 
-      document.body.removeChild(reportElement);
+      // Crear dos páginas HTML separadas
+      const page1 = document.createElement('div');
+      const page2 = document.createElement('div');
 
+      // Escribir el contenido en el iframe con estilos mínimos
+      iframeDoc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+            <style>
+              @page { margin: 0; }
+              body { 
+                margin: 0; 
+                background: rgb(255,255,255);
+                font-family: 'Poppins', Arial, sans-serif;
+                color: #000000;
+              }
+              .page { 
+                width: 210mm;
+                height: 297mm;
+                padding: 20mm;
+                box-sizing: border-box;
+                background: white;
+                position: relative;
+              }
+              .logos { 
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center; 
+                margin-bottom: 20px;
+                width: 100%;
+              }
+              .logos img { 
+                height: 40px; 
+                width: auto; 
+                object-fit: contain;
+              }
+              .logos img.main-logo {
+                height: 60px;
+              }
+              .header {
+                text-align: center;
+                margin-bottom: 30px;
+              }
+              .header h1 {
+                font-size: 20px;
+                font-weight: 500;
+                margin: 0;
+                margin-bottom: 10px;
+                letter-spacing: 1px;
+              }
+              .header p {
+                font-size: 18px;
+                margin: 0;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }
+              .content {
+                font-size: 12px;
+                line-height: 2;
+              }
+              .info p {
+                margin: 10px 0;
+                font-size: 12px;
+                line-height: 1.8;
+              }
+              .info .time-row {
+                display: flex;
+                gap: 30px;
+                margin-bottom: 15px;
+              }
+              .activities {
+                margin-top: 20px;
+              }
+              .activities h3 {
+                font-size: 14px;
+                font-weight: 500;
+                margin-bottom: 15px;
+              }
+              .activities p {
+                margin: 12px 0;
+                font-size: 11px;
+                line-height: 1.8;
+                padding-left: 30px;
+                position: relative;
+                word-spacing: 1px;
+              }
+              .activities p:before {
+                content: counter(task);
+                counter-increment: task;
+                position: absolute;
+                left: 0;
+                font-weight: 500;
+              }
+              .evidence {
+                text-align: center;
+                margin-top: 25px;
+              }
+              .evidence h2 {
+                font-size: 16px;
+                margin-bottom: 15px;
+                color: #1e3a8a;
+              }
+              .evidence-img {
+                margin-bottom: 20px;
+              }
+              .evidence-img p {
+                font-weight: 500;
+                margin-bottom: 8px;
+                text-align: left;
+                color: #1e3a8a;
+              }
+              .evidence-img img {
+                width: 100%;
+                max-height: 180px;
+                object-fit: contain;
+              }
+            </style>
+          </head>
+          <body>
+          <!-- Primera página -->
+            <div class="page">
+              <div class="logos">
+                <img src="/sgs-iso.png" alt="SGS Logo" />
+                <img src="/logo.jpg" alt="Hombres de Blanco Logo" class="main-logo" />
+                <img src="/issa.png" alt="ISSA Member Logo" />
+            </div>
+            
+              <div class="header">
+                <h1>REPORTE DE TAREA</h1>
+                <p>HOSPITAL SAN MIGUEL ARCANGEL</p>
+            </div>
+            
+              <div class="content">
+                <div class="info">
+                  <p><strong>Área:</strong> ${reportData.area}</p>
+                  <p><strong>Sala:</strong> ${reportData.sala}</p>
+                  <p><strong>Fecha:</strong> ${reportData.fecha}</p>
+                  <div class="time-row">
+                    <p><strong>Hora Inicio:</strong> ${reportData.horaInicio}</p>
+                    <p><strong>Hora Fin:</strong> ${reportData.horaFin}</p>
+                  </div>
+                </div>
+                
+                <div class="activities">
+                  <h3>Tareas Realizadas:</h3>
+                  <div style="counter-reset: task;">
+                  ${orderedTaskDescriptions.map(task => `<p>${task}</p>`).join('')}
+                  </div>
+                </div>
+            </div>
+          </div>
+
+          <!-- Segunda página -->
+            ${reportData.imagenes ? `
+              <div class="page">
+                <div class="header">
+                  <h1>EVIDENCIA FOTOGRÁFICA</h1>
+                  <p>${reportData.area} - ${reportData.sala}</p>
+            </div>
+            
+                <div class="evidence">
+                  ${reportData.imagenes.inicial ? `
+                    <div class="evidence-img">
+                      <p>ANTES:</p>
+                      <img src="${reportData.imagenes.inicial}" />
+                </div>
+                  ` : ''}
+                  
+                  ${reportData.imagenes.durante ? `
+                    <div class="evidence-img">
+                      <p>DURANTE:</p>
+                      <img src="${reportData.imagenes.durante}" />
+            </div>
+                  ` : ''}
+                  
+                  ${reportData.imagenes.final ? `
+                    <div class="evidence-img">
+                      <p>DESPUÉS:</p>
+                      <img src="${reportData.imagenes.final}" />
+          </div>
+                  ` : ''}
+        </div>
+              </div>
+            ` : ''}
+          </body>
+        </html>
+      `);
+      iframeDoc.close();
+
+      // Esperar a que las imágenes se carguen
+      await Promise.all(
+        Array.from(iframeDoc.images).map(
+          img => new Promise((resolve) => {
+            if (img.complete) resolve(null);
+            else {
+              img.onload = () => resolve(null);
+              img.onerror = () => resolve(null);
+            }
+          })
+        )
+      );
+
+      // Generar el PDF
+      const pages = Array.from(iframeDoc.querySelectorAll('.page')) as HTMLElement[];
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4'
       });
 
-      const imgData = canvas.toDataURL('image/png');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      for (let i = 0; i < pages.length; i++) {
+        if (i > 0) pdf.addPage();
 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Reporte_Contingencia_${selectedReport.id}.pdf`);
+        const canvas = await html2canvas(pages[i], {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          width: pages[i].offsetWidth,
+          height: pages[i].offsetHeight,
+          windowWidth: pages[i].offsetWidth,
+          windowHeight: pages[i].offsetHeight,
+          foreignObjectRendering: false,
+          removeContainer: true,
+          backgroundColor: null,
+          logging: false
+        });
 
+        const imgData = canvas.toDataURL('image/jpeg', 1.0);
+        pdf.addImage(
+          imgData,
+          'JPEG',
+          0,
+          0,
+          210,
+          297
+        );
+      }
+
+      pdf.save(`Reporte_${reportData.sala}_${reportData.fecha}.pdf`);
+      
+      // Limpiar
+      document.body.removeChild(iframe);
       toast.success('PDF generado exitosamente');
     } catch (error) {
       console.error('Error al generar el PDF:', error);
@@ -888,6 +1031,92 @@ export default function ReportsPage() {
         ))}
       </div>
     );
+  };
+
+  const formatReportContent = (content: string) => {
+    try {
+      const data = JSON.parse(content);
+      return (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-2xl font-semibold mb-4">{data.title}</h2>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <p className="text-gray-600">Área:</p>
+                <p className="font-medium">{data.area}</p>
+              </div>
+              <div>
+                <p className="text-gray-600">Sala:</p>
+                <p className="font-medium">{data.sala}</p>
+              </div>
+              <div>
+                <p className="text-gray-600">Fecha:</p>
+                <p className="font-medium">{data.fecha}</p>
+              </div>
+              <div>
+                <p className="text-gray-600">Horario:</p>
+                <p className="font-medium">{data.horaInicio} - {data.horaFin}</p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-semibold mb-4">Tareas realizadas:</h3>
+            <div className="bg-gray-50 rounded-lg p-4">
+              {data.actividades.map((actividad: string, index: number) => (
+                <div key={index} className="flex items-start space-x-2 mb-2">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-medium">
+                    {index + 1}
+                  </div>
+                  <p className="text-gray-700">{actividad.substring(actividad.indexOf('. ') + 2)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {(data.imagenes?.inicial || data.imagenes?.durante || data.imagenes?.final) && (
+            <div>
+              <h3 className="text-xl font-semibold mb-4">Evidencia fotográfica:</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {data.imagenes?.inicial && (
+                  <div className="space-y-2">
+                    <p className="font-medium text-gray-700">Antes</p>
+                    <img 
+                      src={data.imagenes.inicial} 
+                      alt="Foto inicial" 
+                      className="w-full aspect-video object-cover rounded-lg"
+                    />
+                  </div>
+                )}
+                {data.imagenes?.durante && (
+                  <div className="space-y-2">
+                    <p className="font-medium text-gray-700">Durante</p>
+                    <img 
+                      src={data.imagenes.durante} 
+                      alt="Foto durante" 
+                      className="w-full aspect-video object-cover rounded-lg"
+                    />
+                  </div>
+                )}
+                {data.imagenes?.final && (
+                  <div className="space-y-2">
+                    <p className="font-medium text-gray-700">Después</p>
+                    <img 
+                      src={data.imagenes.final} 
+                      alt="Foto final" 
+                      className="w-full aspect-video object-cover rounded-lg"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    } catch (error) {
+      console.error('Error al formatear el reporte:', error);
+      return <p className="text-red-500">Error al cargar el contenido del reporte</p>;
+    }
   };
 
   if (error) {

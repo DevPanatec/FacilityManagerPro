@@ -257,7 +257,7 @@ export default function InventoryPage() {
           const { error: updateItemsError } = await supabase
             .from('inventory_items')
             .update({
-              quantity: newQuantity,
+        quantity: newQuantity,
               updated_at: now
             })
             .eq('id', itemId);

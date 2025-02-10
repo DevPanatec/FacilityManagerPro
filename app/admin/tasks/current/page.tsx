@@ -165,6 +165,7 @@ export default function CurrentTaskPage() {
         id: mainTask.id,
         title: mainTask.title,
         status: mainTask.status,
+        area_id: mainTask.area_id,
         area: mainTask.area?.[0]?.name
       });
 
@@ -178,64 +179,77 @@ export default function CurrentTaskPage() {
           status,
           priority,
           estimated_hours,
-          created_at
+          created_at,
+          type,
+          area_id,
+          organization_id
         `)
         .eq('area_id', mainTask.area_id)
-        .eq('status', 'pending');
+        .eq('organization_id', userProfile.organization_id);
+
+      console.log('Debug - TODAS las tareas del área (sin filtros):', {
+        area_id: mainTask.area_id,
+        organization_id: userProfile.organization_id,
+        totalTasks: areaTasks?.length,
+        areaTasks: areaTasks?.map(t => ({
+          id: t.id,
+          title: t.title,
+          status: t.status,
+          type: t.type
+        }))
+      });
 
       if (tasksError) {
         console.error('Error al obtener tareas del área:', tasksError);
         throw new Error('Error al obtener tareas del área');
       }
 
-      console.log('Tareas del área encontradas:', areaTasks);
+      // Reordenar las tareas según la imagen
+      const orderedTaskDescriptions = [
+        "SE REALIZA HIGIENE DE MANOS Y SE COLOCA EL EQUIPO DE PROTECCION PERSONAL",
+        "SE CLASIFICA EL AREA SEGUN EL TIPO DE LIMPIEZA PROFUNDA",
+        "SE LIMPIA LA UNIDAD DEL PACIENTE CON WAYPALL EN METODO DE FRICCION Y ARRASTRE",
+        "SE LIMPIA LAS SUPERFICIES HORIZONTALES DEBEMOS LIMPIARLOS CON UN PAÑO EMBEBIDO DE DESINFECTANTES COMO MESAS, MOBILIARIOS DE MEDICAMENTOS, ESTACION DE ENFERMERIA, DISPENSADORES DE PAPEL TOALLA E HIGIENICO",
+        "SE ENJUAGA UNIDAD DE PACIENTE CON AGUA Y SE REALIZA METODO DE FRICCION CON WAYPALL",
+        "SE SELLO EN PISO BARRIDO HUMEDO, LIMPIEZA Y DESINFECCION CON TECNICA ZIGZAG",
+        "SE REALIZA DESINFECCION DE LA UNIDAD DEL PACIENTE CON VIRUGUAT Y WAYPALL METODO DE FRICCION",
+        "SE LIMPIA PISOS CON METODO DE DOS BALDES, BARRIDO HUMEDO Y TRAPEADO ENJABONADO Y LUEGO ENJUAGAR",
+        "AL ENTRAR AL AREA HOSPITALARIA REALIZAMOS LIMPIEZA INICIANDO POR EL TECHO, ELIMINANDO MANCHAS EN CIELO RASO",
+        "SE LIMPIA PUERTAS Y PERILLAS CON ATOMIZADOR, WAYPALL Y SEPTIN",
+        "SE REALIZA LIMPIEZA DE RODAPIES CON PAÑO Y DESINFECTANTE PANO DE MICROFIBRA",
+        "SE LIMPIA CORTINAS DE BAÑO Y SI ESTA EN MAL ESTADO SE REPORTA AL ENCARGADO DEL SERVICIO SU PRONTO CAMBIO",
+        "SE REALIZA LIMPIEZA DE VENTANAS FIJAS O PERSIANAS CON PAÑOS DE MICROFIBRA Y CRYSTAL MIX",
+        "LA SOLUCION DESINFECTANTE SE DEBE PREPARAR EN EL MOMENTO DE USO Y DESCARTAR LUEGO DE 24 HORAS",
+        "EN LAS AREAS DE AISLAMIENTO REALIZAMOS PROCEDIMIENTO CON EQUIPO EXCLUSIVO ADECUADO Y SE INICIA LA LIMPIEZA DE LIMPIO A LO SUCIO"
+      ];
 
-      // Formatear las tareas
-      const formattedTasks = areaTasks?.map(task => ({
-        id: task.id,
-        title: task.title,
-        description: task.description,
-        status: task.status as Task['status'],
-        priority: task.priority as Task['priority'],
+      const formattedTasks = orderedTaskDescriptions.map((description, index) => ({
+        id: `task-${index + 1}`,
+        title: `Paso ${index + 1}`,
+        description: description,
+        status: 'pending' as Task['status'],
+        priority: 'medium' as Task['priority'],
         assigned_to: mainTask.assigned_to,
         created_at: mainTask.created_at,
         due_date: mainTask.due_date,
         area_id: mainTask.area_id,
         organization_id: mainTask.organization_id,
-        estimated_hours: task.estimated_hours
-      })) || [];
+        estimated_hours: 0.5
+      }));
 
-      // 3. Calcular el progreso basado en tareas completadas
-      const completedTasks = formattedTasks.filter(task => task.status === 'completed').length;
-      const totalTasks = formattedTasks.length;
-      const currentProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
-      // 4. Formatear la tarea principal con las tareas del área
+      // Actualizar la tarea principal con las subtareas
       const formattedTask: Task = {
-        id: mainTask.id,
-        title: mainTask.title,
-        description: mainTask.description,
-        status: mainTask.status,
-        priority: mainTask.priority,
-        assigned_to: mainTask.assigned_to,
-        created_at: mainTask.created_at,
-        due_date: mainTask.due_date,
-        area_id: mainTask.area_id,
-        organization_id: mainTask.organization_id,
-        start_time: mainTask.start_time,
-        end_time: mainTask.end_time,
-        sala_id: mainTask.sala_id,
-        assignee: mainTask.assignee?.[0],
-        area: mainTask.area?.[0],
-        sala: mainTask.sala?.[0],
-        subtasks: formattedTasks,
-        progress: currentProgress
+        ...mainTask,
+        subtasks: formattedTasks
       };
 
-      console.log('Tarea formateada con pasos:', formattedTask);
+      console.log('Debug - Tarea formateada:', {
+        mainTask: formattedTask,
+        subtasksCount: formattedTasks.length
+      });
 
       setCurrentTask(formattedTask);
-      setProgress(currentProgress);
+      setProgress(0);
       setStartTime(mainTask.start_time || '');
 
     } catch (error: any) {
@@ -248,42 +262,96 @@ export default function CurrentTaskPage() {
   };
 
   const handleCompleteTask = async () => {
-    if (!currentTask) return;
-
     try {
-      const now = new Date();
-      const timeString = now.toLocaleTimeString('en-US', { hour12: false });
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('No autorizado')
 
-      const { error: updateError } = await supabase
-        .from('tasks')
-        .update({
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single()
+
+      if (!userProfile) throw new Error('Perfil no encontrado')
+      if (!currentTask) throw new Error('No hay tarea activa')
+
+      const now = new Date()
+      const timeString = now.toLocaleTimeString('en-US', { hour12: false })
+
+      // Crear el contenido del reporte en formato estructurado
+      const reportContent = {
+        title: `Reporte de contingencia - ${currentTask.sala?.nombre || 'Sin sala'}`,
+        area: currentTask.area?.name || '',
+        sala: currentTask.sala?.nombre || '',
+        fecha: now.toLocaleDateString(),
+        horaInicio: currentTask.start_time || '',
+        horaFin: timeString,
+        actividades: currentTask.subtasks?.map((task, index) => {
+        const description = task.description.toLowerCase()
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        return `${index + 1}. ${description}`;
+        }) || [],
+        imagenes: {
+          inicial: images.before || '',
+          durante: images.during || '',
+          final: images.after || ''
+        }
+      };
+
+        // Crear el reporte de contingencia
+        const contingencyData = {
+        title: reportContent.title,
+        description: JSON.stringify(reportContent), // Guardamos como JSON para mantener la estructura
           status: 'completed',
-          end_time: timeString,
-          updated_at: now.toISOString()
-        })
-        .eq('id', currentTask.id);
+          created_by: user.id,
+          area_id: currentTask.area_id,
+          organization_id: userProfile.organization_id,
+          created_at: now.toISOString(),
+        updated_at: now.toISOString()
+      };
 
-      if (updateError) throw updateError;
+      console.log('Creando reporte de contingencia:', {
+        title: contingencyData.title,
+        hasImages: {
+          before: !!images.before,
+          during: !!images.during,
+          after: !!images.after
+        }
+      });
 
-      // También actualizar todas las subtareas como completadas
-      if (currentTask.subtasks && currentTask.subtasks.length > 0) {
-        const { error: subtasksError } = await supabase
+        // Insertar el reporte
+        const { error: contingencyError } = await supabase
+          .from('contingencies')
+        .insert([contingencyData]);
+
+      if (contingencyError) {
+        console.error('Error al crear el reporte:', contingencyError);
+        throw new Error('Error al crear el reporte de contingencia');
+      }
+
+        // Actualizar el estado de la tarea
+        const { error: updateError } = await supabase
           .from('tasks')
           .update({
             status: 'completed',
             end_time: timeString,
             updated_at: now.toISOString()
           })
-          .in('id', currentTask.subtasks.map(task => task.id));
+        .eq('id', currentTask.id);
 
-        if (subtasksError) throw subtasksError;
+      if (updateError) {
+        console.error('Error al actualizar la tarea:', updateError);
+        throw new Error('Error al actualizar el estado de la tarea');
       }
 
-      toast.success('Tarea completada con éxito');
+      toast.success('Tarea completada y reporte generado');
       router.push('/admin/tasks');
-    } catch (error: any) {
+
+      } catch (error: any) {
       console.error('Error al completar la tarea:', error);
-      toast.error('Error al completar la tarea');
+      toast.error(error.message || 'Error al completar la tarea');
     }
   };
 
@@ -319,33 +387,36 @@ export default function CurrentTaskPage() {
 
   const handleSubtaskStatusChange = async (subtask: Task) => {
     try {
-      const newStatus = subtask.status === 'completed' ? 'in_progress' : 'completed';
-      const { error } = await supabase
-        .from('tasks')
-        .update({ status: newStatus })
-        .eq('id', subtask.id);
-      
-      if (error) throw error;
-      
-      // Actualizar el estado local
-      const updatedSubtasks = currentTask?.subtasks?.map(t => 
-        t.id === subtask.id ? { ...t, status: newStatus as Task['status'] } : t
-      );
-      
-      if (currentTask && updatedSubtasks) {
-        setCurrentTask({
-          ...currentTask,
-          subtasks: updatedSubtasks
-        });
-        
-        // Actualizar el progreso
-        const completed = updatedSubtasks.filter(t => t.status === 'completed').length;
-        const total = updatedSubtasks.length;
-        setProgress(Math.round((completed / total) * 100));
+      if (!currentTask) {
+        toast.error('No hay tarea principal activa');
+        return;
       }
-    } catch (error) {
-      console.error('Error al actualizar subtarea:', error);
-      toast.error('Error al actualizar la tarea');
+
+      const newStatus = subtask.status === 'completed' ? 'in_progress' : 'completed';
+      
+      // Actualizar solo el estado local
+      const updatedSubtasks = currentTask.subtasks?.map(t => 
+        t.id === subtask.id ? { ...t, status: newStatus as Task['status'] } : t
+      ) || [];
+      
+      setCurrentTask(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          subtasks: updatedSubtasks
+        };
+      });
+      
+      // Actualizar el progreso
+      const completed = updatedSubtasks.filter(t => t.status === 'completed').length;
+      const total = updatedSubtasks.length;
+      setProgress(Math.round((completed / total) * 100));
+
+      toast.success(`Paso ${newStatus === 'completed' ? 'completado' : 'en progreso'}`);
+      
+    } catch (error: any) {
+      console.error('Error al actualizar el estado de la tarea:', error);
+      toast.error('Error al actualizar el estado de la tarea');
     }
   };
 
@@ -419,81 +490,83 @@ export default function CurrentTaskPage() {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const type = fileInputRef.current?.getAttribute('data-type') as 'before' | 'during' | 'after';
+    
+    console.log('handleFileChange:', { file, type });
+    
+    if (!file) {
+      console.error('No se seleccionó ningún archivo');
+      toast.error('Por favor selecciona una imagen');
+      return;
+    }
+    
+    if (!type) {
+      console.error('No se especificó el tipo de imagen');
+      toast.error('Error al procesar la imagen');
+      return;
+    }
+    
+    handleImageUpload(type, file);
+  };
+
   const handleImageUpload = async (type: 'before' | 'during' | 'after', file: File) => {
     try {
+      console.log('1. Iniciando subida de imagen');
       setUploading(true);
       
       if (!currentTask) {
         throw new Error('No hay tarea seleccionada');
       }
 
-      // Verificar autenticación
-      const { data: { session }, error: authError } = await supabase.auth.getSession();
-      if (authError || !session) {
-        throw new Error('Usuario no autenticado');
+      // Validar el tipo de archivo
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        throw new Error('Tipo de archivo no permitido. Solo se permiten imágenes (JPG, PNG, GIF, WebP)');
       }
 
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${type}_${Date.now()}.${fileExt}`;
+      // Nombre de archivo simple
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || '';
+      const fileName = `tasks/${currentTask.id}/${type}_${Date.now()}.${fileExt}`;
 
-      console.log('Iniciando subida de archivo:', {
-        bucket: 'attachments',
-        fileName,
-        fileSize: file.size,
-        fileType: file.type,
-        userId: session.user.id
-      });
+      console.log('2. Subiendo archivo:', fileName);
 
-      // Subir la imagen a Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('attachments')
+      // Subir archivo al bucket Attachments
+      const { data, error: uploadError } = await supabase.storage
+        .from('Attachments')
         .upload(fileName, file, {
           cacheControl: '3600',
           upsert: true
         });
 
       if (uploadError) {
-        console.error('Error al subir archivo:', uploadError);
-        throw new Error('Error al subir archivo a Storage');
+        console.error('3. Error al subir:', uploadError);
+        throw uploadError;
       }
 
-      console.log('Archivo subido exitosamente:', uploadData);
+      console.log('4. Archivo subido exitosamente');
 
-      // Obtener la URL pública
-      const { data } = supabase.storage
-        .from('attachments')
+      // Obtener URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('Attachments')
         .getPublicUrl(fileName);
 
-      if (!data?.publicUrl) {
-        throw new Error('No se pudo obtener la URL pública de la imagen');
-      }
+      console.log('5. URL pública generada:', publicUrl);
 
-      console.log('URL pública obtenida:', data.publicUrl);
-
-      // Actualizar el registro en la base de datos
-      const { error: updateError } = await supabase
-        .from('task_images')
-        .upsert({
-          task_id: currentTask.id,
-          image_type: type,
-          image_url: data.publicUrl,
-          updated_at: new Date().toISOString()
-        });
-
-      if (updateError) {
-        console.error('Error al actualizar registro:', updateError);
-        throw new Error('Error al guardar registro en la base de datos');
-      }
-
-      // Actualizar el estado local
-      setImages(prev => ({
+      // Actualizar estado local
+      setImages(prev => {
+        const newImages = {
         ...prev,
-        [type]: data.publicUrl
-      }));
+          [type]: publicUrl
+        };
+        console.log('6. Estado de imágenes actualizado:', newImages);
+        return newImages;
+      });
 
       toast.success('Imagen subida correctamente');
     } catch (error: any) {
-      console.error('Error al subir la imagen:', error);
+      console.error('Error:', error);
       toast.error(error.message || 'Error al subir la imagen');
     } finally {
       setUploading(false);
@@ -504,15 +577,6 @@ export default function CurrentTaskPage() {
     if (fileInputRef.current) {
       fileInputRef.current.setAttribute('data-type', type);
       fileInputRef.current.click();
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    const type = e.target.getAttribute('data-type') as 'before' | 'during' | 'after';
-    
-    if (file && type) {
-      handleImageUpload(type, file);
     }
   };
 
@@ -546,13 +610,13 @@ export default function CurrentTaskPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+      <div style={{ backgroundColor: '#ffffff' }} className="rounded-lg shadow-lg p-6 mb-8">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold text-gray-800">
+          <h1 style={{ color: '#1f2937' }} className="text-3xl font-bold">
             Tareas {currentTask?.sala?.nombre || ''}
           </h1>
           <div className="flex items-center space-x-4">
-            <span className="text-gray-600">
+            <span style={{ color: '#4b5563' }}>
               <FaClock className="inline mr-2" />
               {elapsedTime}
             </span>
@@ -561,20 +625,20 @@ export default function CurrentTaskPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div>
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Detalles de la Asignación</h2>
+            <h2 style={{ color: '#1f2937' }} className="text-xl font-semibold mb-4">Detalles de la Asignación</h2>
             <div className="space-y-4">
               <div className="flex items-start">
-                <FaBuilding className="text-gray-500 mt-1 mr-3" />
+                <FaBuilding style={{ color: '#6b7280' }} className="mt-1 mr-3" />
                 <div>
-                  <p className="font-medium text-gray-700">Ubicación</p>
-                  <p className="text-gray-600">{currentTask.sala?.nombre || 'No especificado'} - {currentTask.area?.name || 'No especificado'}</p>
+                  <p style={{ color: '#374151' }} className="font-medium">Ubicación</p>
+                  <p style={{ color: '#4b5563' }}>{currentTask.sala?.nombre || 'No especificado'} - {currentTask.area?.name || 'No especificado'}</p>
                 </div>
               </div>
               <div className="flex items-start">
-                <FaUserCircle className="text-gray-500 mt-1 mr-3" />
+                <FaUserCircle style={{ color: '#6b7280' }} className="mt-1 mr-3" />
                 <div>
-                  <p className="font-medium text-gray-700">Asignado a</p>
-                  <p className="text-gray-600">
+                  <p style={{ color: '#374151' }} className="font-medium">Asignado a</p>
+                  <p style={{ color: '#4b5563' }}>
                     {currentTask.assignee 
                       ? `${currentTask.assignee.first_name} ${currentTask.assignee.last_name}`
                       : 'No asignado'}
@@ -582,10 +646,10 @@ export default function CurrentTaskPage() {
                 </div>
               </div>
               <div className="flex items-start">
-                <FaHourglassHalf className="text-gray-500 mt-1 mr-3" />
+                <FaHourglassHalf style={{ color: '#6b7280' }} className="mt-1 mr-3" />
                 <div>
-                  <p className="font-medium text-gray-700">Horario</p>
-                  <p className="text-gray-600">
+                  <p style={{ color: '#374151' }} className="font-medium">Horario</p>
+                  <p style={{ color: '#4b5563' }}>
                     {currentTask.start_time || ''} - {currentTask.end_time || ''}
                   </p>
                 </div>
@@ -594,50 +658,37 @@ export default function CurrentTaskPage() {
           </div>
 
           <div>
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Pasos a Realizar</h2>
-            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-              {currentTask.subtasks && currentTask.subtasks.map((subtask, index) => (
-                <div key={subtask.id} className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={subtask.status === 'completed'}
-                    onChange={() => handleSubtaskStatusChange(subtask)}
-                    className="form-checkbox h-5 w-5 text-blue-600 mt-1 rounded border-gray-300 focus:ring-blue-500"
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className={`${subtask.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-700'}`}>
-                          {subtask.description}
-                        </p>
-                      </div>
-                      <div className="flex items-center space-x-3 ml-4">
-                        {subtask.estimated_hours && (
-                          <span className="text-sm text-gray-500 whitespace-nowrap">
-                            <FaClock className="inline mr-1" />
-                            {subtask.estimated_hours}h
-                          </span>
-                        )}
-                        <button
-                          onClick={() => handleDeleteTask(subtask.id)}
-                          className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                          title="Eliminar tarea"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+            <h2 style={{ color: '#1f2937' }} className="text-xl font-semibold mb-4">Tareas del Área</h2>
+            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
+              {currentTask.subtasks && currentTask.subtasks.length > 0 ? (
+                currentTask.subtasks.map((task, index) => (
+                  <div key={task.id} style={{ backgroundColor: '#ffffff', borderColor: '#e5e7eb' }} className="flex items-start space-x-2 p-3 rounded-lg border shadow-sm">
+                    <div style={{ backgroundColor: '#dbeafe', color: '#2563eb' }} className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center font-semibold text-sm">
+                      {index + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={task.status === 'completed'}
+                          onChange={() => handleSubtaskStatusChange(task)}
+                          style={{ color: '#2563eb' }}
+                          className="mt-1 h-4 w-4 rounded border-gray-300"
+                        />
+                        <div>
+                          <h3 style={{ color: '#111827' }} className="font-medium text-sm">{task.title}</h3>
+                          <p style={{ color: '#4b5563' }} className="text-sm mt-0.5 line-clamp-2">{task.description}</p>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
-              {(!currentTask.subtasks || currentTask.subtasks.length === 0) && (
-                <div className="text-center py-8">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
-                    <FaListUl className="w-8 h-8 text-gray-400" />
+                ))
+              ) : (
+                <div className="text-center py-6">
+                  <div style={{ backgroundColor: '#f3f4f6' }} className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-3">
+                    <FaListUl style={{ color: '#9ca3af' }} className="w-6 h-6" />
                   </div>
-                  <p className="text-gray-500">No hay pasos asignados</p>
+                  <p style={{ color: '#6b7280' }} className="text-sm">No hay tareas disponibles para esta área</p>
                 </div>
               )}
             </div>
@@ -646,19 +697,19 @@ export default function CurrentTaskPage() {
 
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-lg font-semibold text-gray-800">Progreso</h3>
-            <span className="text-sm font-medium text-gray-600">{progress}%</span>
+            <h3 style={{ color: '#1f2937' }} className="text-lg font-semibold">Progreso</h3>
+            <span style={{ color: '#4b5563' }} className="text-sm font-medium">{progress}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div style={{ backgroundColor: '#e5e7eb' }} className="w-full rounded-full h-2.5">
             <div
-              className="bg-blue-600 h-2.5 rounded-full transition-all duration-500"
-              style={{ width: `${progress}%` }}
+              style={{ backgroundColor: '#2563eb', width: `${progress}%` }}
+              className="h-2.5 rounded-full transition-all duration-500"
             ></div>
           </div>
         </div>
 
         <div className="mb-8">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Evidencia Fotográfica</h3>
+          <h3 style={{ color: '#1f2937' }} className="text-lg font-semibold mb-4">Evidencia Fotográfica</h3>
           <input
             type="file"
             ref={fileInputRef}
@@ -668,78 +719,99 @@ export default function CurrentTaskPage() {
           />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Sección Antes */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="font-medium text-gray-700 mb-3">Antes</h4>
+            <div style={{ backgroundColor: '#f9fafb' }} className="rounded-lg p-4">
+              <h4 style={{ color: '#374151' }} className="font-medium mb-3">Antes</h4>
               <div 
                 onClick={() => handleImageClick('before')}
-                className="aspect-video bg-gray-100 rounded-lg relative overflow-hidden"
+                style={{ backgroundColor: '#f3f4f6' }}
+                className="aspect-video rounded-lg relative overflow-hidden cursor-pointer"
               >
                 {images.before ? (
+                  <div className="relative w-full h-full">
                   <img 
                     src={images.before} 
                     alt="Antes" 
-                    className="w-full h-full object-cover"
-                  />
+                      className="absolute inset-0 w-full h-full object-cover"
+                      onError={(e) => {
+                        console.error('Error al cargar la imagen:', e);
+                        e.currentTarget.src = '/placeholder-image.png';
+                      }}
+                    />
+                  </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center h-full border-2 border-dashed border-gray-300 hover:border-blue-500 transition-colors cursor-pointer">
-                    <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div style={{ borderColor: '#d1d5db' }} className="flex flex-col items-center justify-center h-full border-2 border-dashed">
+                    <svg style={{ color: '#9ca3af' }} className="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
-                    <span className="text-sm text-gray-500">Agregar foto</span>
+                    <span style={{ color: '#6b7280' }} className="text-sm">Agregar foto</span>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Sección Durante */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="font-medium text-gray-700 mb-3">Durante</h4>
+            <div style={{ backgroundColor: '#f9fafb' }} className="rounded-lg p-4">
+              <h4 style={{ color: '#374151' }} className="font-medium mb-3">Durante</h4>
               <div 
                 onClick={() => handleImageClick('during')}
-                className="aspect-video bg-gray-100 rounded-lg relative overflow-hidden"
+                style={{ backgroundColor: '#f3f4f6' }}
+                className="aspect-video rounded-lg relative overflow-hidden cursor-pointer"
               >
                 {images.during ? (
+                  <div className="relative w-full h-full">
                   <img 
                     src={images.during} 
                     alt="Durante" 
-                    className="w-full h-full object-cover"
-                  />
+                      className="absolute inset-0 w-full h-full object-cover"
+                      onError={(e) => {
+                        console.error('Error al cargar la imagen:', e);
+                        e.currentTarget.src = '/placeholder-image.png';
+                      }}
+                    />
+                  </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center h-full border-2 border-dashed border-gray-300 hover:border-blue-500 transition-colors cursor-pointer">
-                    <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div style={{ borderColor: '#d1d5db' }} className="flex flex-col items-center justify-center h-full border-2 border-dashed">
+                    <svg style={{ color: '#9ca3af' }} className="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
-                    <span className="text-sm text-gray-500">Agregar foto</span>
+                    <span style={{ color: '#6b7280' }} className="text-sm">Agregar foto</span>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Sección Después */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="font-medium text-gray-700 mb-3">Después</h4>
+            <div style={{ backgroundColor: '#f9fafb' }} className="rounded-lg p-4">
+              <h4 style={{ color: '#374151' }} className="font-medium mb-3">Después</h4>
               <div 
                 onClick={() => handleImageClick('after')}
-                className="aspect-video bg-gray-100 rounded-lg relative overflow-hidden"
+                style={{ backgroundColor: '#f3f4f6' }}
+                className="aspect-video rounded-lg relative overflow-hidden cursor-pointer"
               >
                 {images.after ? (
+                  <div className="relative w-full h-full">
                   <img 
                     src={images.after} 
                     alt="Después" 
-                    className="w-full h-full object-cover"
-                  />
+                      className="absolute inset-0 w-full h-full object-cover"
+                      onError={(e) => {
+                        console.error('Error al cargar la imagen:', e);
+                        e.currentTarget.src = '/placeholder-image.png';
+                      }}
+                    />
+                  </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center h-full border-2 border-dashed border-gray-300 hover:border-blue-500 transition-colors cursor-pointer">
-                    <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div style={{ borderColor: '#d1d5db' }} className="flex flex-col items-center justify-center h-full border-2 border-dashed">
+                    <svg style={{ color: '#9ca3af' }} className="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
-                    <span className="text-sm text-gray-500">Agregar foto</span>
+                    <span style={{ color: '#6b7280' }} className="text-sm">Agregar foto</span>
                   </div>
                 )}
               </div>
             </div>
           </div>
-          <p className="text-sm text-gray-500 mt-2 text-center">
+          <p style={{ color: '#6b7280' }} className="text-sm mt-2 text-center">
             {uploading ? 'Subiendo imagen...' : 'Haz clic en cada sección para agregar una foto del proceso'}
           </p>
         </div>
@@ -748,19 +820,22 @@ export default function CurrentTaskPage() {
       <div className="flex justify-end space-x-4">
         <button
           onClick={() => router.push('/admin/tasks')}
-          className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          style={{ borderColor: '#d1d5db', color: '#374151' }}
+          className="px-6 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
         >
           Volver
         </button>
         <button
           onClick={handleDeleteAssignment}
-          className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+          style={{ backgroundColor: '#ef4444', color: '#ffffff' }}
+          className="px-6 py-2 rounded-lg transition-colors"
         >
           Eliminar Asignación
         </button>
         <button
           onClick={handleCompleteTask}
-          className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+          style={{ backgroundColor: '#22c55e', color: '#ffffff' }}
+          className="px-6 py-2 rounded-lg transition-colors"
         >
           Marcar como completada
         </button>

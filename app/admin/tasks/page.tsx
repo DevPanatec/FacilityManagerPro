@@ -127,6 +127,8 @@ export default function TasksPage() {
           )
         `)
         .eq('organization_id', userProfile.organization_id)
+        .eq('created_by', user.id)
+        .eq('type', 'assignment')
         .order('created_at', { ascending: false })
 
       if (tasksError) {
