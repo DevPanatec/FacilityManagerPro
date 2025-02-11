@@ -7,11 +7,11 @@
     "start": "ts-node bulk-insert-inventory.ts"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.0",
-    "dotenv": "^16.3.1"
+    "@supabase/supabase-js": "^2.48.1",
+    "dotenv": "^16.4.7"
   },
   "devDependencies": {
-    "ts-node": "^10.9.1",
-    "typescript": "^5.3.2"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
   }
-} 
+}
