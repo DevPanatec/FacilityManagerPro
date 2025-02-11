@@ -87,17 +87,18 @@ interface TaskData {
 }
 
 interface FormattedTask extends Omit<TaskData, 'assignee'> {
-  assignee: User | null
-  assigned_name: string
+  assignee: User | null;
+  assigned_name: string;
+  area_id: string | null;
 }
 
 interface SalaWithTasks extends Sala {
-  tasks: FormattedTask[]
+  tasks: FormattedTask[];
   areas: {
-    id: string
-    name: string
-    sala_id: string
-  }[]
+    id: string;
+    name: string;
+    sala_id: string;
+  }[];
 }
 
 interface Employee {
@@ -393,7 +394,8 @@ export default function EnterpriseOverviewPage() {
             salaAreas.some(area => area.id === task.area_id)
           ).map(task => ({
             ...task,
-            assigned_name: task.assignee ? `${task.assignee.first_name} ${task.assignee.last_name}` : 'Sin asignar'
+            assigned_name: task.assignee ? `${task.assignee.first_name} ${task.assignee.last_name}` : 'Sin asignar',
+            area_id: task.area_id
           })) || [];
 
           return {
