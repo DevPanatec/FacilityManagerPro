@@ -19,6 +19,10 @@ interface Task {
   prioridad: 'baja' | 'media' | 'alta'
 }
 
+interface CustomError {
+  message: string;
+}
+
 export default function EnterpriseSchedulePage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -67,9 +71,13 @@ export default function EnterpriseSchedulePage() {
 
         setTasks(data || [])
         setLoading(false)
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Error fetching data:', error)
-        setError(error.message)
+        if (error instanceof Error) {
+          setError(error.message)
+        } else {
+          setError('Error desconocido al cargar los datos')
+        }
         setLoading(false)
       }
     }
