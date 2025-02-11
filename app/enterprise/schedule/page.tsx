@@ -6,18 +6,18 @@ import TaskModal from './components/TaskModal'
 
 interface Task {
   id: string
-  titulo: string
-  descripcion: string
-  fecha: string
-  hora_inicio: string
-  hora_fin: string
-  estado: 'pending' | 'completed' | 'cancelled'
-  area_id: string
-  area: string
-  turno: 'A' | 'B' | 'C'
-  asignado_a: string[]
+  title: string
+  description?: string
+  status: string
+  priority: string
+  assigned_to?: string
+  created_by: string
   organization_id: string
-  prioridad: 'baja' | 'media' | 'alta'
+  created_at?: string
+  updated_at?: string
+  area_id?: string
+  area?: string
+  due_date?: string
 }
 
 interface CustomError {
@@ -182,18 +182,22 @@ export default function EnterpriseSchedulePage() {
       'alta': 'high'
     } as const;
 
+    const taskPriority = task.priority as keyof typeof priorityMap;
+
     return {
       id: task.id,
-      title: task.titulo,
-      description: task.descripcion,
+      title: task.title,
+      description: task.description,
       area_id: task.area_id,
       area: task.area,
-      assigned_to: task.asignado_a?.[0] || null,
-      priority: priorityMap[task.prioridad] || 'medium',
-      status: task.estado,
-      due_date: task.fecha || null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      assigned_to: task.assigned_to,
+      priority: priorityMap[taskPriority] || 'medium',
+      status: task.status,
+      due_date: task.due_date,
+      created_by: userProfile?.id || '',
+      organization_id: userProfile?.organization_id || '',
+      created_at: task.created_at || new Date().toISOString(),
+      updated_at: task.updated_at || new Date().toISOString()
     }
   })
 
