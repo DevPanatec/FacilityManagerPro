@@ -187,4 +187,25 @@ export class FileService {
 
     return data[0]
   }
-} 
+}
+
+// Crear una instancia del servicio
+const fileService = new FileService()
+
+// Exportar las funciones necesarias
+export const uploadContingencyFile = (
+  file: File,
+  contingencyId: string,
+  organizationId: string,
+  userId: string,
+  onProgress?: (progress: number) => void
+) => fileService.uploadContingencyFile(file, contingencyId, organizationId, userId, onProgress)
+
+export const getContingencyFiles = (contingencyId: string) => 
+  fileService.getContingencyFiles(contingencyId)
+
+export const deleteContingencyFile = (fileId: string, filePath: string) => 
+  fileService.deleteContingencyFile(fileId, filePath)
+
+// Exportar el servicio por defecto
+export default fileService 

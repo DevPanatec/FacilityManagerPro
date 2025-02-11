@@ -6,7 +6,7 @@ import { Dialog } from '@headlessui/react';
 import { User } from '@supabase/supabase-js';
 import SalaAreaSelector from '@/app/shared/components/componentes/SalaAreaSelector';
 import { toast } from 'react-hot-toast';
-import { errorHandler } from '@/utils/errorHandler';
+import { errorHandler } from '@/app/utils/errorHandler';
 
 interface WorkShiftData {
   id: string;
@@ -175,7 +175,7 @@ export default function AssignmentsPage() {
 
     } catch (error) {
       console.error('Error loading data:', error);
-      toast.error(errorHandler(error));
+      toast.error(errorHandler.logError('loadData', error));
     } finally {
       setLoading(false);
     }
