@@ -58,10 +58,10 @@ interface Message {
 type UserRow = Database['public']['Tables']['users']['Row'];
 type User = UserRow & {
   organization_id: string;
-  online_status?: 'online' | 'offline';
   first_name: string;
   last_name: string;
   avatar_url: string | null;
+  online_status?: 'online' | 'offline';
 };
 
 type RealtimePayload = RealtimePostgresChangesPayload<{
@@ -228,7 +228,7 @@ export function ChatView({ roomId, onClose, chatTitle, predefinedMessage }: Chat
                     first_name: user.first_name || '',
                     last_name: user.last_name || '',
                     avatar_url: user.avatar_url || null,
-                    online_status: 'online'
+                    online_status: user.id ? 'online' : 'offline'
                 }
             };
             

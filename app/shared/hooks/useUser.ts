@@ -10,6 +10,7 @@ export interface User {
   first_name?: string | null
   last_name?: string | null
   status?: 'active' | 'inactive' | 'pending'
+  online_status?: 'online' | 'offline'
 }
 
 export function useUser() {
