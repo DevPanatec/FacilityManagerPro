@@ -3,12 +3,20 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/app/lib/supabase/client';
 import { useUser } from '@/app/shared/hooks/useUser';
-import { Send, Search, MoreVertical, MessageCircle, Paperclip, Smile, Image, Link, X } from 'lucide-react';
+import { 
+  Send, Search, MoreVertical, MessageCircle, Paperclip, 
+  Smile, Image as ImageIcon, Link, X, Reply, Star,
+  ThumbsUp, Heart, FileText, AlertCircle, Edit, Trash, ArrowLeft
+} from 'lucide-react';
 import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'react-hot-toast';
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import type { Database } from '@/app/lib/supabase/types';
+import './styles.css';
+import { useSupabase } from '@/app/lib/supabase/supabase-provider';
+import { useDropzone } from 'react-dropzone';
+import Image from 'next/image';
 
 const supabase = createClient();
 
@@ -17,19 +25,44 @@ type ChatMessage = Database['public']['Functions']['get_chat_messages_v2']['Retu
 interface Message {
   id: string;
   content: string;
-  type: string;
+  type: 'text' | 'image' | 'file';
   status: string;
   created_at: string;
   updated_at: string;
   user_id: string;
   room_id: string;
   organization_id: string;
+  file_url?: string;
+  importance?: 'normal' | 'urgent' | 'important';
+  edited?: boolean;
+  reactions?: {
+    emoji: string;
+    users: string[];
+  }[];
+  reply_to?: {
+    id: string;
+    content: string;
+    user: {
+      first_name: string;
+      last_name: string;
+    };
+  };
   user: {
     first_name: string;
     last_name: string;
     avatar_url: string | null;
+    online_status?: 'online' | 'offline';
   };
 }
+
+type UserRow = Database['public']['Tables']['users']['Row'];
+type User = UserRow & {
+  organization_id: string;
+  online_status?: 'online' | 'offline';
+  first_name: string;
+  last_name: string;
+  avatar_url: string | null;
+};
 
 type RealtimePayload = RealtimePostgresChangesPayload<{
   [key: string]: any;
@@ -42,16 +75,25 @@ interface ChatViewProps {
   roomId: string;
   onClose: () => void;
   chatTitle?: string;
+  predefinedMessage?: string;
 }
 
 interface MessageGroup {
   userId: string;
   messages: Message[];
   date: string;
+  groupId: string;
 }
 
-export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
+const REACTIONS = [
+  { emoji: '👍', icon: ThumbsUp },
+  { emoji: '❤️', icon: Heart },
+  { emoji: '⭐', icon: Star },
+];
+
+export function ChatView({ roomId, onClose, chatTitle, predefinedMessage }: ChatViewProps) {
   const { user, loading: userLoading } = useUser();
+  const { supabase: supabaseProvider } = useSupabase();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -68,6 +110,17 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
   const [filteredMessages, setFilteredMessages] = useState<Message[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const lastScrollPosition = useRef(0);
+  const refreshThreshold = 100;
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const touchStartY = useRef(0);
+  const touchEndY = useRef(0);
 
   const updateLastRead = useCallback(async () => {
     if (!user) return;
@@ -121,10 +174,16 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
         user_id: msg.user_id,
         room_id: msg.room_id,
         organization_id: msg.organization_id,
+        file_url: msg.file_url,
+        importance: msg.importance,
+        edited: msg.edited,
+        reactions: msg.reactions,
+        reply_to: msg.reply_to,
         user: {
           first_name: msg.users?.first_name || 'Usuario',
           last_name: msg.users?.last_name || 'Desconocido',
-          avatar_url: msg.users?.avatar_url
+          avatar_url: msg.users?.avatar_url,
+          online_status: msg.online_status
         }
       }));
 
@@ -144,22 +203,32 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
     try {
         console.log('Nuevo mensaje recibido:', payload.new);
         
+        const baseMessage = {
+            id: payload.new.id,
+            content: payload.new.content,
+            type: payload.new.type as 'text' | 'image' | 'file',
+            status: payload.new.status,
+            created_at: payload.new.created_at,
+            updated_at: payload.new.updated_at,
+            user_id: payload.new.user_id,
+            room_id: payload.new.room_id,
+            organization_id: payload.new.organization_id,
+            file_url: payload.new.file_url || undefined,
+            importance: payload.new.importance || undefined,
+            edited: payload.new.edited || false,
+            reactions: payload.new.reactions || undefined,
+            reply_to: payload.new.reply_to || undefined
+        };
+        
         // Si el mensaje es del usuario actual, usar sus datos directamente
         if (payload.new.user_id === user.id) {
             const newMessage: Message = {
-                id: payload.new.id,
-                content: payload.new.content,
-                type: payload.new.type,
-                status: payload.new.status,
-                created_at: payload.new.created_at,
-                updated_at: payload.new.updated_at,
-                user_id: payload.new.user_id,
-                room_id: payload.new.room_id,
-                organization_id: payload.new.organization_id,
+                ...baseMessage,
                 user: {
                     first_name: user.first_name || '',
                     last_name: user.last_name || '',
-                    avatar_url: user.avatar_url || null
+                    avatar_url: user.avatar_url || null,
+                    online_status: 'online'
                 }
             };
             
@@ -176,7 +245,7 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
         // Si el mensaje es de otro usuario, obtener sus datos
         const { data: userData, error: userError } = await supabase
             .from('users')
-            .select('first_name, last_name, avatar_url')
+            .select('first_name, last_name, avatar_url, online_status')
             .eq('id', payload.new.user_id)
             .single();
 
@@ -186,19 +255,12 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
         }
 
         const newMessage: Message = {
-            id: payload.new.id,
-            content: payload.new.content,
-            type: payload.new.type,
-            status: payload.new.status,
-            created_at: payload.new.created_at,
-            updated_at: payload.new.updated_at,
-            user_id: payload.new.user_id,
-            room_id: payload.new.room_id,
-            organization_id: payload.new.organization_id,
+            ...baseMessage,
             user: {
-                first_name: userData?.first_name || '',
-                last_name: userData?.last_name || '',
-                avatar_url: userData?.avatar_url || null
+                first_name: userData.first_name || '',
+                last_name: userData.last_name || '',
+                avatar_url: userData.avatar_url || null,
+                online_status: userData.online_status || 'offline'
             }
         };
 
@@ -362,6 +424,12 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
 
     const attemptSend = async (): Promise<boolean> => {
         try {
+            if (!user?.organization_id) {
+                console.error('No organization_id found for user');
+                toast.error('Error: Usuario sin organización asignada');
+                return false;
+            }
+
             console.log(`Intento ${retryCount + 1} de enviar mensaje:`, {
                 room_id: roomId,
                 user_id: user.id,
@@ -391,16 +459,26 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
             const messageContent = newMessage.trim();
             setNewMessage(''); // Limpiar el input inmediatamente
 
+            const message = {
+                room_id: roomId,
+                user_id: user.id,
+                organization_id: user.organization_id,
+                content: messageContent,
+                type: 'text',
+                status: 'sent',
+                reply_to: replyingTo ? {
+                    id: replyingTo.id,
+                    content: replyingTo.content,
+                    user: {
+                        first_name: replyingTo.user.first_name,
+                        last_name: replyingTo.user.last_name
+                    }
+                } : null
+            };
+
             const { data, error } = await supabase
                 .from('chat_messages')
-                .insert({
-                    room_id: roomId,
-                    user_id: user.id,
-                    content: messageContent,
-                    organization_id: user.organization_id,
-                    type: 'text',
-                    status: 'sent'
-                })
+                .insert(message)
                 .select(`
                     id,
                     content,
@@ -437,7 +515,8 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
                     user: {
                         first_name: user.first_name || '',
                         last_name: user.last_name || '',
-                        avatar_url: user.avatar_url || null
+                        avatar_url: user.avatar_url || null,
+                        online_status: user.online_status
                     }
                 };
 
@@ -497,7 +576,8 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
         groups.push({
           userId: message.user_id,
           messages: [message],
-          date
+          date,
+          groupId: `${date}-${message.user_id}-${message.id}`
         });
       }
 
@@ -600,6 +680,453 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
     }
   };
 
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+  };
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    for (const file of acceptedFiles) {
+      await handleFileUpload(file);
+    }
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    noClick: true,
+    noKeyboard: true,
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.gif'],
+      'application/pdf': ['.pdf'],
+      'application/msword': ['.doc'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'text/plain': ['.txt']
+    }
+  });
+
+  const handleFileUpload = async (file: File) => {
+    if (!user) return;
+
+    try {
+      console.log('Iniciando carga de archivo:', file.name);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `${roomId}/${fileName}`;
+      
+      console.log('Verificando bucket chat-attachments...');
+      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+
+      if (bucketsError) {
+        console.error('Error verificando buckets:', bucketsError);
+        toast.error('Error al verificar el almacenamiento');
+        return;
+      }
+
+      const bucketExists = buckets.some(b => b.name === 'chat-attachments');
+      if (!bucketExists) {
+        console.error('El bucket chat-attachments no existe');
+        toast.error('El sistema de almacenamiento no está configurado correctamente');
+        return;
+      }
+
+      console.log('Subiendo archivo a storage...');
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('chat-attachments')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Error subiendo archivo:', uploadError);
+        toast.error('Error al subir el archivo');
+        return;
+      }
+
+      console.log('Archivo subido exitosamente:', uploadData);
+
+      // Obtener la URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-attachments')
+        .getPublicUrl(filePath);
+
+      if (!publicUrl) {
+        console.error('No se pudo obtener la URL pública');
+        toast.error('Error al obtener la URL del archivo');
+        return;
+      }
+
+      console.log('URL pública obtenida:', publicUrl);
+
+      // Crear el mensaje con el archivo adjunto
+      const messageData = {
+        room_id: roomId,
+        user_id: user.id,
+        content: file.name,
+        type: file.type.startsWith('image/') ? 'image' : 'file',
+        file_url: publicUrl,
+        organization_id: user.organization_id,
+        status: 'sent'
+      };
+
+      console.log('Creando mensaje con archivo:', messageData);
+
+      const { data: message, error: messageError } = await supabase
+        .from('chat_messages')
+        .insert(messageData)
+        .select()
+        .single();
+
+      if (messageError) {
+        console.error('Error creando mensaje:', messageError);
+        toast.error('Error al crear el mensaje');
+        return;
+      }
+
+      console.log('Mensaje con archivo creado exitosamente:', message);
+      toast.success('Archivo subido correctamente');
+    } catch (error) {
+      console.error('Error en handleFileUpload:', error);
+      toast.error('Error al procesar el archivo');
+    }
+  };
+
+  const handleReaction = async (messageId: string, emoji: string) => {
+    try {
+      const message = messages.find(m => m.id === messageId);
+      if (!message) return;
+
+      const existingReaction = message.reactions?.find(r => r.emoji === emoji);
+      const userReacted = existingReaction?.users.includes(user?.id || '');
+
+      let updatedReactions = message.reactions || [];
+      if (userReacted) {
+        // Remover reacción
+        updatedReactions = updatedReactions.map(r => 
+          r.emoji === emoji 
+            ? { ...r, users: r.users.filter(uid => uid !== user?.id) }
+            : r
+        ).filter(r => r.users.length > 0);
+      } else {
+        // Agregar reacción
+        if (existingReaction) {
+          updatedReactions = updatedReactions.map(r =>
+            r.emoji === emoji
+              ? { ...r, users: [...r.users, user?.id || ''] }
+              : r
+          );
+        } else {
+          updatedReactions = [...updatedReactions, {
+            emoji,
+            users: [user?.id || '']
+          }];
+        }
+      }
+
+      await supabase
+        .from('chat_messages')
+        .update({ reactions: updatedReactions })
+        .eq('id', messageId);
+
+      setMessages(prev => prev.map(m =>
+        m.id === messageId
+          ? { ...m, reactions: updatedReactions }
+          : m
+      ));
+    } catch (error) {
+      console.error('Error actualizando reacciones:', error);
+    }
+  };
+
+  const handleEdit = async (messageId: string, newContent: string) => {
+    try {
+      await supabase
+        .from('chat_messages')
+        .update({ 
+          content: newContent,
+          edited: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', messageId);
+
+      setMessages(prev => prev.map(m =>
+        m.id === messageId
+          ? { ...m, content: newContent, edited: true }
+          : m
+      ));
+      setEditingMessage(null);
+    } catch (error) {
+      console.error('Error editando mensaje:', error);
+    }
+  };
+
+  const handleDelete = async (messageId: string) => {
+    try {
+      await supabase
+        .from('chat_messages')
+        .delete()
+        .eq('id', messageId);
+
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+    } catch (error) {
+      console.error('Error eliminando mensaje:', error);
+    }
+  };
+
+  const handleScroll = useCallback(() => {
+    if (!messagesContainerRef.current) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+    setShowScrollToBottom(!isNearBottom);
+
+    // Actualizar contador de no leídos
+    if (isNearBottom) {
+      setUnreadCount(0);
+      updateLastRead();
+    }
+  }, []);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndY.current = e.touches[0].clientY;
+    const diff = touchStartY.current - touchEndY.current;
+
+    if (diff < -50) {
+      setIsRefreshing(true);
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (isRefreshing) {
+      const { data } = await supabase
+        .rpc('get_chat_messages_v2', { p_room_id: roomId });
+      
+      if (data) {
+        setMessages(data);
+      }
+      setIsRefreshing(false);
+    }
+  };
+
+  // Renderizar mensaje con todas las nuevas funcionalidades
+  const renderMessage = (message: Message): JSX.Element => {
+    return (
+      <div 
+        key={message.id}
+        className={`message group ${message.user_id === user?.id ? 'outgoing' : 'incoming'}`}
+      >
+        {message.user_id !== user?.id && (
+          <div className="message-avatar">
+            {message.user.avatar_url ? (
+              <img
+                src={message.user.avatar_url}
+                alt={`${message.user.first_name} ${message.user.last_name}`}
+                className="w-full h-full rounded-xl object-cover"
+              />
+            ) : (
+              <span className="avatar-placeholder">
+                {message.user.first_name[0]}
+              </span>
+            )}
+          </div>
+        )}
+        <div className="message-content">
+          {message.user_id !== user?.id && (
+            <span className="message-sender">
+              {message.user.first_name} {message.user.last_name}
+            </span>
+          )}
+          
+          {message.reply_to && (
+            <div className="reply-preview">
+              <Reply className="w-4 h-4" />
+              <span className="reply-author">
+                {message.reply_to.user.first_name}:
+              </span>
+              <span className="reply-content">
+                {message.reply_to.content}
+              </span>
+            </div>
+          )}
+
+          <div className="message-bubble">
+            {editingMessage?.id === message.id ? (
+              <input
+                type="text"
+                value={editingMessage.content}
+                onChange={(e) => setEditingMessage({ ...editingMessage, content: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleEdit(message.id, editingMessage.content);
+                  } else if (e.key === 'Escape') {
+                    setEditingMessage(null);
+                  }
+                }}
+                className="edit-input"
+                autoFocus
+              />
+            ) : (
+              <>
+                {message.type === 'text' && (
+                  <p className="message-text">{message.content}</p>
+                )}
+                {message.type === 'image' && message.file_url && (
+                  <div className="image-preview">
+                    <img 
+                      src={message.file_url} 
+                      alt="Imagen compartida" 
+                      className="cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => message.file_url && window.open(message.file_url, '_blank')}
+                    />
+                    <div className="image-preview-overlay">
+                      <button
+                        onClick={() => message.file_url && window.open(message.file_url, '_blank')}
+                        className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                        title="Ver imagen completa"
+                      >
+                        <ImageIcon className="w-5 h-5 text-white" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {message.type === 'file' && message.file_url && (
+                  <div className="file-preview">
+                    <div className="file-preview-icon">
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <div className="file-preview-content">
+                      <p className="file-preview-name">{message.content}</p>
+                      <p className="file-preview-size">
+                        {message.file_url.split('.').pop()?.toUpperCase() || 'ARCHIVO'}
+                      </p>
+                    </div>
+                    <div className="file-preview-actions">
+                      <button
+                        onClick={() => message.file_url && window.open(message.file_url, '_blank')}
+                        className="file-preview-button"
+                        title="Abrir archivo"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                          <polyline points="15 3 21 3 21 9"></polyline>
+                          <line x1="10" y1="14" x2="21" y2="3"></line>
+                        </svg>
+                      </button>
+                      <a
+                        href={message.file_url}
+                        download={message.content || 'archivo'}
+                        className="file-preview-button"
+                        title="Descargar archivo"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                          <polyline points="7 10 12 15 17 10"></polyline>
+                          <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          <div className="message-info">
+            <span className="message-time">
+              {format(new Date(message.created_at), 'HH:mm')}
+            </span>
+            {message.edited && (
+              <span className="message-edited">(editado)</span>
+            )}
+            {message.importance && message.importance !== 'normal' && (
+              <span className={`message-badge badge-${message.importance}`}>
+                {message.importance === 'urgent' ? 'Urgente' : 'Importante'}
+              </span>
+            )}
+          </div>
+
+          {message.reactions && message.reactions.length > 0 && (
+            <div className="message-reactions">
+              {message.reactions.map((reaction) => {
+                const ReactionIcon = REACTIONS.find(r => r.emoji === reaction.emoji)?.icon;
+                return (
+                  <button
+                    key={`${message.id}-${reaction.emoji}`}
+                    onClick={() => handleReaction(message.id, reaction.emoji)}
+                    className={`reaction ${
+                      reaction.users.includes(user?.id || '')
+                        ? 'reaction-active'
+                        : ''
+                    }`}
+                  >
+                    {ReactionIcon && <ReactionIcon className="w-4 h-4" />} {reaction.users.length}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="message-actions">
+            <button
+              onClick={() => setReplyingTo(message)}
+              className="message-action-button"
+              title="Responder"
+            >
+              <Reply className="w-4 h-4" />
+            </button>
+            {message.user_id === user?.id && (
+              <>
+                <button
+                  onClick={() => setEditingMessage(message)}
+                  className="message-action-button"
+                  title="Editar"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(message.id)}
+                  className="message-action-button"
+                  title="Eliminar"
+                >
+                  <Trash className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Modificar el useEffect para manejar el mensaje predefinido
+  useEffect(() => {
+    if (predefinedMessage) {
+      console.log('Estableciendo mensaje predefinido:', predefinedMessage);
+      setNewMessage(predefinedMessage);
+      // Ajustar la altura del textarea después de establecer el mensaje
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+          textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
+          textareaRef.current.focus();
+        }
+      }, 0);
+    }
+  }, [predefinedMessage]);
+
   if (!user) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -617,247 +1144,75 @@ export function ChatView({ roomId, onClose, chatTitle }: ChatViewProps) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
-      {/* Header Mejorado */}
-      <div className="border-b bg-white px-6 py-4 sticky top-0 z-10 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500/20 to-blue-600/10 flex items-center justify-center ring-2 ring-blue-500/20 shadow-lg">
-                <span className="text-blue-600 text-lg font-bold">
-                  {chatTitle?.[0]?.toUpperCase() || '?'}
-                </span>
-              </div>
-              {isTyping && (
-                <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full animate-pulse shadow-md">
-                  escribiendo...
-                </div>
-              )}
-            </div>
-            <div className="flex flex-col">
-              <h2 className="text-lg font-semibold text-gray-800">
-                {chatTitle || 'Nueva conversación'}
-              </h2>
-              <span className="text-xs text-gray-500">
-                {messages.length} mensajes
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setShowSearch(!showSearch)}
-              className="p-2 hover:bg-gray-100 rounded-full transition-all duration-200 hover:shadow-md active:scale-95"
-            >
-              <Search className="w-5 h-5 text-gray-600" />
-            </button>
-            <button className="p-2 hover:bg-gray-100 rounded-full transition-all duration-200 hover:shadow-md active:scale-95">
-              <MoreVertical className="w-5 h-5 text-gray-600" />
-            </button>
-          </div>
-        </div>
-        
-        {/* Barra de búsqueda mejorada */}
-        {showSearch && (
-          <div className="border-b bg-white px-6 py-4">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchText}
-                onChange={(e) => handleSearch(e.target.value)}
-                placeholder="Buscar en la conversación..."
-                className="w-full pl-10 pr-4 py-2 rounded-full border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              {searchText && (
-                <button
-                  onClick={() => {
-                    setSearchText('');
-                    setIsSearching(false);
-                    setFilteredMessages([]);
-                  }}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full"
-                >
-                  <X className="w-4 h-4 text-gray-500" />
-                </button>
-              )}
-            </div>
-            {isSearching && (
-              <div className="mt-2 text-sm text-gray-500">
-                {filteredMessages.length} resultados encontrados
-              </div>
-            )}
-          </div>
-        )}
+    <div className="chat-container">
+      <div className="chat-header">
+        <button onClick={onClose} className="chat-header-back">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <h2 className="chat-title">{chatTitle}</h2>
+        <button className="chat-header-back">
+          <MoreVertical className="w-5 h-5" />
+        </button>
       </div>
 
-      {/* Área de mensajes con resultados de búsqueda */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 bg-gradient-to-b from-gray-50 to-white">
-        {groupMessages(isSearching ? filteredMessages : messages).map((group, groupIndex) => (
-          <div key={`${group.userId}-${group.date}-${groupIndex}`} 
-            className={`space-y-4 ${
-              isSearching ? 'opacity-60 hover:opacity-100 transition-opacity duration-200' : ''
-            }`}
-          >
-            {/* Separador de fecha */}
-            <div className="flex items-center justify-center">
-              <div className="bg-white text-gray-600 text-xs px-4 py-1.5 rounded-full shadow-sm border border-gray-200/50">
-                {formatDateHeader(group.date)}
-              </div>
-            </div>
-
-            {/* Grupo de mensajes */}
-            <div className="space-y-2">
-              {group.messages.map((message, messageIndex) => (
-                <div
-                  key={message.id}
-                  className={`flex items-end gap-2 ${
-                    message.user_id === user?.id ? 'justify-end' : 'justify-start'
-                  }`}
-                >
-                  {message.user_id !== user?.id && messageIndex === 0 && (
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500/20 to-blue-600/5 flex items-center justify-center ring-2 ring-blue-500/10 shadow-md">
-                        <span className="text-sm font-semibold text-blue-600">
-                          {message.user.first_name?.[0] || '?'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  <div
-                    className={`group max-w-[70%] ${
-                      message.user_id === user?.id ? 'ml-4' : 'mr-4'
-                    }`}
-                  >
-                    {/* Nombre del remitente */}
-                    {messageIndex === 0 && (
-                      <div className={`text-sm mb-1 ${
-                        message.user_id === user?.id 
-                          ? 'text-right text-gray-600 font-medium' 
-                          : 'text-left text-gray-600 font-medium'
-                      }`}>
-                        {message.user_id === user?.id 
-                          ? 'Tú' 
-                          : `${message.user.first_name || ''} ${message.user.last_name || ''}`}
-                      </div>
-                    )}
-                    <div
-                      className={`rounded-2xl px-4 py-3 ${
-                        message.user_id === user?.id
-                          ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-br-md shadow-md hover:shadow-lg'
-                          : 'bg-white text-gray-800 shadow-md hover:shadow-lg rounded-bl-md border border-gray-100'
-                      } transition-all duration-200`}
-                    >
-                      <p className="whitespace-pre-wrap leading-relaxed">
-                        {message.content}
-                      </p>
-                      <div className={`mt-1 text-[11px] ${
-                        message.user_id === user?.id
-                          ? 'text-blue-100'
-                          : 'text-gray-500'
-                      } text-right`}>
-                        {formatDistanceToNow(new Date(message.created_at), {
-                          addSuffix: true,
-                          locale: es
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
+      <div className="messages-container">
+        {messages.map((message) => renderMessage(message))}
       </div>
 
-      {/* Área de input mejorada */}
-      <div className="border-t bg-white p-4 shadow-lg">
-        <div className="max-w-4xl mx-auto">
-          <div className="relative bg-white rounded-2xl shadow-md ring-1 ring-gray-200">
-            {/* Barra de herramientas */}
-            <div className="absolute left-2 bottom-3 flex items-center gap-1">
-              <button
-                onClick={() => setShowEmojis(!showEmojis)}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-all duration-200 text-gray-600 hover:text-gray-800 hover:shadow-md active:scale-95"
-              >
-                <Smile className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => handleAttachment('image')}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-all duration-200 text-gray-600 hover:text-gray-800 hover:shadow-md active:scale-95"
-              >
-                <Image className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => handleAttachment('file')}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-all duration-200 text-gray-600 hover:text-gray-800 hover:shadow-md active:scale-95"
-              >
-                <Paperclip className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Textarea con padding para los botones */}
-            <textarea
-              ref={textareaRef}
-              value={newMessage}
-              onChange={handleMessageChange}
-              onKeyDown={handleKeyDown}
-              placeholder="Escribe un mensaje..."
-              className="w-full bg-transparent rounded-2xl border-0 pt-4 pb-4 pl-[7.5rem] pr-14 focus:ring-2 focus:ring-blue-500/20 focus:outline-none text-gray-800 resize-none placeholder:text-gray-400 min-h-[52px]"
-              rows={1}
-            />
-
-            {/* Botón de enviar */}
-            <button
-              onClick={handleSendMessage}
-              disabled={!newMessage.trim()}
-              className="absolute right-3 bottom-3 p-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:shadow-lg disabled:opacity-50 disabled:hover:bg-blue-500 transition-all duration-200 hover:scale-105 disabled:hover:scale-100 disabled:hover:shadow-none active:scale-95"
-            >
-              <Send className="w-5 h-5" />
-            </button>
-
-            {/* Inputs ocultos para archivos */}
-            <input
-              type="file"
-              ref={fileInputRef}
-              className="hidden"
-              accept=".pdf,.doc,.docx,.txt"
-              onChange={(e) => {
-                // Manejar archivo
-                console.log(e.target.files?.[0]);
-              }}
-            />
+      <div className="message-input">
+        <div className="input-container">
+          <textarea
+            placeholder="Escribe un mensaje..."
+            value={newMessage}
+            onChange={handleMessageChange}
+            onKeyDown={handleKeyDown}
+            className="input-textarea"
+            rows={1}
+            ref={textareaRef}
+          />
+          <div className="input-actions">
             <input
               type="file"
               ref={imageInputRef}
               className="hidden"
               accept="image/*"
               onChange={(e) => {
-                // Manejar imagen
-                console.log(e.target.files?.[0]);
+                const file = e.target.files?.[0];
+                if (file) handleFileUpload(file);
               }}
             />
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept=".pdf,.doc,.docx,.txt"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFileUpload(file);
+              }}
+            />
+            <button 
+              className="input-button"
+              onClick={() => handleAttachment('image')}
+              title="Adjuntar imagen"
+            >
+              <ImageIcon className="w-5 h-5" />
+            </button>
+            <button 
+              className="input-button"
+              onClick={() => handleAttachment('file')}
+              title="Adjuntar archivo"
+            >
+              <Paperclip className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={handleSendMessage}
+              className="send-button"
+              disabled={!newMessage.trim()}
+            >
+              <Send className="w-5 h-5" />
+            </button>
           </div>
-
-          {/* Panel de emojis */}
-          {showEmojis && (
-            <div className="absolute bottom-full mb-2 bg-white rounded-lg shadow-lg p-4 border">
-              <div className="grid grid-cols-8 gap-2">
-                {['😊', '😂', '❤️', '👍', '🎉', '🤔', '😅', '🙌'].map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => {
-                      setNewMessage(prev => prev + emoji);
-                      setShowEmojis(false);
-                    }}
-                    className="text-2xl hover:bg-gray-100 p-2 rounded-lg transition-colors"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

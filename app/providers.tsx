@@ -2,6 +2,7 @@
 
 import { PropsWithChildren } from 'react'
 import { useState, useEffect } from 'react'
+import SupabaseProvider from './lib/supabase/supabase-provider'
 
 export function Providers({ children }: PropsWithChildren) {
   const [mounted, setMounted] = useState(false)
@@ -15,8 +16,8 @@ export function Providers({ children }: PropsWithChildren) {
   }
 
   return (
-    <>
+    <SupabaseProvider>
       {children}
-    </>
+    </SupabaseProvider>
   )
 } 

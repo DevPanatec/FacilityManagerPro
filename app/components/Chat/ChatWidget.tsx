@@ -50,6 +50,7 @@ export function ChatWidget({ className, isEnterprise = false }: ChatWidgetProps)
   const [view, setView] = useState<'list' | 'new' | 'chat'>('list');
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [chats, setChats] = useState<ChatRoom[]>([]);
+  const [predefinedMessage, setPredefinedMessage] = useState<string | null>(null);
   const { user, loading } = useUser();
   const pathname = usePathname();
 
@@ -72,19 +73,22 @@ export function ChatWidget({ className, isEnterprise = false }: ChatWidgetProps)
     return null;
   }
 
-  function handleNewChat(roomId: string) {
+  function handleNewChat(roomId: string, message?: string) {
     setActiveRoomId(roomId);
+    setPredefinedMessage(message || null);
     setView('chat');
   }
 
-  function handleSelectChat(roomId: string) {
+  function handleSelectChat(roomId: string, message?: string) {
     setActiveRoomId(roomId);
+    setPredefinedMessage(message || null);
     setView('chat');
   }
 
   function handleBackToList() {
     setView('list');
     setActiveRoomId(null);
+    setPredefinedMessage(null);
   }
 
   function handleStartNewChat() {
@@ -92,72 +96,44 @@ export function ChatWidget({ className, isEnterprise = false }: ChatWidgetProps)
   }
 
   return (
-    <div className={cn("fixed bottom-4 right-4 z-50", className)}>
-      {/* Botón flotante modernizado */}
+    <div className={cn("fixed bottom-6 right-6 z-50", className)}>
+      {/* Botón flotante */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all duration-200 hover:scale-105"
+        className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-blue-800 shadow-[0_8px_28px_-6px_rgba(59,130,246,0.5)] hover:shadow-[0_8px_32px_-4px_rgba(59,130,246,0.6)] hover:scale-105 transition-all duration-300"
         aria-label={isOpen ? "Cerrar chat" : "Abrir chat"}
       >
         {isOpen ? (
-          <X className="h-6 w-6" />
+          <X className="h-6 w-6 text-white" />
         ) : (
-          <MessageCircle className="h-6 w-6" />
+          <MessageCircle className="h-6 w-6 text-white" />
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-20 right-0 w-96 rounded-lg bg-background shadow-xl border border-border overflow-hidden">
-          {/* Header con título y botón de cerrar */}
-          <div className="flex flex-col h-[32rem]">
-            <div className="border-b px-4 py-3 flex items-center justify-between bg-primary/5">
-              <h2 className="font-semibold text-foreground">
-                {view === 'list' && 'Chats'}
-                {view === 'new' && 'Nuevo Chat'}
-                {view === 'chat' && 'Conversación'}
-              </h2>
-              {view === 'list' && (
-                <button
-                  onClick={handleStartNewChat}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  Nuevo Chat
-                </button>
-              )}
-              {(view === 'new' || view === 'chat') && (
-                <button
-                  onClick={handleBackToList}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              )}
-            </div>
-
-            {/* Contenido principal con fondo modernizado */}
-            <div className="flex-1 overflow-hidden bg-gradient-to-b from-gray-50 to-white">
-              {view === 'list' && (
-                <ChatList 
-                  onSelectChat={handleSelectChat} 
-                  onChatsLoaded={setChats}
-                  onNewChat={user?.role === 'enterprise' ? handleStartNewChat : undefined}
-                />
-              )}
-              {view === 'new' && (
-                <NewChatView 
-                  onClose={handleBackToList}
-                  onChatCreated={handleNewChat}
-                />
-              )}
-              {view === 'chat' && activeRoomId && (
-                <ChatView 
-                  roomId={activeRoomId}
-                  onClose={handleBackToList}
-                  chatTitle={chats.find(chat => chat.room_id === activeRoomId)?.room_name}
-                />
-              )}
-            </div>
+        <div className="absolute bottom-20 right-0 w-[420px] rounded-3xl bg-white/95 backdrop-blur-sm overflow-hidden shadow-[0_8px_40px_-12px_rgba(0,0,0,0.2)] border border-gray-200/60">
+          <div className="flex flex-col h-[650px]">
+            {view === 'list' && (
+              <ChatList 
+                onSelectChat={handleSelectChat} 
+                onChatsLoaded={setChats}
+                onNewChat={user?.role === 'enterprise' ? handleStartNewChat : undefined}
+              />
+            )}
+            {view === 'new' && (
+              <NewChatView 
+                onClose={handleBackToList}
+                onChatCreated={handleNewChat}
+              />
+            )}
+            {view === 'chat' && activeRoomId && (
+              <ChatView 
+                roomId={activeRoomId}
+                onClose={handleBackToList}
+                chatTitle={chats.find(chat => chat.room_id === activeRoomId)?.room_name}
+                predefinedMessage={predefinedMessage || undefined}
+              />
+            )}
           </div>
         </div>
       )}

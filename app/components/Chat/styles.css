@@ -1,0 +1,339 @@
+/* Estilos base del chat */
+.chat-wrapper {
+  @apply flex h-full w-full overflow-hidden rounded-3xl border border-gray-200;
+  background: #ffffff;
+  box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.15);
+}
+
+/* Sidebar de chats */
+.chat-sidebar {
+  @apply w-full flex flex-col bg-white;
+  height: 100%;
+}
+
+.chat-sidebar-header {
+  @apply px-6 py-5 bg-white sticky top-0 z-10 border-b border-gray-200;
+}
+
+.chat-sidebar-title {
+  @apply text-xl font-bold text-gray-900;
+}
+
+/* Lista de chats */
+.chat-list {
+  @apply flex-1 overflow-y-auto py-4;
+  height: calc(100% - 90px);
+}
+
+.chat-list-item {
+  @apply flex items-center gap-4 px-6 py-3.5 cursor-pointer relative 
+         hover:bg-blue-50/60 transition-all duration-200;
+  width: 100%;
+}
+
+.chat-list-avatar {
+  @apply w-12 h-12 rounded-full flex items-center justify-center text-lg font-semibold text-white flex-shrink-0;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  box-shadow: 0 4px 12px -2px rgba(59, 130, 246, 0.4);
+}
+
+.chat-list-content {
+  @apply flex-1 min-w-0 pr-3;
+}
+
+.chat-list-header {
+  @apply flex items-center justify-between mb-1;
+}
+
+.chat-list-name {
+  @apply font-semibold text-gray-900 truncate text-[15px];
+  max-width: calc(100% - 80px);
+}
+
+.chat-list-time {
+  @apply text-xs text-gray-400 flex-shrink-0;
+}
+
+.chat-list-message {
+  @apply text-sm text-gray-500 truncate leading-relaxed;
+}
+
+/* Quick actions */
+.chat-quick-actions {
+  @apply p-5 bg-white border-t-2 border-gray-100 sticky bottom-0;
+}
+
+.quick-action-button {
+  @apply w-full flex items-center justify-center gap-2 px-5 py-3.5
+         rounded-xl font-medium text-white text-sm transition-all duration-200
+         hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 active:translate-y-0;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
+
+/* Área principal del chat */
+.chat-container {
+  @apply flex-1 flex flex-col bg-gray-50/80;
+  height: 100%;
+}
+
+/* Header del chat */
+.chat-header {
+  @apply flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-200 sticky top-0 z-10;
+}
+
+.chat-header-back {
+  @apply p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-all duration-200;
+}
+
+.chat-title {
+  @apply text-lg font-semibold text-gray-800 flex-1 truncate;
+}
+
+/* Mensajes */
+.messages-container {
+  @apply flex-1 overflow-y-auto p-6 space-y-4;
+  height: calc(100% - 130px);
+  background: linear-gradient(to bottom, #f8fafc, #f1f5f9);
+}
+
+.message {
+  @apply flex items-end gap-3 max-w-[85%];
+  animation: slideIn 0.3s ease-out forwards;
+}
+
+.incoming {
+  @apply ml-0;
+}
+
+.outgoing {
+  @apply ml-auto flex-row-reverse;
+}
+
+.message-group {
+  @apply space-y-2 w-full flex flex-col;
+}
+
+.message-date {
+  @apply flex justify-center my-8;
+}
+
+.message-date-text {
+  @apply text-xs font-medium text-gray-500 px-4 py-1.5 bg-white/80 rounded-full;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.05);
+}
+
+.message-bubble {
+  @apply px-5 py-3 rounded-2xl text-sm relative;
+  transition: all 0.2s ease;
+}
+
+.message-bubble img {
+  @apply rounded-xl max-w-full;
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.1);
+}
+
+.message-actions {
+  @apply flex items-center gap-1 opacity-0 transition-opacity duration-200 absolute -top-3 right-0 bg-white 
+         rounded-full shadow-lg border border-gray-100 p-1;
+  group-hover:opacity-100;
+}
+
+.message-action-button {
+  @apply p-1.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-all duration-200;
+}
+
+.outgoing .message-actions {
+  @apply -left-12 right-auto flex-row-reverse;
+}
+
+.incoming .message-bubble {
+  @apply bg-white text-gray-900;
+  border-bottom-left-radius: 8px;
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.08);
+}
+
+.outgoing .message-bubble {
+  @apply text-white;
+  border-bottom-right-radius: 8px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  box-shadow: 0 4px 12px -4px rgba(59, 130, 246, 0.4);
+}
+
+.message-time {
+  @apply text-xs text-gray-400 mt-1.5 opacity-0;
+  transition: opacity 0.2s ease;
+}
+
+/* Mostrar tiempo al hacer hover en el mensaje */
+.message:hover > .message-time,
+.message:focus-within > .message-time {
+  @apply opacity-100;
+}
+
+/* Área de input */
+.message-input {
+  @apply p-4 bg-white border-t border-gray-200 sticky bottom-0;
+  width: 100%;
+}
+
+.input-container {
+  @apply flex items-end gap-3 bg-white rounded-2xl p-3
+         focus-within:ring-2 focus-within:ring-blue-500/30 transition-all duration-200;
+  box-shadow: 0 2px 12px -4px rgba(0, 0, 0, 0.08);
+}
+
+.input-textarea {
+  @apply flex-1 resize-none bg-transparent border-0 focus:ring-0 text-gray-700 
+         placeholder-gray-400 text-sm leading-relaxed py-2 px-1 min-h-[44px] max-h-32;
+}
+
+.input-actions {
+  @apply flex items-center gap-2 flex-shrink-0;
+}
+
+.input-button {
+  @apply p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 flex-shrink-0 transition-all duration-200;
+}
+
+.send-button {
+  @apply p-3 rounded-xl text-white flex-shrink-0 transition-all duration-200
+         hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 active:translate-y-0;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
+
+/* Badges y estados */
+.chat-list-badge {
+  @apply absolute right-6 top-1/2 -translate-y-1/2 min-w-[22px] h-[22px] 
+         flex items-center justify-center text-white text-xs font-medium rounded-full px-1.5;
+  background: linear-gradient(135deg, #4f46e5, #3b82f6);
+  box-shadow: 0 4px 12px -2px rgba(79, 70, 229, 0.4);
+}
+
+.status-indicator {
+  @apply absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white;
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+}
+
+.status-online {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+}
+
+.status-offline {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+}
+
+/* Animaciones */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Typing indicator */
+.typing-indicator {
+  @apply flex items-center gap-1.5 px-4 py-2 bg-gray-50/80 rounded-full w-fit;
+  backdrop-filter: blur(8px);
+}
+
+.typing-dot {
+  @apply w-2 h-2 rounded-full;
+  background: linear-gradient(135deg, #4f46e5, #3b82f6);
+  animation: bounce 1.4s infinite;
+}
+
+/* Archivos adjuntos */
+.image-preview {
+  @apply relative rounded-xl overflow-hidden bg-gray-50 max-w-[240px];
+}
+
+.image-preview img {
+  @apply w-full h-full object-cover;
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.1);
+}
+
+.image-preview-overlay {
+  @apply absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-200
+         flex items-center justify-center;
+}
+
+.image-preview:hover .image-preview-overlay {
+  @apply opacity-100;
+}
+
+.file-preview {
+  @apply flex items-center gap-3 p-4 bg-white/90 rounded-xl border border-gray-100
+         hover:bg-gray-50/90 transition-colors;
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.05);
+}
+
+.file-preview-icon {
+  @apply w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0;
+}
+
+.file-preview-content {
+  @apply flex-1 min-w-0;
+}
+
+.file-preview-name {
+  @apply text-sm font-medium text-gray-900 truncate;
+}
+
+.file-preview-size {
+  @apply text-xs text-gray-500;
+}
+
+.file-preview-actions {
+  @apply flex items-center gap-2;
+}
+
+.file-preview-button {
+  @apply p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .chat-wrapper {
+    @apply h-screen rounded-none;
+  }
+  
+  .chat-sidebar {
+    @apply w-full absolute inset-0 z-20;
+  }
+  
+  .chat-sidebar.hidden {
+    @apply -translate-x-full;
+  }
+}
+
+/* Mejoras de accesibilidad */
+@media (prefers-reduced-motion: reduce) {
+  .chat-list-item,
+  .chat-list-avatar,
+  .quick-action-button,
+  .message,
+  .send-button {
+    @apply transform-none transition-none;
+    animation: none;
+  }
+}
+
+.delete-chat-button {
+  @apply absolute right-4 z-10;
+}
+
+.delete-chat-button:hover {
+  @apply bg-red-50;
+  animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+} 

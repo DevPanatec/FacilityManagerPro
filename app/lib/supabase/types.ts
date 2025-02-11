@@ -1,4 +1,12 @@
-export type Database = {
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export interface Database {
   public: {
     Tables: {
       users: {
@@ -525,31 +533,105 @@ export type Database = {
       chat_messages: {
         Row: {
           id: string
-          room_id: string
-          user_id: string
-          organization_id: string
           content: string
-          type: 'text' | 'system' | 'file'
+          type: 'text' | 'image' | 'file'
           status: 'sent' | 'edited' | 'deleted'
           created_at: string
           updated_at: string
+          user_id: string
+          room_id: string
+          organization_id: string
+          file_url?: string | null
+          importance: 'normal' | 'urgent' | 'important'
+          edited: boolean
+          reactions: {
+            emoji: string
+            users: string[]
+          }[]
+          reply_to?: {
+            id: string
+            content: string
+            user: {
+              first_name: string
+              last_name: string
+            }
+          } | null
+          online_status: 'online' | 'offline'
         }
         Insert: {
-          room_id: string
-          user_id: string
-          organization_id: string
+          id?: string
           content: string
-          type?: 'text' | 'system' | 'file'
+          type?: 'text' | 'image' | 'file'
           status?: 'sent' | 'edited' | 'deleted'
-        }
-        Update: Partial<{
-          room_id: string
+          created_at?: string
+          updated_at?: string
           user_id: string
+          room_id: string
           organization_id: string
-          content: string
-          type: 'text' | 'system' | 'file'
-          status: 'sent' | 'edited' | 'deleted'
-        }>
+          file_url?: string | null
+          importance?: 'normal' | 'urgent' | 'important'
+          edited?: boolean
+          reactions?: {
+            emoji: string
+            users: string[]
+          }[]
+          reply_to?: {
+            id: string
+            content: string
+            user: {
+              first_name: string
+              last_name: string
+            }
+          } | null
+          online_status?: 'online' | 'offline'
+        }
+        Update: {
+          id?: string
+          content?: string
+          type?: 'text' | 'image' | 'file'
+          status?: 'sent' | 'edited' | 'deleted'
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+          room_id?: string
+          organization_id?: string
+          file_url?: string | null
+          importance?: 'normal' | 'urgent' | 'important'
+          edited?: boolean
+          reactions?: {
+            emoji: string
+            users: string[]
+          }[]
+          reply_to?: {
+            id: string
+            content: string
+            user: {
+              first_name: string
+              last_name: string
+            }
+          } | null
+          online_status?: 'online' | 'offline'
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_room_id_fkey"
+            columns: ["room_id"]
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       chat_message_attachments: {
         Row: {
@@ -621,23 +703,39 @@ export type Database = {
       }
       get_chat_messages_v2: {
         Args: {
-          room_uuid: string
-          msg_limit?: number
-          msg_offset?: number
+          p_room_id: string
         }
         Returns: {
           id: string
           content: string
-          type: string
+          type: 'text' | 'image' | 'file'
           status: string
           created_at: string
           updated_at: string
           user_id: string
           room_id: string
           organization_id: string
-          first_name: string
-          last_name: string
-          avatar_url: string | null
+          file_url: string | null
+          importance: 'normal' | 'urgent' | 'important'
+          edited: boolean
+          reactions: {
+            emoji: string
+            users: string[]
+          }[]
+          reply_to: {
+            id: string
+            content: string
+            user: {
+              first_name: string
+              last_name: string
+            }
+          } | null
+          online_status: 'online' | 'offline'
+          users: {
+            first_name: string
+            last_name: string
+            avatar_url: string | null
+          }
         }[]
       }
       get_chat_room_messages_v1: {
@@ -660,6 +758,23 @@ export type Database = {
           last_name: string
           avatar_url: string | null
         }[]
+      }
+      get_users_online_status: {
+        Args: {
+          p_user_ids: string[]
+        }
+        Returns: {
+          user_id: string
+          online_status: 'online' | 'offline'
+          last_seen: string
+        }[]
+      }
+      update_user_online_status: {
+        Args: {
+          p_user_id: string
+          p_status: 'online' | 'offline'
+        }
+        Returns: void
       }
     }
   }
