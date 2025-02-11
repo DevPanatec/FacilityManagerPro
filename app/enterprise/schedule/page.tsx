@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { createBrowserClient } from '@supabase/ssr'
 import Calendar from '@/app/shared/schedule/components/Calendar'
 import TaskModal from './components/TaskModal'
 
@@ -20,6 +20,10 @@ interface Task {
 }
 
 export default function EnterpriseSchedulePage() {
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
