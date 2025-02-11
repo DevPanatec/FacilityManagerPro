@@ -36,6 +36,8 @@ interface Task {
   };
   subtasks?: Task[];
   progress?: number;
+  complexity?: string;
+  sort_order?: number;
 }
 
 export default function CurrentTaskPage() {
@@ -169,8 +171,8 @@ export default function CurrentTaskPage() {
         area: mainTask.area?.[0]?.name
       });
 
-      // Obtener las tareas del área
-      const { data: areaTasks, error: tasksError } = await supabase
+      // Obtener las tareas asignadas
+      const { data: assignedTasks, error: tasksError } = await supabase
         .from('tasks')
         .select(`
           id,
@@ -180,64 +182,63 @@ export default function CurrentTaskPage() {
           priority,
           estimated_hours,
           created_at,
+          organization_id,
           type,
-          area_id,
-          organization_id
+          parent_task_id
         `)
+        .eq('organization_id', userProfile.organization_id)
         .eq('area_id', mainTask.area_id)
-        .eq('organization_id', userProfile.organization_id);
+        .eq('sala_id', mainTask.sala_id)
+        .eq('type', 'subtask')
+        .eq('parent_task_id', mainTask.id)
+        .order('created_at', { ascending: true });
 
-      console.log('Debug - TODAS las tareas del área (sin filtros):', {
+      console.log('Debug - Tareas asignadas:', {
+        parent_task_id: mainTask.id,
         area_id: mainTask.area_id,
+        sala_id: mainTask.sala_id,
         organization_id: userProfile.organization_id,
-        totalTasks: areaTasks?.length,
-        areaTasks: areaTasks?.map(t => ({
+        totalTasks: assignedTasks?.length,
+        tasks: assignedTasks?.map(t => ({
           id: t.id,
           title: t.title,
+          description: t.description,
           status: t.status,
-          type: t.type
+          parent_task_id: t.parent_task_id
         }))
       });
 
       if (tasksError) {
-        console.error('Error al obtener tareas del área:', tasksError);
-        throw new Error('Error al obtener tareas del área');
+        console.error('Error al obtener tareas asignadas:', tasksError);
+        throw new Error('Error al obtener las tareas asignadas');
       }
 
-      // Reordenar las tareas según la imagen
-      const orderedTaskDescriptions = [
-        "SE REALIZA HIGIENE DE MANOS Y SE COLOCA EL EQUIPO DE PROTECCION PERSONAL",
-        "SE CLASIFICA EL AREA SEGUN EL TIPO DE LIMPIEZA PROFUNDA",
-        "SE LIMPIA LA UNIDAD DEL PACIENTE CON WAYPALL EN METODO DE FRICCION Y ARRASTRE",
-        "SE LIMPIA LAS SUPERFICIES HORIZONTALES DEBEMOS LIMPIARLOS CON UN PAÑO EMBEBIDO DE DESINFECTANTES COMO MESAS, MOBILIARIOS DE MEDICAMENTOS, ESTACION DE ENFERMERIA, DISPENSADORES DE PAPEL TOALLA E HIGIENICO",
-        "SE ENJUAGA UNIDAD DE PACIENTE CON AGUA Y SE REALIZA METODO DE FRICCION CON WAYPALL",
-        "SE SELLO EN PISO BARRIDO HUMEDO, LIMPIEZA Y DESINFECCION CON TECNICA ZIGZAG",
-        "SE REALIZA DESINFECCION DE LA UNIDAD DEL PACIENTE CON VIRUGUAT Y WAYPALL METODO DE FRICCION",
-        "SE LIMPIA PISOS CON METODO DE DOS BALDES, BARRIDO HUMEDO Y TRAPEADO ENJABONADO Y LUEGO ENJUAGAR",
-        "AL ENTRAR AL AREA HOSPITALARIA REALIZAMOS LIMPIEZA INICIANDO POR EL TECHO, ELIMINANDO MANCHAS EN CIELO RASO",
-        "SE LIMPIA PUERTAS Y PERILLAS CON ATOMIZADOR, WAYPALL Y SEPTIN",
-        "SE REALIZA LIMPIEZA DE RODAPIES CON PAÑO Y DESINFECTANTE PANO DE MICROFIBRA",
-        "SE LIMPIA CORTINAS DE BAÑO Y SI ESTA EN MAL ESTADO SE REPORTA AL ENCARGADO DEL SERVICIO SU PRONTO CAMBIO",
-        "SE REALIZA LIMPIEZA DE VENTANAS FIJAS O PERSIANAS CON PAÑOS DE MICROFIBRA Y CRYSTAL MIX",
-        "LA SOLUCION DESINFECTANTE SE DEBE PREPARAR EN EL MOMENTO DE USO Y DESCARTAR LUEGO DE 24 HORAS",
-        "EN LAS AREAS DE AISLAMIENTO REALIZAMOS PROCEDIMIENTO CON EQUIPO EXCLUSIVO ADECUADO Y SE INICIA LA LIMPIEZA DE LIMPIO A LO SUCIO"
-      ];
+      if (!assignedTasks || assignedTasks.length === 0) {
+        console.log('No se encontraron tareas asignadas');
+        setCurrentTask({
+          ...mainTask,
+          subtasks: []
+        });
+        setLoading(false);
+        return;
+      }
 
-      const formattedTasks = orderedTaskDescriptions.map((description, index) => ({
-        id: `task-${index + 1}`,
-        title: `Paso ${index + 1}`,
-        description: description,
-        status: 'pending' as Task['status'],
-        priority: 'medium' as Task['priority'],
+      // Formatear las tareas asignadas
+      const formattedTasks = assignedTasks.map(task => ({
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        status: task.status as Task['status'],
+        priority: task.priority as Task['priority'] || 'medium',
         assigned_to: mainTask.assigned_to,
-        created_at: mainTask.created_at,
+        created_at: task.created_at,
         due_date: mainTask.due_date,
         area_id: mainTask.area_id,
         organization_id: mainTask.organization_id,
-        estimated_hours: 0.5
+        estimated_hours: task.estimated_hours || 0.5
       }));
 
-      // Actualizar la tarea principal con las subtareas
+      // Actualizar la tarea principal con las tareas asignadas
       const formattedTask: Task = {
         ...mainTask,
         subtasks: formattedTasks
@@ -609,237 +610,282 @@ export default function CurrentTaskPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div style={{ backgroundColor: '#ffffff' }} className="rounded-lg shadow-lg p-6 mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 style={{ color: '#1f2937' }} className="text-3xl font-bold">
-            Tareas {currentTask?.sala?.nombre || ''}
-          </h1>
-          <div className="flex items-center space-x-4">
-            <span style={{ color: '#4b5563' }}>
-              <FaClock className="inline mr-2" />
-              {elapsedTime}
-            </span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div>
-            <h2 style={{ color: '#1f2937' }} className="text-xl font-semibold mb-4">Detalles de la Asignación</h2>
-            <div className="space-y-4">
-              <div className="flex items-start">
-                <FaBuilding style={{ color: '#6b7280' }} className="mt-1 mr-3" />
-                <div>
-                  <p style={{ color: '#374151' }} className="font-medium">Ubicación</p>
-                  <p style={{ color: '#4b5563' }}>{currentTask.sala?.nombre || 'No especificado'} - {currentTask.area?.name || 'No especificado'}</p>
-                </div>
-              </div>
-              <div className="flex items-start">
-                <FaUserCircle style={{ color: '#6b7280' }} className="mt-1 mr-3" />
-                <div>
-                  <p style={{ color: '#374151' }} className="font-medium">Asignado a</p>
-                  <p style={{ color: '#4b5563' }}>
-                    {currentTask.assignee 
-                      ? `${currentTask.assignee.first_name} ${currentTask.assignee.last_name}`
-                      : 'No asignado'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start">
-                <FaHourglassHalf style={{ color: '#6b7280' }} className="mt-1 mr-3" />
-                <div>
-                  <p style={{ color: '#374151' }} className="font-medium">Horario</p>
-                  <p style={{ color: '#4b5563' }}>
-                    {currentTask.start_time || ''} - {currentTask.end_time || ''}
-                  </p>
-                </div>
-              </div>
+    <>
+      <div className="container mx-auto px-4 py-8">
+        <div style={{ backgroundColor: '#ffffff' }} className="rounded-lg shadow-lg p-6 mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <h1 style={{ color: '#1f2937' }} className="text-3xl font-bold">
+              Tareas {currentTask?.sala?.nombre || ''}
+            </h1>
+            <div className="flex items-center space-x-4">
+              <span style={{ color: '#4b5563' }}>
+                <FaClock className="inline mr-2" />
+                {elapsedTime}
+              </span>
             </div>
           </div>
 
-          <div>
-            <h2 style={{ color: '#1f2937' }} className="text-xl font-semibold mb-4">Tareas del Área</h2>
-            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
-              {currentTask.subtasks && currentTask.subtasks.length > 0 ? (
-                currentTask.subtasks.map((task, index) => (
-                  <div key={task.id} style={{ backgroundColor: '#ffffff', borderColor: '#e5e7eb' }} className="flex items-start space-x-2 p-3 rounded-lg border shadow-sm">
-                    <div style={{ backgroundColor: '#dbeafe', color: '#2563eb' }} className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center font-semibold text-sm">
-                      {index + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={task.status === 'completed'}
-                          onChange={() => handleSubtaskStatusChange(task)}
-                          style={{ color: '#2563eb' }}
-                          className="mt-1 h-4 w-4 rounded border-gray-300"
-                        />
-                        <div>
-                          <h3 style={{ color: '#111827' }} className="font-medium text-sm">{task.title}</h3>
-                          <p style={{ color: '#4b5563' }} className="text-sm mt-0.5 line-clamp-2">{task.description}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div>
+              <h2 style={{ color: '#1f2937' }} className="text-xl font-semibold mb-4">Detalles de la Asignación</h2>
+              <div className="space-y-4">
+                <div className="flex items-start">
+                  <FaBuilding style={{ color: '#6b7280' }} className="mt-1 mr-3" />
+                  <div>
+                    <p style={{ color: '#374151' }} className="font-medium">Ubicación</p>
+                    <p style={{ color: '#4b5563' }}>{currentTask.sala?.nombre || 'No especificado'} - {currentTask.area?.name || 'No especificado'}</p>
+                  </div>
+                </div>
+                <div className="flex items-start">
+                  <FaUserCircle style={{ color: '#6b7280' }} className="mt-1 mr-3" />
+                  <div>
+                    <p style={{ color: '#374151' }} className="font-medium">Asignado a</p>
+                    <p style={{ color: '#4b5563' }}>
+                      {currentTask.assignee 
+                        ? `${currentTask.assignee.first_name} ${currentTask.assignee.last_name}`
+                        : 'No asignado'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start">
+                  <FaHourglassHalf style={{ color: '#6b7280' }} className="mt-1 mr-3" />
+                  <div>
+                    <p style={{ color: '#374151' }} className="font-medium">Horario</p>
+                    <p style={{ color: '#4b5563' }}>
+                      {currentTask.start_time || ''} - {currentTask.end_time || ''}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h2 style={{ color: '#1f2937' }} className="text-xl font-semibold mb-4">Tareas del Área</h2>
+              <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                {currentTask.subtasks && currentTask.subtasks.length > 0 ? (
+                  currentTask.subtasks.map((task, index) => (
+                    <div 
+                      key={task.id} 
+                      style={{ backgroundColor: task.status === 'completed' ? '#f0fdf4' : '#ffffff', borderColor: '#e5e7eb' }} 
+                      className="flex items-start space-x-2 p-4 rounded-lg border shadow-sm hover:shadow-md transition-all duration-200"
+                    >
+                      <div 
+                        style={{ 
+                          backgroundColor: task.status === 'completed' ? '#dcfce7' : '#dbeafe', 
+                          color: task.status === 'completed' ? '#16a34a' : '#2563eb' 
+                        }} 
+                        className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm"
+                      >
+                        {index + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={task.status === 'completed'}
+                            onChange={() => handleSubtaskStatusChange(task)}
+                            style={{ color: '#2563eb' }}
+                            className="mt-1.5 h-5 w-5 rounded border-gray-300 focus:ring-blue-500 transition-colors duration-200"
+                          />
+                          <div className="flex-1">
+                            <h3 
+                              style={{ 
+                                color: task.status === 'completed' ? '#16a34a' : '#111827',
+                                textDecoration: task.status === 'completed' ? 'line-through' : 'none'
+                              }} 
+                              className="font-medium text-base transition-all duration-200"
+                            >
+                              {task.title}
+                            </h3>
+                            <p 
+                              style={{ 
+                                color: task.status === 'completed' ? '#4ade80' : '#4b5563',
+                                textDecoration: task.status === 'completed' ? 'line-through' : 'none'
+                              }} 
+                              className="text-sm mt-1 transition-all duration-200"
+                            >
+                              {task.description}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center py-6">
+                    <div style={{ backgroundColor: '#f3f4f6' }} className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-3">
+                      <FaListUl style={{ color: '#9ca3af' }} className="w-6 h-6" />
+                    </div>
+                    <p style={{ color: '#6b7280' }} className="text-sm">No hay tareas disponibles para esta área</p>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-6">
-                  <div style={{ backgroundColor: '#f3f4f6' }} className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-3">
-                    <FaListUl style={{ color: '#9ca3af' }} className="w-6 h-6" />
-                  </div>
-                  <p style={{ color: '#6b7280' }} className="text-sm">No hay tareas disponibles para esta área</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-2">
+              <h3 style={{ color: '#1f2937' }} className="text-lg font-semibold">Progreso</h3>
+              <span style={{ color: '#4b5563' }} className="text-sm font-medium">{progress}%</span>
+            </div>
+            <div style={{ backgroundColor: '#e5e7eb' }} className="w-full rounded-full h-2.5">
+              <div
+                style={{ backgroundColor: '#2563eb', width: `${progress}%` }}
+                className="h-2.5 rounded-full transition-all duration-500"
+              ></div>
+            </div>
+          </div>
+
+          <div className="mb-8">
+            <h3 style={{ color: '#1f2937' }} className="text-lg font-semibold mb-4">Evidencia Fotográfica</h3>
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="image/*"
+              onChange={handleFileChange}
+            />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Sección Antes */}
+              <div style={{ backgroundColor: '#f9fafb' }} className="rounded-lg p-4">
+                <h4 style={{ color: '#374151' }} className="font-medium mb-3">Antes</h4>
+                <div 
+                  onClick={() => handleImageClick('before')}
+                  style={{ backgroundColor: '#f3f4f6' }}
+                  className="aspect-video rounded-lg relative overflow-hidden cursor-pointer"
+                >
+                  {images.before ? (
+                    <div className="relative w-full h-full">
+                    <img 
+                      src={images.before} 
+                      alt="Antes" 
+                        className="absolute inset-0 w-full h-full object-cover"
+                        onError={(e) => {
+                          console.error('Error al cargar la imagen:', e);
+                          e.currentTarget.src = '/placeholder-image.png';
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ borderColor: '#d1d5db' }} className="flex flex-col items-center justify-center h-full border-2 border-dashed">
+                      <svg style={{ color: '#9ca3af' }} className="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      <span style={{ color: '#6b7280' }} className="text-sm">Agregar foto</span>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+
+              {/* Sección Durante */}
+              <div style={{ backgroundColor: '#f9fafb' }} className="rounded-lg p-4">
+                <h4 style={{ color: '#374151' }} className="font-medium mb-3">Durante</h4>
+                <div 
+                  onClick={() => handleImageClick('during')}
+                  style={{ backgroundColor: '#f3f4f6' }}
+                  className="aspect-video rounded-lg relative overflow-hidden cursor-pointer"
+                >
+                  {images.during ? (
+                    <div className="relative w-full h-full">
+                    <img 
+                      src={images.during} 
+                      alt="Durante" 
+                        className="absolute inset-0 w-full h-full object-cover"
+                        onError={(e) => {
+                          console.error('Error al cargar la imagen:', e);
+                          e.currentTarget.src = '/placeholder-image.png';
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ borderColor: '#d1d5db' }} className="flex flex-col items-center justify-center h-full border-2 border-dashed">
+                      <svg style={{ color: '#9ca3af' }} className="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      <span style={{ color: '#6b7280' }} className="text-sm">Agregar foto</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Sección Después */}
+              <div style={{ backgroundColor: '#f9fafb' }} className="rounded-lg p-4">
+                <h4 style={{ color: '#374151' }} className="font-medium mb-3">Después</h4>
+                <div 
+                  onClick={() => handleImageClick('after')}
+                  style={{ backgroundColor: '#f3f4f6' }}
+                  className="aspect-video rounded-lg relative overflow-hidden cursor-pointer"
+                >
+                  {images.after ? (
+                    <div className="relative w-full h-full">
+                    <img 
+                      src={images.after} 
+                      alt="Después" 
+                        className="absolute inset-0 w-full h-full object-cover"
+                        onError={(e) => {
+                          console.error('Error al cargar la imagen:', e);
+                          e.currentTarget.src = '/placeholder-image.png';
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ borderColor: '#d1d5db' }} className="flex flex-col items-center justify-center h-full border-2 border-dashed">
+                      <svg style={{ color: '#9ca3af' }} className="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      <span style={{ color: '#6b7280' }} className="text-sm">Agregar foto</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
+            <p style={{ color: '#6b7280' }} className="text-sm mt-2 text-center">
+              {uploading ? 'Subiendo imagen...' : 'Haz clic en cada sección para agregar una foto del proceso'}
+            </p>
           </div>
         </div>
 
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <h3 style={{ color: '#1f2937' }} className="text-lg font-semibold">Progreso</h3>
-            <span style={{ color: '#4b5563' }} className="text-sm font-medium">{progress}%</span>
-          </div>
-          <div style={{ backgroundColor: '#e5e7eb' }} className="w-full rounded-full h-2.5">
-            <div
-              style={{ backgroundColor: '#2563eb', width: `${progress}%` }}
-              className="h-2.5 rounded-full transition-all duration-500"
-            ></div>
-          </div>
-        </div>
-
-        <div className="mb-8">
-          <h3 style={{ color: '#1f2937' }} className="text-lg font-semibold mb-4">Evidencia Fotográfica</h3>
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            accept="image/*"
-            onChange={handleFileChange}
-          />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Sección Antes */}
-            <div style={{ backgroundColor: '#f9fafb' }} className="rounded-lg p-4">
-              <h4 style={{ color: '#374151' }} className="font-medium mb-3">Antes</h4>
-              <div 
-                onClick={() => handleImageClick('before')}
-                style={{ backgroundColor: '#f3f4f6' }}
-                className="aspect-video rounded-lg relative overflow-hidden cursor-pointer"
-              >
-                {images.before ? (
-                  <div className="relative w-full h-full">
-                  <img 
-                    src={images.before} 
-                    alt="Antes" 
-                      className="absolute inset-0 w-full h-full object-cover"
-                      onError={(e) => {
-                        console.error('Error al cargar la imagen:', e);
-                        e.currentTarget.src = '/placeholder-image.png';
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div style={{ borderColor: '#d1d5db' }} className="flex flex-col items-center justify-center h-full border-2 border-dashed">
-                    <svg style={{ color: '#9ca3af' }} className="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    <span style={{ color: '#6b7280' }} className="text-sm">Agregar foto</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Sección Durante */}
-            <div style={{ backgroundColor: '#f9fafb' }} className="rounded-lg p-4">
-              <h4 style={{ color: '#374151' }} className="font-medium mb-3">Durante</h4>
-              <div 
-                onClick={() => handleImageClick('during')}
-                style={{ backgroundColor: '#f3f4f6' }}
-                className="aspect-video rounded-lg relative overflow-hidden cursor-pointer"
-              >
-                {images.during ? (
-                  <div className="relative w-full h-full">
-                  <img 
-                    src={images.during} 
-                    alt="Durante" 
-                      className="absolute inset-0 w-full h-full object-cover"
-                      onError={(e) => {
-                        console.error('Error al cargar la imagen:', e);
-                        e.currentTarget.src = '/placeholder-image.png';
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div style={{ borderColor: '#d1d5db' }} className="flex flex-col items-center justify-center h-full border-2 border-dashed">
-                    <svg style={{ color: '#9ca3af' }} className="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    <span style={{ color: '#6b7280' }} className="text-sm">Agregar foto</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Sección Después */}
-            <div style={{ backgroundColor: '#f9fafb' }} className="rounded-lg p-4">
-              <h4 style={{ color: '#374151' }} className="font-medium mb-3">Después</h4>
-              <div 
-                onClick={() => handleImageClick('after')}
-                style={{ backgroundColor: '#f3f4f6' }}
-                className="aspect-video rounded-lg relative overflow-hidden cursor-pointer"
-              >
-                {images.after ? (
-                  <div className="relative w-full h-full">
-                  <img 
-                    src={images.after} 
-                    alt="Después" 
-                      className="absolute inset-0 w-full h-full object-cover"
-                      onError={(e) => {
-                        console.error('Error al cargar la imagen:', e);
-                        e.currentTarget.src = '/placeholder-image.png';
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div style={{ borderColor: '#d1d5db' }} className="flex flex-col items-center justify-center h-full border-2 border-dashed">
-                    <svg style={{ color: '#9ca3af' }} className="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    <span style={{ color: '#6b7280' }} className="text-sm">Agregar foto</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <p style={{ color: '#6b7280' }} className="text-sm mt-2 text-center">
-            {uploading ? 'Subiendo imagen...' : 'Haz clic en cada sección para agregar una foto del proceso'}
-          </p>
+        <div className="flex justify-end space-x-4">
+          <button
+            onClick={() => router.push('/admin/tasks')}
+            style={{ borderColor: '#d1d5db', color: '#374151' }}
+            className="px-6 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Volver
+          </button>
+          <button
+            onClick={handleDeleteAssignment}
+            style={{ backgroundColor: '#ef4444', color: '#ffffff' }}
+            className="px-6 py-2 rounded-lg transition-colors"
+          >
+            Eliminar Asignación
+          </button>
+          <button
+            onClick={handleCompleteTask}
+            style={{ backgroundColor: '#22c55e', color: '#ffffff' }}
+            className="px-6 py-2 rounded-lg transition-colors"
+          >
+            Marcar como completada
+          </button>
         </div>
       </div>
 
-      <div className="flex justify-end space-x-4">
-        <button
-          onClick={() => router.push('/admin/tasks')}
-          style={{ borderColor: '#d1d5db', color: '#374151' }}
-          className="px-6 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          Volver
-        </button>
-        <button
-          onClick={handleDeleteAssignment}
-          style={{ backgroundColor: '#ef4444', color: '#ffffff' }}
-          className="px-6 py-2 rounded-lg transition-colors"
-        >
-          Eliminar Asignación
-        </button>
-        <button
-          onClick={handleCompleteTask}
-          style={{ backgroundColor: '#22c55e', color: '#ffffff' }}
-          className="px-6 py-2 rounded-lg transition-colors"
-        >
-          Marcar como completada
-        </button>
-      </div>
-    </div>
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #888;
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #666;
+        }
+      `}</style>
+    </>
   );
 } 
