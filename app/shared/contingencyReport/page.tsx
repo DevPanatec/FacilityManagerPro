@@ -26,7 +26,13 @@ interface ContingencyReport {
   status: 'Pendiente' | 'Completada';
   type: string;
   area: string;
+  subarea: string;
   sala?: string;
+  subareas: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+  }>;
   start_time?: string;
   end_time?: string;
   attachments: Array<{
@@ -73,10 +79,16 @@ interface SupabaseReport {
   area: {
     id: string;
     name: string;
-    sala: {
+    subareas: {
       id: string;
       nombre: string;
-    } | null;
+      descripcion: string | null;
+      area_id: string;
+      sala: {
+        id: string;
+        nombre: string;
+      } | null;
+    }[] | null;
   };
 }
 
@@ -196,9 +208,11 @@ export default function ReportsPage() {
           area:areas!area_id(
             id, 
             name,
-            sala:salas!sala_id(
+            sala_id,
+            sala:salas(
               id,
-              nombre
+              nombre,
+              descripcion
             )
           ),
           organization:organizations!organization_id(id, name)
@@ -239,15 +253,24 @@ export default function ReportsPage() {
 
       // Mapear los reportes con la información
       const reportsWithOrgs = reports.map((report: any) => {
+        const sala = report.area?.sala;
+        
         return {
           id: report.id,
           title: report.title,
           description: report.description,
           date: report.created_at,
           status: report.status === 'completed' ? 'Completada' : 'Pendiente',
-          type: report.title || 'No especificado',
+          type: report.type || 'No especificado',
           area: report.area?.name || 'No especificada',
-          sala: report.area?.sala?.nombre || 'No especificada',
+          subarea: report.area?.name || 'No especificada',
+          sala: sala?.nombre || 'No especificada',
+          subareas: [
+            { id: '1', name: 'CAMAS 1 A LA 7', description: null },
+            { id: '2', name: 'BAÑO DE CUBICULO 1', description: null },
+            { id: '3', name: 'ESTACION DE ENFERMERIA', description: null },
+            { id: '4', name: 'CUARTO SEPTICO', description: null }
+          ],
           attachments: report.attachments || [],
           creator: report.creator,
           organization: {
@@ -281,11 +304,10 @@ export default function ReportsPage() {
   };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    const newFiles = acceptedFiles.filter(file => file.type.startsWith('image/'));
-    setImages(prev => [...prev, ...newFiles]);
+    setImages(prev => [...prev, ...acceptedFiles]);
     
     // Crear URLs para preview
-    const newUrls = newFiles.map(file => URL.createObjectURL(file));
+    const newUrls = acceptedFiles.map(file => URL.createObjectURL(file));
     setImageUrls(prev => [...prev, ...newUrls]);
   }, []);
 
@@ -300,22 +322,12 @@ export default function ReportsPage() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: {
-      'image/*': ['.jpeg', '.jpg', '.png', '.gif']
-    },
-    maxSize: 5 * 1024 * 1024 // 5MB
+    multiple: true
   });
 
   const handleSaveReport = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      console.log('Iniciando creación de reporte con datos:', {
-        selectedArea,
-        contingencyType,
-        description,
-        images
-      });
-
       if (!userData?.organization_id) {
         throw new Error('Usuario no tiene organización asignada');
       }
@@ -326,100 +338,187 @@ export default function ReportsPage() {
       }
 
       // Verificar autenticación
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) throw userError || new Error('No se pudo obtener el usuario');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        console.error('Error de autenticación:', sessionError);
+        throw new Error('No se pudo verificar la sesión del usuario');
+      }
+
+      console.log('Sesión verificada:', {
+        userId: session.user.id,
+        role: session.user.role,
+        token: session.access_token.substring(0, 20) + '...'
+      });
 
       // Primero subimos las imágenes si hay alguna
       const uploadedUrls: string[] = [];
       if (images.length > 0) {
-        for (const image of images) {
-          const fileExt = image.name.split('.').pop()?.toLowerCase();
-          const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
-          const filePath = `${userData.organization_id}/${fileName}`;
+        try {
+          console.log('Iniciando subida de imágenes:', {
+            cantidadImagenes: images.length,
+            organizacionId: userData.organization_id,
+            accessToken: session.access_token.substring(0, 20) + '...'
+          });
 
-          const arrayBuffer = await image.arrayBuffer();
-          const blob = new Blob([arrayBuffer], { type: image.type });
+          for (let i = 0; i < images.length; i++) {
+            const image = images[i];
+            try {
+              const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${image.name.split('.').pop()}`;
+              const filePath = `${userData.organization_id}/${fileName}`;
 
-          const uploadResult = await supabase.storage
-            .from('Reports')
-            .upload(filePath, blob, {
-              contentType: image.type,
-              cacheControl: '3600',
-              upsert: true
-            });
+              console.log(`Procesando archivo ${i + 1}/${images.length}:`, {
+                nombre: image.name,
+                tipo: image.type,
+                tamaño: `${(image.size / 1024 / 1024).toFixed(2)}MB`,
+                ruta: filePath
+              });
 
-          if (uploadResult.error) {
-            console.error('Error al subir imagen:', uploadResult.error);
-            throw uploadResult.error;
+              // Obtener el token de la sesión actual
+              const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+              if (sessionError || !session) {
+                throw new Error('No hay sesión activa');
+              }
+
+              // Configurar cliente de storage con token de autenticación
+              const { data: storageData, error: uploadError } = await supabase.storage
+                .from('Reports')
+                .upload(filePath, image, {
+                  cacheControl: '3600',
+                  upsert: true,
+                  contentType: image.type,
+                  duplex: 'half'
+                });
+
+              if (uploadError) {
+                console.error('Error detallado de subida:', {
+                  mensaje: uploadError.message,
+                  error: uploadError,
+                  contexto: {
+                    archivo: image.name,
+                    ruta: filePath,
+                    organizacionId: userData.organization_id,
+                    token: session.access_token.substring(0, 20) + '...'
+                  }
+                });
+                throw new Error(`Error al subir archivo ${i + 1}: ${uploadError.message}`);
+              }
+
+              if (!storageData?.path) {
+                throw new Error('No se recibió la ruta del archivo subido');
+              }
+
+              // Obtener la URL pública
+              const { data: urlData } = supabase.storage
+                .from('Reports')
+                .getPublicUrl(storageData.path);
+
+              if (!urlData?.publicUrl) {
+                throw new Error(`No se pudo obtener la URL pública para el archivo ${i + 1}`);
+              }
+
+              uploadedUrls.push(urlData.publicUrl);
+              console.log(`Archivo ${i + 1} subido exitosamente:`, {
+                url: urlData.publicUrl,
+                ruta: storageData.path
+              });
+            } catch (imageError) {
+              console.error(`Error al procesar archivo ${i + 1}:`, {
+                error: imageError instanceof Error ? imageError.message : 'Error desconocido',
+                archivo: {
+                  nombre: image.name,
+                  tipo: image.type,
+                  tamaño: image.size
+                }
+              });
+              throw imageError;
+            }
           }
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('Reports')
-            .getPublicUrl(filePath);
-
-          uploadedUrls.push(publicUrl);
+        } catch (error) {
+          console.error('Error al procesar archivos:', {
+            mensaje: error instanceof Error ? error.message : 'Error desconocido',
+            tipo: typeof error,
+            detalles: error instanceof Error ? error.stack : undefined
+          });
+          throw error;
         }
       }
 
-      // Crear el nuevo reporte con todos los campos requeridos
-      const newReport = {
-        title: contingencyType,
-        description: description,
-        area_id: selectedArea,
-        organization_id: userData.organization_id,
-        created_by: user.id,
-        status: 'pending',
-        priority: 'medium'
-      };
+      // Crear el nuevo reporte
+      try {
+        const newReport = {
+          title: contingencyType,
+          description: JSON.stringify({
+            area: selectedArea,
+            sala: selectedSala,
+            fecha: new Date().toLocaleDateString(),
+            horaInicio: new Date().toLocaleTimeString(),
+            horaFin: new Date().toLocaleTimeString(),
+            actividades: orderedTaskDescriptions,
+            imagenes: uploadedUrls.reduce((acc, url, index) => {
+              if (index === 0) acc.inicial = url;
+              else if (index === 1) acc.durante = url;
+              else if (index === 2) acc.final = url;
+              return acc;
+            }, {} as { inicial?: string; durante?: string; final?: string })
+          }),
+          area_id: selectedArea,
+          organization_id: userData.organization_id,
+          created_by: session.user.id,
+          status: 'pending',
+          priority: 'medium',
+          assigned_to: session.user.id
+        };
 
-      console.log('Intentando crear reporte con datos:', newReport);
+        const { data, error: insertError } = await supabase
+          .from('contingencies')
+          .insert([newReport])
+          .select('*')
+          .single();
 
-      // Insertar el reporte usando el cliente autenticado
-      const { data, error } = await supabase
-        .from('contingencies')
-        .insert([newReport])
-        .select('*')
-        .single();
+        if (insertError) {
+          throw insertError;
+        }
 
-      if (error) {
-        console.error('Error específico de Supabase:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
+        console.log('Reporte creado exitosamente:', {
+          id: data.id,
+          titulo: data.title,
+          estado: data.status,
+          imagenes: uploadedUrls.length
         });
-        throw error;
+
+        // Actualizar la lista de reportes
+        await loadData();
+        
+        // Limpiar el formulario
+        setContingencyType('');
+        setSelectedSala(null);
+        setSelectedArea('');
+        setDescription('');
+        setImages([]);
+        setImageUrls([]);
+
+        toast.success('Reporte creado exitosamente');
+      } catch (error: any) {
+        console.error('Error al guardar el reporte:', {
+          mensaje: error?.message || 'Error desconocido',
+          detalles: error?.details || {},
+          codigo: error?.code || ''
+        });
+        
+        toast.error(error?.message || 'Error al guardar el reporte');
       }
-
-      console.log('Reporte creado exitosamente:', data);
-
-      // Actualizar la lista de reportes
-      await loadData();
-      
-      // Limpiar el formulario
-      setContingencyType('');
-      setSelectedSala(null);
-      setSelectedArea('');
-      setDescription('');
-      setImages([]);
-      setImageUrls([]);
-
-      toast.success('Reporte creado exitosamente');
     } catch (error: any) {
       console.error('Error detallado al guardar el reporte:', {
-        message: error?.message || 'Error desconocido',
-        details: error?.details || {},
-        hint: error?.hint || '',
-        code: error?.code || '',
-        fullError: JSON.stringify(error, null, 2)
+        tipo: typeof error,
+        mensaje: error?.message || 'Error desconocido',
+        detalles: error?.details || {},
+        sugerencia: error?.hint || '',
+        codigo: error?.code || '',
+        stack: error?.stack,
+        errorCompleto: error
       });
       
-      let errorMessage = 'Error al guardar el reporte';
-      if (error?.message) {
-        errorMessage = `Error: ${error.message}`;
-      }
-      
-      toast.error(errorMessage);
+      toast.error(error?.message || 'Error al guardar el reporte');
     }
   };
 
@@ -473,13 +572,13 @@ export default function ReportsPage() {
       if (!iframeDoc) throw new Error('No se pudo crear el iframe');
 
       let reportData: ReportData = {
-        title: selectedReport.title,
-        area: selectedReport.area,
-        sala: selectedReport.sala,
+        title: selectedReport.title || 'Reporte de Contingencia',
+        area: selectedReport.area || '',
+        sala: selectedReport.sala || '',
         fecha: new Date(selectedReport.date).toLocaleDateString(),
-        horaInicio: selectedReport.start_time,
-        horaFin: selectedReport.end_time,
-        actividades: [],
+        horaInicio: selectedReport.start_time || new Date().toLocaleTimeString(),
+        horaFin: selectedReport.end_time || new Date().toLocaleTimeString(),
+        actividades: orderedTaskDescriptions,
         imagenes: {}
       };
 
@@ -492,190 +591,369 @@ export default function ReportsPage() {
         }
       }
 
-      // Crear dos páginas HTML separadas
-      const page1 = document.createElement('div');
-      const page2 = document.createElement('div');
+      // Dividir las actividades en grupos de 5 para múltiples páginas
+      const activitiesByPage = [];
+      for (let i = 0; i < orderedTaskDescriptions.length; i += 5) {
+        activitiesByPage.push(orderedTaskDescriptions.slice(i, i + 5));
+      }
 
-      // Escribir el contenido en el iframe con estilos mínimos
+      // Escribir el contenido en el iframe con estilos mejorados
       iframeDoc.write(`
         <!DOCTYPE html>
         <html>
           <head>
             <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
             <style>
-              @page { margin: 0; }
+              @page { 
+                margin: 20mm;
+                size: A4;
+              }
               body { 
                 margin: 0; 
-                background: rgb(255,255,255);
                 font-family: 'Poppins', Arial, sans-serif;
-                color: #000000;
+                color: #1a1a1a;
+                line-height: 1.6;
               }
               .page { 
                 width: 210mm;
-                height: 297mm;
+                min-height: 297mm;
                 padding: 20mm;
                 box-sizing: border-box;
                 background: white;
                 position: relative;
+                page-break-after: always;
+              }
+              .page:last-child {
+                page-break-after: avoid;
               }
               .logos { 
                 display: flex; 
                 justify-content: space-between; 
                 align-items: center; 
-                margin-bottom: 20px;
+                margin-bottom: 30px;
                 width: 100%;
               }
               .logos img { 
-                height: 40px; 
+                height: 60px; 
                 width: auto; 
                 object-fit: contain;
               }
-              .logos img.main-logo {
-                height: 60px;
-              }
               .header {
                 text-align: center;
-                margin-bottom: 30px;
+                margin-bottom: 40px;
+                border-bottom: 3px solid #2563eb;
+                padding-bottom: 20px;
               }
               .header h1 {
-                font-size: 20px;
-                font-weight: 500;
+                font-size: 28px;
+                font-weight: 600;
                 margin: 0;
-                margin-bottom: 10px;
+                margin-bottom: 15px;
                 letter-spacing: 1px;
+                color: #1e40af;
+                text-transform: uppercase;
               }
               .header p {
                 font-size: 18px;
-                margin: 0;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
+                margin: 5px 0;
+                color: #4b5563;
+              }
+              .subheader {
+                background: #f8fafc;
+                padding: 20px;
+                border-radius: 12px;
+                margin-bottom: 30px;
+                border: 1px solid #e2e8f0;
+              }
+              .subheader p {
+                margin: 8px 0;
+                font-size: 15px;
+                color: #4b5563;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+              }
+              .subheader strong {
+                color: #1e40af;
+                min-width: 120px;
+                display: inline-block;
               }
               .content {
-                font-size: 12px;
-                line-height: 2;
-              }
-              .info p {
-                margin: 10px 0;
-                font-size: 12px;
-                line-height: 1.8;
-              }
-              .info .time-row {
-                display: flex;
-                gap: 30px;
-                margin-bottom: 15px;
-              }
-              .activities {
-                margin-top: 20px;
-              }
-              .activities h3 {
                 font-size: 14px;
-                font-weight: 500;
-                margin-bottom: 15px;
-              }
-              .activities p {
-                margin: 12px 0;
-                font-size: 11px;
                 line-height: 1.8;
-                padding-left: 30px;
-                position: relative;
-                word-spacing: 1px;
               }
-              .activities p:before {
-                content: counter(task);
-                counter-increment: task;
-                position: absolute;
-                left: 0;
-                font-weight: 500;
+              .section {
+                margin-bottom: 30px;
+              }
+              .section-title {
+                font-size: 20px;
+                font-weight: 600;
+                color: #1e40af;
+                margin-bottom: 20px;
+                padding-bottom: 10px;
+                border-bottom: 2px solid #e5e7eb;
+                text-transform: uppercase;
+              }
+              .area-info {
+                background: #f8fafc;
+                padding: 20px;
+                border-radius: 12px;
+                margin-bottom: 20px;
+                border: 1px solid #e2e8f0;
+              }
+              .area-info p {
+                margin: 8px 0;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+              }
+              .area-info strong {
+                color: #1e40af;
+                min-width: 100px;
+                display: inline-block;
+              }
+              .task-item {
+                background: #f8fafc;
+                padding: 15px;
+                margin-bottom: 15px;
+                border-radius: 8px;
+                border: 1px solid #e2e8f0;
+                display: flex;
+                align-items: flex-start;
+                gap: 15px;
+              }
+              .task-number {
+                background: #2563eb;
+                color: white;
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: 600;
+                flex-shrink: 0;
+              }
+              .task-text {
+                color: #4b5563;
+                font-size: 14px;
+                line-height: 1.6;
               }
               .evidence {
+                margin-top: 40px;
+              }
+              .evidence-title {
+                font-size: 20px;
+                font-weight: 600;
+                color: #1e40af;
+                margin-bottom: 25px;
+                text-transform: uppercase;
+              }
+              .evidence-grid {
+                display: grid;
+                grid-template-columns: repeat(1, 1fr);
+                gap: 30px;
+              }
+              .evidence-item {
                 text-align: center;
-                margin-top: 25px;
+                page-break-inside: avoid;
+                background: #f8fafc;
+                padding: 20px;
+                border-radius: 12px;
+                border: 1px solid #e2e8f0;
               }
-              .evidence h2 {
-                font-size: 16px;
-                margin-bottom: 15px;
-                color: #1e3a8a;
-              }
-              .evidence-img {
-                margin-bottom: 20px;
-              }
-              .evidence-img p {
-                font-weight: 500;
-                margin-bottom: 8px;
-                text-align: left;
-                color: #1e3a8a;
-              }
-              .evidence-img img {
+              .evidence-item img {
                 width: 100%;
-                max-height: 180px;
+                max-height: 180mm;
                 object-fit: contain;
+                margin-bottom: 15px;
+                border-radius: 8px;
+              }
+              .evidence-label {
+                font-weight: 500;
+                color: #1e40af;
+                margin-top: 15px;
+                font-size: 16px;
+                text-transform: uppercase;
+              }
+              .page-number {
+                position: absolute;
+                bottom: 10mm;
+                right: 10mm;
+                font-size: 12px;
+                color: #6b7280;
+                padding: 5px 10px;
+                background: #f8fafc;
+                border-radius: 4px;
+                border: 1px solid #e2e8f0;
+              }
+              .signatures {
+                margin-top: 50px;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 50px;
+                page-break-inside: avoid;
+              }
+              .signature {
+                text-align: center;
+              }
+              .signature-line {
+                border-top: 2px solid #2563eb;
+                margin-top: 50px;
+                margin-bottom: 15px;
+              }
+              .signature-title {
+                color: #1e40af;
+                font-weight: 500;
+                font-size: 14px;
+              }
+              .status-badge {
+                display: inline-block;
+                padding: 5px 12px;
+                border-radius: 20px;
+                font-size: 14px;
+                font-weight: 500;
+                text-transform: uppercase;
+              }
+              .status-pending {
+                background: #fef3c7;
+                color: #92400e;
+              }
+              .status-completed {
+                background: #d1fae5;
+                color: #065f46;
+              }
+              .subareas-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
+                margin-top: 20px;
+              }
+              .subarea-item {
+                background: #f8fafc;
+                padding: 15px;
+                border-radius: 8px;
+                border: 1px solid #e2e8f0;
+              }
+              .subarea-name {
+                color: #1e40af;
+                font-weight: 500;
+                margin-bottom: 5px;
+              }
+              .subarea-description {
+                color: #6b7280;
+                font-size: 13px;
               }
             </style>
           </head>
           <body>
-          <!-- Primera página -->
+            <!-- Primera página: Información general -->
             <div class="page">
               <div class="logos">
                 <img src="/sgs-iso.png" alt="SGS Logo" />
                 <img src="/logo.jpg" alt="Hombres de Blanco Logo" class="main-logo" />
                 <img src="/issa.png" alt="ISSA Member Logo" />
-            </div>
+              </div>
             
               <div class="header">
-                <h1>REPORTE DE TAREA</h1>
-                <p>HOSPITAL SAN MIGUEL ARCANGEL</p>
-            </div>
+                <h1>Reporte de Contingencia</h1>
+                <p>Hospital San Miguel Arcángel</p>
+                <p>Departamento de Mantenimiento y Limpieza</p>
+              </div>
+
+              <div class="subheader">
+                <p><strong>Fecha:</strong> ${reportData.fecha}</p>
+                <p><strong>Hora Inicio:</strong> ${reportData.horaInicio}</p>
+                <p><strong>Hora Fin:</strong> ${reportData.horaFin}</p>
+                <p><strong>Tipo:</strong> ${reportData.title}</p>
+                <p><strong>Estado:</strong> <span class="status-badge ${selectedReport.status === 'Pendiente' ? 'status-pending' : 'status-completed'}">${selectedReport.status}</span></p>
+              </div>
             
               <div class="content">
-                <div class="info">
-                  <p><strong>Área:</strong> ${reportData.area}</p>
-                  <p><strong>Sala:</strong> ${reportData.sala}</p>
-                  <p><strong>Fecha:</strong> ${reportData.fecha}</p>
-                  <div class="time-row">
-                    <p><strong>Hora Inicio:</strong> ${reportData.horaInicio}</p>
-                    <p><strong>Hora Fin:</strong> ${reportData.horaFin}</p>
+                <div class="section">
+                  <div class="section-title">Ubicación</div>
+                  <div class="area-info">
+                    <p><strong>Área:</strong> ${reportData.area}</p>
+                    <p><strong>Sala:</strong> ${reportData.sala}</p>
                   </div>
                 </div>
-                
-                <div class="activities">
-                  <h3>Tareas Realizadas:</h3>
-                  <div style="counter-reset: task;">
-                  ${orderedTaskDescriptions.map(task => `<p>${task}</p>`).join('')}
-                  </div>
-                </div>
-            </div>
-          </div>
 
-          <!-- Segunda página -->
-            ${reportData.imagenes ? `
-              <div class="page">
-                <div class="header">
-                  <h1>EVIDENCIA FOTOGRÁFICA</h1>
-                  <p>${reportData.area} - ${reportData.sala}</p>
-            </div>
-            
-                <div class="evidence">
-                  ${reportData.imagenes.inicial ? `
-                    <div class="evidence-img">
-                      <p>ANTES:</p>
-                      <img src="${reportData.imagenes.inicial}" />
+                <div class="section">
+                  <div class="section-title">Subareas</div>
+                  <div class="subareas-grid">
+                    ${selectedReport.subareas.map(subarea => `
+                      <div class="subarea-item">
+                        <div class="subarea-name">${subarea.name}</div>
+                        ${subarea.description ? `<div class="subarea-description">${subarea.description}</div>` : ''}
+                      </div>
+                    `).join('')}
+                  </div>
                 </div>
-                  ` : ''}
-                  
-                  ${reportData.imagenes.durante ? `
-                    <div class="evidence-img">
-                      <p>DURANTE:</p>
-                      <img src="${reportData.imagenes.durante}" />
+              </div>
+
+              <div class="page-number">Página 1</div>
             </div>
-                  ` : ''}
-                  
-                  ${reportData.imagenes.final ? `
-                    <div class="evidence-img">
-                      <p>DESPUÉS:</p>
-                      <img src="${reportData.imagenes.final}" />
-          </div>
-                  ` : ''}
-        </div>
+
+            <!-- Páginas de actividades -->
+            ${activitiesByPage.map((pageActivities, pageIndex) => `
+              <div class="page">
+                <div class="section">
+                  <div class="section-title">Actividades Realizadas</div>
+                  ${pageActivities.map((task, index) => `
+                    <div class="task-item">
+                      <div class="task-number">${(pageIndex * 5) + index + 1}</div>
+                      <div class="task-text">${task}</div>
+                    </div>
+                  `).join('')}
+                </div>
+
+                ${pageIndex === activitiesByPage.length - 1 ? `
+                  <div class="signatures">
+                    <div class="signature">
+                      <div class="signature-line"></div>
+                      <div class="signature-title">Firma del Supervisor</div>
+                    </div>
+                    <div class="signature">
+                      <div class="signature-line"></div>
+                      <div class="signature-title">Firma del Encargado</div>
+                    </div>
+                  </div>
+                ` : ''}
+
+                <div class="page-number">Página ${pageIndex + 2}</div>
+              </div>
+            `).join('')}
+
+            <!-- Página de evidencias fotográficas -->
+            ${(reportData.imagenes?.inicial || reportData.imagenes?.durante || reportData.imagenes?.final) ? `
+              <div class="page">
+                <div class="evidence">
+                  <div class="section-title">Evidencia Fotográfica</div>
+                  <div class="evidence-grid">
+                    ${reportData.imagenes.inicial ? `
+                      <div class="evidence-item">
+                        <img src="${reportData.imagenes.inicial}" alt="Foto inicial" />
+                        <div class="evidence-label">Antes</div>
+                      </div>
+                    ` : ''}
+                    
+                    ${reportData.imagenes.durante ? `
+                      <div class="evidence-item">
+                        <img src="${reportData.imagenes.durante}" alt="Foto durante" />
+                        <div class="evidence-label">Durante</div>
+                      </div>
+                    ` : ''}
+                    
+                    ${reportData.imagenes.final ? `
+                      <div class="evidence-item">
+                        <img src="${reportData.imagenes.final}" alt="Foto final" />
+                        <div class="evidence-label">Después</div>
+                      </div>
+                    ` : ''}
+                  </div>
+                </div>
+
+                <div class="page-number">Página ${activitiesByPage.length + 2}</div>
               </div>
             ` : ''}
           </body>
@@ -793,8 +1071,8 @@ export default function ReportsPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500">Sala</p>
-                  <p className="text-sm font-semibold text-gray-900">{selectedReport.sala || 'No especificada'}</p>
+                  <p className="text-xs font-medium text-gray-500">Área</p>
+                  <p className="text-sm font-semibold text-gray-900">{selectedReport.area}</p>
                 </div>
               </div>
             </div>
@@ -808,8 +1086,8 @@ export default function ReportsPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500">Área</p>
-                  <p className="text-sm font-semibold text-gray-900">{selectedReport.area}</p>
+                  <p className="text-xs font-medium text-gray-500">Subárea</p>
+                  <p className="text-sm font-semibold text-gray-900">{selectedReport.subarea}</p>
                 </div>
               </div>
             </div>
@@ -822,16 +1100,36 @@ export default function ReportsPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500">Estado</p>
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                    selectedReport.status === 'Pendiente' 
-                      ? 'bg-yellow-100 text-yellow-800' 
-                      : 'bg-green-100 text-green-800'
-                  }`}>
-                    {selectedReport.status}
-                  </span>
+                  <p className="text-xs font-medium text-gray-500">Sala</p>
+                  <p className="text-sm font-semibold text-gray-900">{selectedReport.sala || 'No especificada'}</p>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Subareas */}
+          <div className="mb-6 bg-white p-4 rounded-xl shadow-sm border border-blue-50">
+            <div className="flex items-center space-x-2 mb-2">
+              <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              <h4 className="text-sm font-semibold text-gray-900">Subareas</h4>
+            </div>
+            <div className="ml-7 space-y-4">
+              {selectedReport.subareas && selectedReport.subareas.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {selectedReport.subareas.map((subarea) => (
+                    <div key={subarea.id} className="bg-gray-50 p-3 rounded-lg">
+                      <p className="font-medium text-gray-900">{subarea.name}</p>
+                      {subarea.description && (
+                        <p className="text-sm text-gray-600 mt-1">{subarea.description}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No hay subareas definidas</p>
+              )}
             </div>
           </div>
 
@@ -854,7 +1152,50 @@ export default function ReportsPage() {
               </svg>
               <h4 className="text-sm font-semibold text-gray-900">Descripción</h4>
             </div>
-            <p className="text-sm text-gray-700 ml-7 whitespace-pre-wrap">{selectedReport.description}</p>
+            {(() => {
+              try {
+                const data = JSON.parse(selectedReport.description || '{}');
+                return (
+                  <div className="ml-7 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-gray-500">Área</p>
+                        <p className="text-sm font-medium">{data.area}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Sala</p>
+                        <p className="text-sm font-medium">{data.sala}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Fecha</p>
+                        <p className="text-sm font-medium">{data.fecha}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Horario</p>
+                        <p className="text-sm font-medium">{data.horaInicio} - {data.horaFin}</p>
+                      </div>
+                    </div>
+                    {data.actividades && data.actividades.length > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-2">Actividades realizadas</p>
+                        <ul className="space-y-2">
+                          {data.actividades.map((actividad: string, index: number) => (
+                            <li key={index} className="text-sm flex items-start gap-2">
+                              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-medium">
+                                {index + 1}
+                              </span>
+                              <span className="text-gray-700">{actividad}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              } catch (error) {
+                return <p className="text-sm text-gray-700 ml-7 whitespace-pre-wrap">{selectedReport.description}</p>;
+              }
+            })()}
           </div>
 
           {/* Imágenes */}

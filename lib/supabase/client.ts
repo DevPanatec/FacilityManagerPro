@@ -9,7 +9,28 @@ let supabaseClient: ReturnType<typeof createClientComponentClient<Database>> | n
 // Cliente para componentes del lado del cliente
 export const createClientSupabase = () => {
   if (!supabaseClient) {
-    supabaseClient = createClientComponentClient<Database>();
+    supabaseClient = createClientComponentClient<Database>({
+      supabaseUrl: SUPABASE_URL,
+      supabaseKey: SUPABASE_ANON_KEY,
+      options: {
+        ...baseAuthConfig,
+        ...baseGlobalConfig,
+        auth: {
+          ...baseAuthConfig.auth,
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          storage: localStorage
+        },
+        global: {
+          ...baseGlobalConfig.global,
+          headers: {
+            'X-Client-Info': 'supabase-js-web',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+          }
+        }
+      }
+    });
   }
   return supabaseClient;
 }

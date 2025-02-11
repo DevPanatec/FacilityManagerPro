@@ -13,16 +13,23 @@ export const baseAuthConfig = {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce' as const,
+    detectSessionInUrl: true
   }
 }
 
 // Configuración global compartida
 export const baseGlobalConfig = {
+  db: {
+    schema: 'public'
+  },
   global: {
     headers: {
-      'X-Client-Info': 'facility-manager-pro',
-    },
+      'X-Client-Info': 'supabase-js-web'
+    }
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
   }
 } 
