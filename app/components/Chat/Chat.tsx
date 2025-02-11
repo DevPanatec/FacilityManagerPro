@@ -36,7 +36,7 @@ export function Chat({ onClose }: ChatProps) {
             if (selectedRoomId) {
               const selectedChat = chats.find(chat => chat.room_id === selectedRoomId);
               if (selectedChat) {
-                setSelectedRoomTitle(selectedChat.name);
+                setSelectedRoomTitle(selectedChat.room_name);
               }
             }
           }}
