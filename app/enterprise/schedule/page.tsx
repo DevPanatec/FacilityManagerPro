@@ -12,10 +12,8 @@ interface Task {
   hora_inicio: string
   hora_fin: string
   estado: 'pending' | 'completed' | 'cancelled'
-  area: {
-    id: string
-    name: string
-  }
+  area_id: string
+  area: string
   turno: 'A' | 'B' | 'C'
   asignado_a: string[]
   organization_id: string
@@ -188,8 +186,8 @@ export default function EnterpriseSchedulePage() {
       id: task.id,
       title: task.titulo,
       description: task.descripcion,
-      area_id: task.area.id,
-      area: task.area.name,
+      area_id: task.area_id,
+      area: task.area,
       assigned_to: task.asignado_a?.[0] || null,
       priority: priorityMap[task.prioridad] || 'medium',
       status: task.estado,
