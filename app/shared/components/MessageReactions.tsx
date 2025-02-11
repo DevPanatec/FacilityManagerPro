@@ -8,6 +8,12 @@ export interface Reaction {
   reaction: string
 }
 
+interface FormattedReaction {
+  reaction: string
+  count: number
+  users: string[]
+}
+
 export interface MessageReactionsProps {
   messageId: string
   reactions: Reaction[]
@@ -24,6 +30,7 @@ export const MessageReactions = memo(function MessageReactions({
   onRemoveReaction
 }: MessageReactionsProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [formattedReactions, setFormattedReactions] = useState<FormattedReaction[]>([])
   const supabase = createClientComponentClient<Database>()
 
   const loadReactions = useCallback(async () => {
@@ -44,20 +51,13 @@ export const MessageReactions = memo(function MessageReactions({
         return groups
       }, {})
 
-      const formattedReactions = Object.entries(reactionGroups).map(([reaction, users]) => ({
+      const formatted = Object.entries(reactionGroups).map(([reaction, users]) => ({
         reaction,
         count: users.length,
         users
       }))
 
-      // Agrupar reacciones por emoji
-      const groupedReactions = formattedReactions.reduce((acc, reaction) => {
-        acc[reaction.reaction] = acc[reaction.reaction] || []
-        acc[reaction.reaction].push(reaction.user_id)
-        return acc
-      }, {} as Record<string, string[]>)
-
-      setReactions(formattedReactions)
+      setFormattedReactions(formatted)
     } catch (error) {
       console.error('Error loading reactions:', error)
     }
@@ -111,15 +111,15 @@ export const MessageReactions = memo(function MessageReactions({
 
   return (
     <div className="flex items-center gap-2">
-      {Object.entries(groupedReactions).map(([emoji, users]) => (
+      {formattedReactions.map(({ reaction, count, users }) => (
         <button
-          key={emoji}
-          onClick={() => handleReactionClick(emoji)}
+          key={reaction}
+          onClick={() => handleReactionClick(reaction)}
           className={`px-2 py-1 rounded-full text-sm ${
             users.includes(currentUserId) ? 'bg-blue-100' : 'bg-gray-100'
           } hover:bg-gray-200 transition-colors`}
         >
-          {emoji} {users.length}
+          {reaction} {count}
         </button>
       ))}
       <button

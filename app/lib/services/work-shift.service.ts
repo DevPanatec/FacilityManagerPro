@@ -1,5 +1,5 @@
 import { BaseService } from './base.service'
-import { Database } from '@/lib/types/database'
+import { Database } from '@/types/supabase'
 
 type WorkShift = Database['public']['Tables']['work_shifts']['Row']
 type WorkShiftInsert = Database['public']['Tables']['work_shifts']['Insert']
@@ -62,10 +62,14 @@ export class WorkShiftService extends BaseService {
    */
   async createWorkShift(shiftData: Omit<WorkShiftInsert, 'created_at' | 'updated_at'>): Promise<WorkShift> {
     try {
+      const { data: userData } = await this.supabase.auth.getUser()
+      if (!userData.user) throw new Error('Usuario no autenticado')
+
       const { data, error } = await this.supabase
         .from('work_shifts')
         .insert({
           ...shiftData,
+          created_by: userData.user.id,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })

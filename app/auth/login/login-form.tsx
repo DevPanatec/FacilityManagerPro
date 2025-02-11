@@ -131,7 +131,7 @@ export default function LoginForm() {
           <div className="w-full max-w-md mx-auto">
             <div className="mb-6 md:mb-10">
               <Image
-                src="/logo.jpg"
+                src="/logo-new.jpg"
                 alt="Logo"
                 width={100}
                 height={100}

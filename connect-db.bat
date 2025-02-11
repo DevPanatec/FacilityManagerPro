@@ -1,0 +1,3 @@
+@echo off
+set PGPASSWORD=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsZGllZnBxbWZqeGVybnZ1eXd2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczNjMwNjQyNSwiZXhwIjoyMDUxODgyNDI1fQ.x8UvBDoBWGJZeyZ8HEnUpAmvmafYnqJ9OpDqgFHHLxs
+"C:\Program Files\PostgreSQL\16\bin\psql.exe" "host=db.wldiefpqmfjxernvuywv.supabase.co port=5432 dbname=postgres user=postgres sslmode=require" 

@@ -39,6 +39,11 @@ const nextConfig = {
         pathname: '/**',
       }
     ],
+    domains: ['wldiefpqmfjxernvuywv.supabase.co'],
+  },
+  webpack: (config) => {
+    config.externals = [...config.externals, 'canvas', 'jsdom'];
+    return config;
   },
   
   // Configuraciones de seguridad
@@ -101,4 +106,4 @@ const nextConfig = {
   }
 }
 
-module.exports = nextConfig 
+module.exports = nextConfig; 

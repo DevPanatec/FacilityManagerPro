@@ -1,5 +1,5 @@
-import { supabase } from '@/lib/supabase/client'
-import { errorHandler } from '@/utils/errorHandler'
+import { supabase } from '@/app/lib/supabase/client'
+import { errorHandler } from '@/app/utils/errorHandler'
 
 // Exportamos el cliente de Supabase directamente
 export const supabaseService = supabase
@@ -8,6 +8,8 @@ export const supabaseService = supabase
 export const authService = {
   async login(email: string, password: string) {
     try {
+      if (!supabase) throw new Error('Supabase client not initialized')
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -22,6 +24,8 @@ export const authService = {
 
   async logout() {
     try {
+      if (!supabase) throw new Error('Supabase client not initialized')
+      
       const { error } = await supabase.auth.signOut()
       if (error) throw error
     } catch (error) {
@@ -32,6 +36,8 @@ export const authService = {
 
   async getUser() {
     try {
+      if (!supabase) throw new Error('Supabase client not initialized')
+      
       const { data, error } = await supabase.auth.getUser()
       if (error) throw error
       return { data, error: null }
@@ -43,6 +49,8 @@ export const authService = {
 
   async getSession() {
     try {
+      if (!supabase) throw new Error('Supabase client not initialized')
+      
       const { data, error } = await supabase.auth.getSession()
       if (error) throw error
       return { data, error: null }
@@ -56,6 +64,8 @@ export const authService = {
 export const usersService = {
   async getProfile(userId: string) {
     try {
+      if (!supabase) throw new Error('Supabase client not initialized')
+      
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -72,6 +82,8 @@ export const usersService = {
 
   async updateProfile(userId: string, updates: any) {
     try {
+      if (!supabase) throw new Error('Supabase client not initialized')
+      
       const { data, error } = await supabase
         .from('users')
         .update(updates)
@@ -91,6 +103,8 @@ export const usersService = {
 export const organizationsService = {
   async getOrganization(orgId: string) {
     try {
+      if (!supabase) throw new Error('Supabase client not initialized')
+      
       const { data, error } = await supabase
         .from('organizations')
         .select('*')

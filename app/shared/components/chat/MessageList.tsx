@@ -58,7 +58,7 @@ function formatMessageContent(content: string, members: RoomMember[]): JSX.Eleme
 }
 
 const MessageList = memo(function MessageList() {
-  const { state } = useChatContext()
+  const { state, editMessage, deleteMessage, setReplyingTo } = useChatContext()
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -67,12 +67,25 @@ const MessageList = memo(function MessageList() {
     }
   }, [state.messages])
 
+  const handleEdit = useCallback((messageId: string, content: string) => {
+    editMessage(messageId, content)
+  }, [editMessage])
+
+  const handleDelete = useCallback((messageId: string) => {
+    deleteMessage(messageId)
+  }, [deleteMessage])
+
+  const handleReply = useCallback((message: Message) => {
+    setReplyingTo(message)
+  }, [setReplyingTo])
+
   if (!state.activeRoom) {
     return null
   }
 
   const messages = state.messages[state.activeRoom.id] || []
   const typingUsers = state.typingUsers[state.activeRoom.id] || []
+  const roomId = state.activeRoom.id
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -87,7 +100,10 @@ const MessageList = memo(function MessageList() {
             key={message.id}
             message={message}
             attachments={state.attachments[message.id] || []}
-            parentMessage={message.parent_id ? state.messages[state.activeRoom.id].find(m => m.id === message.parent_id) : undefined}
+            parentMessage={message.parent_id ? state.messages[roomId]?.find(m => m.id === message.parent_id) : undefined}
+            onEdit={(content) => handleEdit(message.id, content)}
+            onDelete={() => handleDelete(message.id)}
+            onReply={() => handleReply(message)}
           />
         ))
       )}

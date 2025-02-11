@@ -1,4 +1,12 @@
-export type Database = {
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export interface Database {
   public: {
     Tables: {
       users: {
@@ -457,6 +465,316 @@ export type Database = {
           last_reviewed_by: string | null
           created_by: string
         }>
+      }
+      chat_rooms: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          description: string | null
+          type: 'direct' | 'group' | 'channel'
+          status: 'active' | 'archived'
+          is_private: boolean
+          created_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          organization_id: string
+          name: string
+          description?: string
+          type: 'direct' | 'group' | 'channel'
+          status?: 'active' | 'archived'
+          is_private?: boolean
+          created_by: string
+        }
+        Update: Partial<{
+          organization_id: string
+          name: string
+          description: string | null
+          type: 'direct' | 'group' | 'channel'
+          status: 'active' | 'archived'
+          is_private: boolean
+          created_by: string
+        }>
+      }
+      chat_room_members: {
+        Row: {
+          id: string
+          room_id: string
+          user_id: string
+          organization_id: string
+          role: 'owner' | 'admin' | 'member'
+          status: 'active' | 'inactive'
+          last_read_at: string
+          created_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          room_id: string
+          user_id: string
+          organization_id: string
+          role?: 'owner' | 'admin' | 'member'
+          status?: 'active' | 'inactive'
+          last_read_at?: string
+          created_by: string
+        }
+        Update: Partial<{
+          room_id: string
+          user_id: string
+          organization_id: string
+          role: 'owner' | 'admin' | 'member'
+          status: 'active' | 'inactive'
+          last_read_at: string
+          created_by: string
+        }>
+      }
+      chat_messages: {
+        Row: {
+          id: string
+          content: string
+          type: 'text' | 'image' | 'file'
+          status: 'sent' | 'edited' | 'deleted'
+          created_at: string
+          updated_at: string
+          user_id: string
+          room_id: string
+          organization_id: string
+          file_url?: string | null
+          importance: 'normal' | 'urgent' | 'important'
+          edited: boolean
+          reactions: {
+            emoji: string
+            users: string[]
+          }[]
+          reply_to?: {
+            id: string
+            content: string
+            user: {
+              first_name: string
+              last_name: string
+            }
+          } | null
+          online_status: 'online' | 'offline'
+        }
+        Insert: {
+          id?: string
+          content: string
+          type?: 'text' | 'image' | 'file'
+          status?: 'sent' | 'edited' | 'deleted'
+          created_at?: string
+          updated_at?: string
+          user_id: string
+          room_id: string
+          organization_id: string
+          file_url?: string | null
+          importance?: 'normal' | 'urgent' | 'important'
+          edited?: boolean
+          reactions?: {
+            emoji: string
+            users: string[]
+          }[]
+          reply_to?: {
+            id: string
+            content: string
+            user: {
+              first_name: string
+              last_name: string
+            }
+          } | null
+          online_status?: 'online' | 'offline'
+        }
+        Update: {
+          id?: string
+          content?: string
+          type?: 'text' | 'image' | 'file'
+          status?: 'sent' | 'edited' | 'deleted'
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+          room_id?: string
+          organization_id?: string
+          file_url?: string | null
+          importance?: 'normal' | 'urgent' | 'important'
+          edited?: boolean
+          reactions?: {
+            emoji: string
+            users: string[]
+          }[]
+          reply_to?: {
+            id: string
+            content: string
+            user: {
+              first_name: string
+              last_name: string
+            }
+          } | null
+          online_status?: 'online' | 'offline'
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_room_id_fkey"
+            columns: ["room_id"]
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      chat_message_attachments: {
+        Row: {
+          id: string
+          message_id: string
+          file_url: string
+          file_type: string
+          file_name: string
+          file_size: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          message_id: string
+          file_url: string
+          file_type: string
+          file_name: string
+          file_size: number
+        }
+        Update: Partial<{
+          message_id: string
+          file_url: string
+          file_type: string
+          file_name: string
+          file_size: number
+        }>
+      }
+      chat_message_reactions: {
+        Row: {
+          id: string
+          message_id: string
+          user_id: string
+          reaction: string
+          created_at: string
+        }
+        Insert: {
+          message_id: string
+          user_id: string
+          reaction: string
+        }
+        Update: Partial<{
+          message_id: string
+          user_id: string
+          reaction: string
+        }>
+      }
+    }
+    Functions: {
+      get_chat_messages: {
+        Args: {
+          p_room_id: string
+          p_limit: number
+          p_offset: number
+        }
+        Returns: {
+          id: string
+          content: string
+          type: string
+          status: string
+          created_at: string
+          updated_at: string
+          user_id: string
+          room_id: string
+          organization_id: string
+          first_name: string
+          last_name: string
+          avatar_url: string | null
+        }[]
+      }
+      get_chat_messages_v2: {
+        Args: {
+          p_room_id: string
+        }
+        Returns: {
+          id: string
+          content: string
+          type: 'text' | 'image' | 'file'
+          status: string
+          created_at: string
+          updated_at: string
+          user_id: string
+          room_id: string
+          organization_id: string
+          file_url: string | null
+          importance: 'normal' | 'urgent' | 'important'
+          edited: boolean
+          reactions: {
+            emoji: string
+            users: string[]
+          }[]
+          reply_to: {
+            id: string
+            content: string
+            user: {
+              first_name: string
+              last_name: string
+            }
+          } | null
+          online_status: 'online' | 'offline'
+          users: {
+            first_name: string
+            last_name: string
+            avatar_url: string | null
+          }
+        }[]
+      }
+      get_chat_room_messages_v1: {
+        Args: {
+          room_uuid: string
+          msg_limit?: number
+          msg_offset?: number
+        }
+        Returns: {
+          id: string
+          content: string
+          type: string
+          status: string
+          created_at: string
+          updated_at: string
+          user_id: string
+          room_id: string
+          organization_id: string
+          first_name: string
+          last_name: string
+          avatar_url: string | null
+        }[]
+      }
+      get_users_online_status: {
+        Args: {
+          p_user_ids: string[]
+        }
+        Returns: {
+          user_id: string
+          online_status: 'online' | 'offline'
+          last_seen: string
+        }[]
+      }
+      update_user_online_status: {
+        Args: {
+          p_user_id: string
+          p_status: 'online' | 'offline'
+        }
+        Returns: void
       }
     }
   }

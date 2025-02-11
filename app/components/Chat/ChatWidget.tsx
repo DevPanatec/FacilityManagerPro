@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MessageCircle, X } from 'lucide-react';
 import { useUser } from '@/app/shared/hooks/useUser';
 import { cn } from '@/app/lib/utils';
@@ -9,95 +9,131 @@ import { NewChatView } from './NewChatView';
 import { ChatView } from './ChatView';
 import { usePathname } from 'next/navigation';
 
-interface ChatWidgetProps {
-  className?: string;
+interface ChatRoom {
+  room_id: string;
+  room_name: string;
+  room_type: 'direct' | 'group';
+  last_message: {
+    content: string;
+    created_at: string;
+    user: {
+      first_name: string;
+      last_name: string;
+    };
+  } | null;
+  unread_count: number;
+  other_user_id?: string;
+  other_user_name?: string;
+  other_user_avatar?: string;
+  is_group: boolean;
 }
 
-export function ChatWidget({ className }: ChatWidgetProps) {
+interface ChatWidgetProps {
+  className?: string;
+  isEnterprise?: boolean;
+}
+
+// Rutas donde el chat no debe mostrarse
+const EXCLUDED_ROUTES = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/inactive',
+  '/auth',
+  '/login',
+  '/register'
+];
+
+export function ChatWidget({ className, isEnterprise = false }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState<'list' | 'new' | 'chat'>('list');
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
-  const { user } = useUser();
+  const [chats, setChats] = useState<ChatRoom[]>([]);
+  const [predefinedMessage, setPredefinedMessage] = useState<string | null>(null);
+  const { user, loading } = useUser();
   const pathname = usePathname();
 
-  // No mostrar el chat en la página de login
-  if (!user || pathname === '/login' || pathname === '/register') return null;
+  // Efecto para cerrar el chat cuando se cierra sesión o se cambia de ruta
+  useEffect(() => {
+    if (!user || !pathname || EXCLUDED_ROUTES.some(route => pathname.startsWith(route))) {
+      setIsOpen(false);
+      setView('list');
+      setActiveRoomId(null);
+    }
+  }, [user, pathname]);
 
-  function handleNewChat(roomId: string) {
+  // No renderizar el chat en rutas excluidas o cuando no hay usuario
+  if (
+    !user || 
+    loading || 
+    !pathname ||
+    EXCLUDED_ROUTES.some(route => pathname.startsWith(route))
+  ) {
+    return null;
+  }
+
+  function handleNewChat(roomId: string, message?: string) {
     setActiveRoomId(roomId);
+    setPredefinedMessage(message || null);
     setView('chat');
   }
 
-  function handleSelectChat(roomId: string) {
+  function handleSelectChat(roomId: string, message?: string) {
     setActiveRoomId(roomId);
+    setPredefinedMessage(message || null);
     setView('chat');
   }
 
   function handleBackToList() {
     setView('list');
     setActiveRoomId(null);
+    setPredefinedMessage(null);
+  }
+
+  function handleStartNewChat() {
+    setView('new');
   }
 
   return (
-    <div className={cn("fixed bottom-4 right-4 z-50", className)}>
-      {/* Icono flotante */}
+    <div className={cn("fixed bottom-6 right-6 z-50", className)}>
+      {/* Botón flotante */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
+        className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-blue-800 shadow-[0_8px_28px_-6px_rgba(59,130,246,0.5)] hover:shadow-[0_8px_32px_-4px_rgba(59,130,246,0.6)] hover:scale-105 transition-all duration-300"
         aria-label={isOpen ? "Cerrar chat" : "Abrir chat"}
       >
-        <MessageCircle className="h-6 w-6" />
+        {isOpen ? (
+          <X className="h-6 w-6 text-white" />
+        ) : (
+          <MessageCircle className="h-6 w-6 text-white" />
+        )}
       </button>
 
-      {/* Panel de chat */}
       {isOpen && (
-        <div className="absolute bottom-16 right-0 w-96 rounded-lg border shadow-xl bg-white">
-          <div className="flex flex-col h-[600px] bg-white">
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b bg-white rounded-t-lg">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {view === 'list' && 'Chat'}
-                {view === 'new' && 'Nuevo Chat'}
-                {view === 'chat' && 'Conversación'}
-              </h2>
-              <div className="flex items-center gap-2">
-                {view === 'list' && user?.role === 'enterprise' && (
-                  <button
-                    className="text-sm px-3 py-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
-                    onClick={() => setView('new')}
-                  >
-                    Nuevo Chat
-                  </button>
-                )}
-                {(view === 'new' || view === 'chat') && (
-                  <button
-                    className="text-sm px-2 py-1 rounded-md hover:bg-gray-100"
-                    onClick={handleBackToList}
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Contenido principal */}
-            <div className="flex-1 overflow-hidden bg-white">
-              {view === 'list' && (
-                <ChatList onSelectChat={handleSelectChat} />
-              )}
-              {view === 'new' && (
-                <NewChatView 
-                  onClose={handleBackToList}
-                  onChatCreated={handleNewChat}
-                />
-              )}
-              {view === 'chat' && activeRoomId && (
-                <ChatView 
-                  roomId={activeRoomId}
-                  onClose={handleBackToList}
-                />
-              )}
-            </div>
+        <div className="absolute bottom-20 right-0 w-[420px] rounded-3xl bg-white/95 backdrop-blur-sm overflow-hidden shadow-[0_8px_40px_-12px_rgba(0,0,0,0.2)] border border-gray-200/60">
+          <div className="flex flex-col h-[650px]">
+            {view === 'list' && (
+              <ChatList 
+                onSelectChat={handleSelectChat} 
+                onChatsLoaded={setChats}
+                onNewChat={user?.role === 'enterprise' ? handleStartNewChat : undefined}
+              />
+            )}
+            {view === 'new' && (
+              <NewChatView 
+                onClose={handleBackToList}
+                onChatCreated={handleNewChat}
+              />
+            )}
+            {view === 'chat' && activeRoomId && (
+              <ChatView 
+                roomId={activeRoomId}
+                onClose={handleBackToList}
+                chatTitle={chats.find(chat => chat.room_id === activeRoomId)?.room_name}
+                predefinedMessage={predefinedMessage || undefined}
+              />
+            )}
           </div>
         </div>
       )}

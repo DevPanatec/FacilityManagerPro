@@ -5,6 +5,15 @@ type InventoryItem = Database['public']['Tables']['inventory_items']['Row']
 type InventoryItemInsert = Database['public']['Tables']['inventory_items']['Insert']
 type InventoryItemUpdate = Database['public']['Tables']['inventory_items']['Update']
 
+interface BulkInventoryItem {
+  name: string
+  quantity?: number
+  unit: string
+  organization_id: string
+  category?: string
+  status?: 'active' | 'inactive'
+}
+
 export class InventoryService extends BaseService {
   /**
    * Obtiene todos los items de inventario
@@ -113,6 +122,26 @@ export class InventoryService extends BaseService {
       return this.handleResponse(data, error)
     } catch (error) {
       throw this.handleError(error)
+    }
+  }
+
+  async bulkInsertItems(items: BulkInventoryItem[]) {
+    try {
+      const { data, error } = await this.supabase
+        .from('inventory_items')
+        .insert(items.map(item => ({
+          ...item,
+          quantity: item.quantity || 0,
+          status: item.status || 'active',
+          category: item.category || 'general'
+        })))
+        .select()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error in bulkInsertItems:', error)
+      throw error
     }
   }
 }

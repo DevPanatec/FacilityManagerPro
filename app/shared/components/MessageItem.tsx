@@ -3,6 +3,7 @@ import { Message, MessageAttachment } from '@/app/shared/contexts/ChatContext'
 import { MessageReactions } from './MessageReactions'
 import { LinkPreview } from './LinkPreview'
 import { MessageAttachmentList } from './MessageAttachmentList'
+import { useUser } from '@/app/shared/hooks/useUser'
 
 interface MessageItemProps {
   message: Message
@@ -10,6 +11,8 @@ interface MessageItemProps {
   onEdit: (messageId: string, content: string) => void
   onDelete: (messageId: string) => void
   onReply: (message: Message) => void
+  onReact?: (messageId: string, reaction: string) => void
+  onRemoveReaction?: (messageId: string, reaction: string) => void
 }
 
 export const MessageItem = memo(function MessageItem({
@@ -17,10 +20,13 @@ export const MessageItem = memo(function MessageItem({
   attachments,
   onEdit,
   onDelete,
-  onReply
+  onReply,
+  onReact = () => {},
+  onRemoveReaction = () => {}
 }: MessageItemProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(message.content)
+  const { user } = useUser()
 
   const handleEditClick = useCallback(() => {
     setIsEditing(true)
@@ -102,7 +108,13 @@ export const MessageItem = memo(function MessageItem({
             <MessageAttachmentList attachments={attachments} />
           )}
           <LinkPreview content={message.content} />
-          <MessageReactions messageId={message.id} />
+          <MessageReactions 
+            messageId={message.id}
+            reactions={message.reactions || []}
+            currentUserId={user?.id || ''}
+            onReact={onReact}
+            onRemoveReaction={onRemoveReaction}
+          />
           <div className="flex items-center gap-2 mt-2">
             <button
               onClick={handleReplyClick}

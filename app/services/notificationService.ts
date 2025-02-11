@@ -1,8 +1,8 @@
 import { supabaseService } from './supabaseService'
-import { Database } from '@/lib/types/database'
+import { Database } from '@/types/supabase'
 
 type Notification = Database['public']['Tables']['notifications']['Row']
-type CreateNotification = Pick<Notification, 'message' | 'title' | 'type' | 'user_id'> & Partial<Omit<Notification, 'message' | 'title' | 'type' | 'user_id'>>
+type CreateNotification = Pick<Notification, 'message' | 'title' | 'type' | 'user_id' | 'organization_id'>
 
 export const notificationService = {
   getNotifications: async (userId: string) => {
@@ -19,13 +19,33 @@ export const notificationService = {
     }
   },
 
-  createNotification: async (notification: CreateNotification) => {
+  createNotification: async (notification: Omit<CreateNotification, 'organization_id'>) => {
     try {
+      // Obtener el usuario actual
+      const { data: userData } = await supabaseService.db.auth.getUser()
+      if (!userData.user) throw new Error('Usuario no autenticado')
+
+      // Obtener el organization_id del usuario
+      const { data: userDetails, error: userError } = await supabaseService.db
+        .from('users')
+        .select('organization_id')
+        .eq('id', userData.user.id)
+        .single()
+
+      if (userError || !userDetails?.organization_id) {
+        throw new Error('No se pudo obtener la organización del usuario')
+      }
+
       const { data, error } = await supabaseService.db
         .from('notifications')
-        .insert([notification])
+        .insert([{
+          ...notification,
+          organization_id: userDetails.organization_id,
+          read: false
+        }])
         .select()
         .single()
+
       if (error) throw error
       return data
     } catch (error) {

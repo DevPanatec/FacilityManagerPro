@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import type { RoomMember } from '@/app/shared/contexts/ChatContext'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import type { Database } from '@/lib/types/database'
 
 interface MentionSuggestionsProps {
   query: string
@@ -10,6 +12,11 @@ interface MentionSuggestionsProps {
   position: { top: number; left: number }
   onSelect: (member: RoomMember) => void
   onClose: () => void
+}
+
+interface UserWithAvatar {
+  id: string
+  avatar_url: string | null
 }
 
 export default function MentionSuggestions({
@@ -21,6 +28,29 @@ export default function MentionSuggestions({
 }: MentionSuggestionsProps) {
   const [filteredMembers, setFilteredMembers] = useState<RoomMember[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [userAvatars, setUserAvatars] = useState<Record<string, string | null>>({})
+  const supabase = createClientComponentClient<Database>()
+
+  useEffect(() => {
+    // Cargar avatares de usuarios
+    const loadUserAvatars = async () => {
+      const userIds = members.map(member => member.user_id)
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, avatar_url')
+        .in('id', userIds)
+
+      if (users) {
+        const avatarMap = users.reduce((acc, user) => ({
+          ...acc,
+          [user.id]: user.avatar_url
+        }), {} as Record<string, string | null>)
+        setUserAvatars(avatarMap)
+      }
+    }
+
+    loadUserAvatars()
+  }, [members, supabase])
 
   useEffect(() => {
     // Filtrar miembros basado en la consulta
@@ -91,9 +121,9 @@ export default function MentionSuggestions({
           }`}
         >
           <div className="flex items-center gap-2">
-            {member.avatar_url ? (
+            {userAvatars[member.user_id] ? (
               <img
-                src={member.avatar_url}
+                src={userAvatars[member.user_id]!}
                 alt={member.user_id}
                 className="w-6 h-6 rounded-full"
               />

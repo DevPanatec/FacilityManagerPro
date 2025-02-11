@@ -11,6 +11,14 @@ interface Organization {
   created_at: string
 }
 
+interface OrgStats {
+  id: string
+  name: string
+  users: { count: number }[]
+  inventory_items: { count: number }[]
+  maintenance_requests: { count: number }[]
+}
+
 interface MaintenanceStatus {
   status: string
   count: number
@@ -207,7 +215,7 @@ export default function SuperAdminDashboard() {
                          selectedPeriod === 'weekly' ? weekStart : monthStart
 
       // Consulta base para estadísticas de la organización
-      const { data: orgStats } = await supabase
+      let orgStatsQuery = supabase
         .from('organizations')
         .select(`
           id,
@@ -216,52 +224,81 @@ export default function SuperAdminDashboard() {
           inventory_items (count),
           maintenance_requests (count)
         `)
-        .eq(selectedOrganization !== 'all' ? 'id' : 'id', selectedOrganization)
         .gte('created_at', periodStart.toISOString())
-        .single()
+
+      if (selectedOrganization !== 'all') {
+        orgStatsQuery = orgStatsQuery.eq('id', selectedOrganization)
+      }
+
+      const { data: orgStats } = await orgStatsQuery as { data: OrgStats[] }
 
       // Obtener estado de mantenimientos
-      const { data: maintenanceStatus } = await supabase
+      let maintenanceQuery = supabase
         .from('maintenance_requests')
         .select('status')
-        .eq(selectedOrganization !== 'all' ? 'organization_id' : 'organization_id', selectedOrganization)
         .gte('created_at', periodStart.toISOString())
 
+      if (selectedOrganization !== 'all') {
+        maintenanceQuery = maintenanceQuery.eq('organization_id', selectedOrganization)
+      }
+
+      const { data: maintenanceStatus } = await maintenanceQuery
+
+      // Agrupar por estado
       const maintenanceByStatus = maintenanceStatus?.reduce((acc: { [key: string]: number }, curr) => {
         acc[curr.status] = (acc[curr.status] || 0) + 1
         return acc
       }, {})
 
-      // Obtener inventario con stock bajo
-      const { data: lowStock } = await supabase
+      // Obtener items con bajo stock
+      let inventoryQuery = supabase
         .from('inventory_items')
         .select('*')
-        .eq(selectedOrganization !== 'all' ? 'organization_id' : 'organization_id', selectedOrganization)
-        .lt('quantity', 'min_stock')
-        .gte('created_at', periodStart.toISOString())
+        .lt('quantity', supabase.rpc('get_minimum_quantity'))
+
+      if (selectedOrganization !== 'all') {
+        inventoryQuery = inventoryQuery.eq('organization_id', selectedOrganization)
+      }
+
+      const { data: lowStock } = await inventoryQuery
 
       // Obtener actividades recientes
-      const { data: activities } = await supabase
-        .from('activities')
+      let activitiesQuery = supabase
+        .from('activity_logs')
         .select('*')
-        .eq(selectedOrganization !== 'all' ? 'organization_id' : 'organization_id', selectedOrganization)
-        .gte('created_at', periodStart.toISOString())
         .order('created_at', { ascending: false })
-        .limit(10) as { data: Activity[] | null }
+        .limit(10)
+
+      if (selectedOrganization !== 'all') {
+        activitiesQuery = activitiesQuery.eq('organization_id', selectedOrganization)
+      }
+
+      const { data: activities } = await activitiesQuery
 
       // Obtener tareas
-      const { data: tasks } = await supabase
-        .from('maintenance_requests')
+      let tasksQuery = supabase
+        .from('tasks')
         .select('*')
-        .eq(selectedOrganization !== 'all' ? 'organization_id' : 'organization_id', selectedOrganization)
-        .gte('created_at', periodStart.toISOString()) as { data: Task[] | null }
+        .gte('created_at', periodStart.toISOString())
+
+      if (selectedOrganization !== 'all') {
+        tasksQuery = tasksQuery.eq('organization_id', selectedOrganization)
+      }
+
+      const { data: tasks } = await tasksQuery
 
       // Procesar estadísticas
       const stats: DashboardStats = {
         totalOrganizations: selectedOrganization === 'all' ? organizations.length : 1,
-        totalUsers: orgStats?.users?.[0]?.count || 0,
-        totalInventoryItems: orgStats?.inventory_items?.[0]?.count || 0,
-        totalMaintenanceRequests: orgStats?.maintenance_requests?.[0]?.count || 0,
+        totalUsers: selectedOrganization === 'all' 
+          ? orgStats?.reduce((sum, org) => sum + (org.users?.[0]?.count || 0), 0) || 0
+          : orgStats?.[0]?.users?.[0]?.count || 0,
+        totalInventoryItems: selectedOrganization === 'all'
+          ? orgStats?.reduce((sum, org) => sum + (org.inventory_items?.[0]?.count || 0), 0) || 0
+          : orgStats?.[0]?.inventory_items?.[0]?.count || 0,
+        totalMaintenanceRequests: selectedOrganization === 'all'
+          ? orgStats?.reduce((sum, org) => sum + (org.maintenance_requests?.[0]?.count || 0), 0) || 0
+          : orgStats?.[0]?.maintenance_requests?.[0]?.count || 0,
         organizationsWithLowStock: lowStock?.length || 0,
         pendingMaintenanceCount: maintenanceStatus?.filter(m => m.status === 'pending').length || 0,
         maintenanceByStatus: Object.entries(maintenanceByStatus || {}).map(([status, count]) => ({
@@ -290,7 +327,7 @@ export default function SuperAdminDashboard() {
               if (task.status === 'completed') acc[task.area].completed++
               return acc
             }, {})
-          ).map(([area, counts]) => ({
+          ).map(([area, counts]: [string, { active: number, completed: number }]) => ({
             area,
             count: counts.active + counts.completed,
             status: counts.active > counts.completed ? 'active' : 'completed'

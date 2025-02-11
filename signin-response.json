@@ -1,0 +1,91 @@
+{
+  "user": {
+    "id": "0b07cc6c-f292-44b5-9091-f91753ac8dca",
+    "aud": "authenticated",
+    "role": "enterprise",
+    "email": "hospital.regional.nicol.s.a.solano.enterprise@facilitymanagerpro.com",
+    "email_confirmed_at": "2025-01-16T20:33:12.414499Z",
+    "phone": "",
+    "confirmed_at": "2025-01-16T20:33:12.414499Z",
+    "last_sign_in_at": "2025-01-29T20:24:24.315950875Z",
+    "app_metadata": {
+      "provider": "email",
+      "providers": [
+        "email"
+      ]
+    },
+    "user_metadata": {
+      "email_verified": true,
+      "role": "enterprise"
+    },
+    "identities": [
+      {
+        "identity_id": "03fe7168-db38-423e-b543-a08e4353f2bd",
+        "id": "0b07cc6c-f292-44b5-9091-f91753ac8dca",
+        "user_id": "0b07cc6c-f292-44b5-9091-f91753ac8dca",
+        "identity_data": {
+          "email": "hospital.regional.nicol.s.a.solano.enterprise@facilitymanagerpro.com",
+          "email_verified": false,
+          "phone_verified": false,
+          "sub": "0b07cc6c-f292-44b5-9091-f91753ac8dca"
+        },
+        "provider": "email",
+        "last_sign_in_at": "2025-01-16T20:33:12.412291Z",
+        "created_at": "2025-01-16T20:33:12.412351Z",
+        "updated_at": "2025-01-16T20:33:12.412351Z",
+        "email": "hospital.regional.nicol.s.a.solano.enterprise@facilitymanagerpro.com"
+      }
+    ],
+    "created_at": "2025-01-16T20:33:12.407578Z",
+    "updated_at": "2025-01-29T20:24:24.317604Z",
+    "is_anonymous": false
+  },
+  "session": {
+    "access_token": "eyJhbGciOiJIUzI1NiIsImtpZCI6IkJ0eWJaUzc1STJmcnhlaHciLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL3dsZGllZnBxbWZqeGVybnZ1eXd2LnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiIwYjA3Y2M2Yy1mMjkyLTQ0YjUtOTA5MS1mOTE3NTNhYzhkY2EiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzM4MTg1ODY0LCJpYXQiOjE3MzgxODIyNjQsImVtYWlsIjoiaG9zcGl0YWwucmVnaW9uYWwubmljb2wucy5hLnNvbGFuby5lbnRlcnByaXNlQGZhY2lsaXR5bWFuYWdlcnByby5jb20iLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJyb2xlIjoiZW50ZXJwcmlzZSJ9LCJyb2xlIjoiZW50ZXJwcmlzZSIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzM4MTgyMjY0fV0sInNlc3Npb25faWQiOiI4ZmQxM2ExNC1jNWRhLTRmOTQtODMxZC0zZGI1ZjVmZDQ1MmIiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.tHoJeDSnkfH875RUh_ehd0pFABh-TCgJXC71H8qIoYM",
+    "token_type": "bearer",
+    "expires_in": 3600,
+    "expires_at": 1738185864,
+    "refresh_token": "5kxWo0b75ePElS7fObfbsQ",
+    "user": {
+      "id": "0b07cc6c-f292-44b5-9091-f91753ac8dca",
+      "aud": "authenticated",
+      "role": "enterprise",
+      "email": "hospital.regional.nicol.s.a.solano.enterprise@facilitymanagerpro.com",
+      "email_confirmed_at": "2025-01-16T20:33:12.414499Z",
+      "phone": "",
+      "confirmed_at": "2025-01-16T20:33:12.414499Z",
+      "last_sign_in_at": "2025-01-29T20:24:24.315950875Z",
+      "app_metadata": {
+        "provider": "email",
+        "providers": [
+          "email"
+        ]
+      },
+      "user_metadata": {
+        "email_verified": true,
+        "role": "enterprise"
+      },
+      "identities": [
+        {
+          "identity_id": "03fe7168-db38-423e-b543-a08e4353f2bd",
+          "id": "0b07cc6c-f292-44b5-9091-f91753ac8dca",
+          "user_id": "0b07cc6c-f292-44b5-9091-f91753ac8dca",
+          "identity_data": {
+            "email": "hospital.regional.nicol.s.a.solano.enterprise@facilitymanagerpro.com",
+            "email_verified": false,
+            "phone_verified": false,
+            "sub": "0b07cc6c-f292-44b5-9091-f91753ac8dca"
+          },
+          "provider": "email",
+          "last_sign_in_at": "2025-01-16T20:33:12.412291Z",
+          "created_at": "2025-01-16T20:33:12.412351Z",
+          "updated_at": "2025-01-16T20:33:12.412351Z",
+          "email": "hospital.regional.nicol.s.a.solano.enterprise@facilitymanagerpro.com"
+        }
+      ],
+      "created_at": "2025-01-16T20:33:12.407578Z",
+      "updated_at": "2025-01-29T20:24:24.317604Z",
+      "is_anonymous": false
+    }
+  }
+}
