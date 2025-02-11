@@ -8,25 +8,7 @@ import { ChatList } from './ChatList';
 import { NewChatView } from './NewChatView';
 import { ChatView } from './ChatView';
 import { usePathname } from 'next/navigation';
-
-interface ChatRoom {
-  room_id: string;
-  room_name: string;
-  room_type: 'direct' | 'group';
-  last_message: {
-    content: string;
-    created_at: string;
-    user: {
-      first_name: string;
-      last_name: string;
-    };
-  } | null;
-  unread_count: number;
-  other_user_id?: string;
-  other_user_name?: string;
-  other_user_avatar?: string;
-  is_group: boolean;
-}
+import type { ChatRoom } from '@/app/shared/types/chat';
 
 interface ChatWidgetProps {
   className?: string;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, Dispatch, SetStateAction } from 'react';
 import { createClient } from '@/app/lib/supabase/client';
 import { useUser } from '@/app/shared/hooks/useUser';
 import { formatDistanceToNow } from 'date-fns';
@@ -8,6 +8,7 @@ import { es } from 'date-fns/locale';
 import { MessageCircle, Search, X, Plus, FileText, Image as ImageIcon, AlertCircle, Star, Trash2 } from 'lucide-react';
 import './styles.css';
 import { toast } from 'react-hot-toast';
+import type { ChatRoom } from '@/app/shared/types/chat';
 
 const supabase = createClient();
 
@@ -18,36 +19,6 @@ interface Admin {
   role: string;
   online_status?: 'online' | 'offline';
   last_seen?: string;
-}
-
-interface ChatRoom {
-  room_id: string;
-  room_name: string;
-  room_type: string;
-  room_description: string | null;
-  organization_id: string;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-  last_message: {
-    id: string;
-    content: string;
-    created_at: string;
-    user_id: string;
-    type?: 'text' | 'image' | 'file';
-    file_url?: string;
-    importance?: 'normal' | 'urgent' | 'important';
-  } | null;
-  unread_count: number;
-  members: {
-    user_id: string;
-    email: string;
-    first_name: string | null;
-    last_name: string | null;
-    role: string;
-    online_status?: 'online' | 'offline';
-    last_seen?: string;
-  }[];
 }
 
 interface ChatSuggestion {
@@ -86,7 +57,7 @@ const CHAT_SUGGESTIONS: ChatSuggestion[] = [
 
 interface ChatListProps {
   onSelectChat: (roomId: string, predefinedMessage?: string) => void;
-  onChatsLoaded?: (chats: ChatRoom[]) => void;
+  onChatsLoaded?: Dispatch<SetStateAction<ChatRoom[]>>;
   onNewChat?: () => void;
 }
 

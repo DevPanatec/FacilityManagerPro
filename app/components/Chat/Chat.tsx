@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChatView } from './ChatView';
 import { ChatList } from './ChatList';
+import type { ChatRoom } from '@/app/shared/types/chat';
 
 interface ChatProps {
   onClose: () => void;
@@ -10,10 +11,15 @@ export function Chat({ onClose }: ChatProps) {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [selectedRoomTitle, setSelectedRoomTitle] = useState<string | null>(null);
   const [predefinedMessage, setPredefinedMessage] = useState<string | null>(null);
+  const [chats, setChats] = useState<ChatRoom[]>([]);
 
   const handleSelectChat = (roomId: string, message?: string) => {
     setSelectedRoomId(roomId);
     setPredefinedMessage(message || null);
+    const selectedChat = chats.find(chat => chat.room_id === roomId);
+    if (selectedChat) {
+      setSelectedRoomTitle(selectedChat.room_name);
+    }
   };
 
   return (
@@ -31,15 +37,7 @@ export function Chat({ onClose }: ChatProps) {
       ) : (
         <ChatList
           onSelectChat={handleSelectChat}
-          onChatsLoaded={(chats) => {
-            // Actualizar el título del chat seleccionado si existe
-            if (selectedRoomId) {
-              const selectedChat = chats.find(chat => chat.room_id === selectedRoomId);
-              if (selectedChat) {
-                setSelectedRoomTitle(selectedChat.room_name);
-              }
-            }
-          }}
+          onChatsLoaded={setChats}
         />
       )}
     </div>
