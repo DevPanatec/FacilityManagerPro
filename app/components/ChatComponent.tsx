@@ -23,7 +23,7 @@ export default function ChatComponent({ roomId }: { roomId: string }) {
         return
       }
 
-      const { data, error } = await supabaseService.db
+      const { data, error } = await supabaseService
         .from('messages')
         .select('*')
         .eq('room_id', roomId)
@@ -40,7 +40,7 @@ export default function ChatComponent({ roomId }: { roomId: string }) {
     loadMessages()
 
     // Suscribirse a nuevos mensajes
-    const channel = supabaseService.db
+    const channel = supabaseService
       .channel('messages')
       .on(
         'postgres_changes',
@@ -72,7 +72,7 @@ export default function ChatComponent({ roomId }: { roomId: string }) {
       return
     }
 
-    const { error } = await supabaseService.db
+    const { error } = await supabaseService
       .from('messages')
       .insert({
         content: newMessage.trim(),
