@@ -173,9 +173,10 @@ export default function AssignmentsPage() {
         setSalas(salasFormatted);
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading data:', error);
-      toast.error(errorHandler.logError('loadData', error));
+      errorHandler.logError('loadData', error);
+      toast.error(error.message || 'Error al cargar los datos');
     } finally {
       setLoading(false);
     }
