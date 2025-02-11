@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 interface Sala {
   id: string
@@ -40,6 +40,7 @@ interface TaskModalProps {
 }
 
 export default function TaskModal({ isOpen, onClose, onSubmit, selectedDate, organizationId }: TaskModalProps) {
+  const supabase = createClientComponentClient()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [selectedSala, setSelectedSala] = useState('')
