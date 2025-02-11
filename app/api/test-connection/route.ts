@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from '@/lib/supabase/config'
+import { createServerSupabaseClient } from '@/app/lib/supabase/config.server'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
