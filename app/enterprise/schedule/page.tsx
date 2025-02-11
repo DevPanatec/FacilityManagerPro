@@ -12,7 +12,10 @@ interface Task {
   hora_inicio: string
   hora_fin: string
   estado: 'pending' | 'completed' | 'cancelled'
-  area: string
+  area: {
+    id: string
+    name: string
+  }
   turno: 'A' | 'B' | 'C'
   asignado_a: string[]
   organization_id: string
@@ -176,17 +179,17 @@ export default function EnterpriseSchedulePage() {
 
   const transformedTasks = tasks.map(task => {
     const priorityMap = {
-      'low': 'baja',
-      'medium': 'media',
-      'high': 'alta'
+      'baja': 'low',
+      'media': 'medium',
+      'alta': 'high'
     } as const;
 
     return {
       id: task.id,
       title: task.titulo,
       description: task.descripcion,
-      area_id: task.area,
-      area: task.area?.name || '',
+      area_id: task.area.id,
+      area: task.area.name,
       assigned_to: task.asignado_a?.[0] || null,
       priority: priorityMap[task.prioridad] || 'medium',
       status: task.estado,
