@@ -6,8 +6,7 @@ import SalaAreaSelector from '@/app/shared/components/componentes/SalaAreaSelect
 import { useDropzone } from 'react-dropzone';
 import Image from 'next/image';
 import { FiUpload, FiX, FiAlertCircle, FiCheckCircle, FiClock, FiPieChart, FiList, FiFilter } from 'react-icons/fi';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import { generateContingencyPDF } from './ContingencyPDF';
 
 interface ContingencyFile {
   id: string;
@@ -26,25 +25,21 @@ interface ContingencyReport {
   status: 'Pendiente' | 'Completada';
   type: string;
   area: string;
-  subarea: string;
   sala?: string;
-  subareas: Array<{
+  tasks: Array<{
     id: string;
-    name: string;
+    title: string;
     description: string | null;
+    status: string;
+    priority: string;
+    estimated_hours: number;
   }>;
-  start_time?: string;
-  end_time?: string;
   attachments: Array<{
     type: 'image' | 'documento';
     url: string;
     created_at: string;
   }>;
-  creator: {
-    id: string;
-    first_name: string | null;
-    last_name: string | null;
-  } | null;
+  creator: string;
   organization: {
     id: string;
     name: string;
@@ -100,11 +95,13 @@ interface SupabaseReport {
 
 interface ReportData {
   title: string;
+  type: 'contingencia';
   area: string;
   sala: string;
   fecha: string;
   horaInicio?: string;
   horaFin?: string;
+  description: string | null;
   actividades: string[];
   imagenes: {
     inicial?: string;
@@ -133,16 +130,7 @@ export default function ReportsPage() {
 
   // Estado para reportes y tipos de contingencia
   const [reportes, setReportes] = useState<ContingencyReport[]>([]);
-  const tiposContingencia = [
-    'Falla de Equipo',
-    'Accidente Laboral',
-    'Problema de Infraestructura',
-    'Falla Eléctrica',
-    'Fuga o Derrame',
-    'Problema de Seguridad',
-    'Emergencia Médica',
-    'Otro'
-  ];
+  const [contingencyTypes, setContingencyTypes] = useState<Array<{id: string; name: string; description: string | null}>>([]);
   const [stats, setStats] = useState({ pendientes: 0, resueltos: 0, total: 0 });
 
   const [images, setImages] = useState<File[]>([]);
@@ -151,6 +139,43 @@ export default function ReportsPage() {
 
   const supabase = createClientComponentClient();
 
+  // Cargar tipos de contingencia
+  const loadContingencyTypes = async () => {
+    try {
+      if (!userData?.organization_id) {
+        console.log('No hay organization_id disponible');
+        return;
+      }
+
+      console.log('Cargando tipos de contingencia para organización:', userData.organization_id);
+
+      // Cargar todos los tipos activos
+      const { data: types, error } = await supabase
+        .from('contingency_types')
+        .select('*')
+        .eq('organization_id', userData.organization_id)
+        .eq('is_active', true);
+
+      if (error) {
+        console.error('Error al cargar tipos de contingencia:', error);
+        return;
+      }
+
+      console.log('Tipos de contingencia cargados:', types);
+      setContingencyTypes(types || []);
+    } catch (error) {
+      console.error('Error al cargar tipos de contingencia:', error);
+    }
+  };
+
+  // Efecto para cargar tipos de contingencia cuando cambie userData
+  useEffect(() => {
+    if (userData?.organization_id) {
+      console.log('userData cambió, cargando tipos de contingencia con organization_id:', userData.organization_id);
+      loadContingencyTypes();
+    }
+  }, [userData?.organization_id]);
+
   // Cargar datos del usuario
   useEffect(() => {
     const loadUserData = async () => {
@@ -158,13 +183,28 @@ export default function ReportsPage() {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError) throw userError;
 
+        console.log('Usuario autenticado:', user);
+
         const { data: userData, error: orgError } = await supabase
           .from('users')
-          .select('role, organization_id')
+          .select(`
+            role, 
+            organization_id,
+            organization:organizations(
+              id,
+              name,
+              status
+            )
+          `)
           .eq('id', user?.id)
           .single();
-        if (orgError) throw orgError;
 
+        if (orgError) {
+          console.error('Error al cargar datos de organización:', orgError);
+          throw orgError;
+        }
+
+        console.log('Datos completos de usuario y organización:', userData);
         setUserData(userData);
       } catch (error) {
         console.error('Error al cargar datos del usuario:', error);
@@ -189,21 +229,30 @@ export default function ReportsPage() {
       setIsLoading(true);
       setError(null);
 
-      // Calcular rango de fechas según el filtro
+      // Get current date in local timezone
       const now = new Date();
-      let startDate = new Date();
+      const startDate = new Date(now);
+
+      // Set the start date based on filter
       if (timeFilter === 'dia') {
+        // Set to start of current day in local timezone
         startDate.setHours(0, 0, 0, 0);
       } else if (timeFilter === 'semana') {
+        // Set to 7 days ago from current time
         startDate.setDate(now.getDate() - 7);
       } else if (timeFilter === 'mes') {
+        // Set to 1 month ago from current time
         startDate.setMonth(now.getMonth() - 1);
       }
+
+      // Ensure end date is set to end of current day
+      const endDate = new Date(now);
+      endDate.setHours(23, 59, 59, 999);
 
       console.log('Filtro de fechas:', {
         filtro: timeFilter,
         fechaInicio: startDate.toISOString(),
-        fechaFin: now.toISOString()
+        fechaFin: endDate.toISOString()
       });
 
       // Cargar reportes
@@ -213,34 +262,46 @@ export default function ReportsPage() {
           *,
           creator:user_profiles!created_by(id, first_name, last_name),
           assignee:user_profiles!assigned_to(id, first_name, last_name),
-          area:areas!area_id(
+          area:areas!inner(
             id, 
             name,
-            sala_id,
             sala:salas(
               id,
               nombre,
               descripcion
+            ),
+            subareas!left(
+              id,
+              nombre,
+              descripcion,
+              area_id
+            ),
+            tasks(
+              id,
+              title,
+              description,
+              status,
+              priority,
+              estimated_hours,
+              created_at,
+              updated_at
             )
           ),
-          subarea:subareas!subarea_id(
+          organization:organizations!organization_id(
             id,
-            nombre,
-            descripcion
+            name,
+            status
           ),
-          organization:organizations!organization_id(id, name)
+          type:contingency_types(
+            id,
+            name,
+            description
+          )
         `)
+        .eq('organization_id', userData.organization_id)
         .gte('created_at', startDate.toISOString())
-        .lte('created_at', now.toISOString())
+        .lte('created_at', endDate.toISOString())
         .order('created_at', { ascending: false });
-
-      // Si no es superadmin, filtrar por organization_id
-      if (userData.role !== 'superadmin') {
-        if (!userData.organization_id) {
-          throw new Error('Usuario no tiene organización asignada');
-        }
-        reportsQuery = reportsQuery.eq('organization_id', userData.organization_id);
-      }
 
       const { data: reports, error: reportsError } = await reportsQuery;
 
@@ -260,38 +321,48 @@ export default function ReportsPage() {
       console.log('Resultado de la consulta:', {
         reportesEncontrados: reports.length,
         fechaInicio: startDate,
-        fechaFin: now,
+        fechaFin: endDate,
         organizacionId: userData.organization_id
       });
 
       // Mapear los reportes con la información
       const reportsWithOrgs = reports.map((report: any) => {
         const sala = report.area?.sala;
+        const tasks = report.area?.tasks || [];
+        
+        console.log('Datos del reporte:', {
+          id: report.id,
+          area: report.area?.name,
+          sala: sala?.nombre,
+          tipo: report.type?.name,
+          tasks: tasks.length
+        });
         
         return {
           id: report.id,
-          title: report.title,
+          title: report.type?.name || report.title,
           description: report.description,
           date: report.created_at,
-          status: report.status === 'completed' ? 'Completada' : 'Pendiente',
-          type: report.type || 'No especificado',
+          status: report.status === 'completed' ? 'Completada' as const : 'Pendiente' as const,
+          type: report.type?.name || 'No especificado',
           area: report.area?.name || 'No especificada',
-          subarea: report.area?.name || 'No especificada',
           sala: sala?.nombre || 'No especificada',
-          subareas: [
-            { id: '1', name: 'CAMAS 1 A LA 7', description: null },
-            { id: '2', name: 'BAÑO DE CUBICULO 1', description: null },
-            { id: '3', name: 'ESTACION DE ENFERMERIA', description: null },
-            { id: '4', name: 'CUARTO SEPTICO', description: null }
-          ],
+          tasks: tasks.map((task: any) => ({
+            id: task.id,
+            title: task.title,
+            description: task.description,
+            status: task.status,
+            priority: task.priority,
+            estimated_hours: task.estimated_hours
+          })),
           attachments: report.attachments || [],
-          creator: report.creator,
+          creator: report.creator ? `${report.creator.first_name || ''} ${report.creator.last_name || ''}`.trim() || 'Usuario' : 'Usuario',
           organization: {
-            id: report.organization?.id || report.organization_id,
-            name: report.organization?.name || 'Organización Desconocida'
+            id: report.organization?.id,
+            name: report.organization?.name || 'Hospital San Miguel Arcángel'
           }
         };
-      }) as ContingencyReport[];
+      });
 
       setReportes(reportsWithOrgs);
       setTotalPages(Math.ceil(reportsWithOrgs.length / 10));
@@ -341,23 +412,30 @@ export default function ReportsPage() {
   // Función para cargar subáreas cuando se selecciona un área
   const loadSubareas = async (areaId: string) => {
     try {
+      console.log('Cargando subáreas para área:', areaId);
+
       const { data: areaData, error } = await supabase
-        .from('areas')
+        .from('subareas')
         .select(`
           id,
-          subareas (
-            id,
-            nombre
-          )
+          nombre,
+          descripcion,
+          area:areas(id, name)
         `)
-        .eq('id', areaId)
-        .single();
+        .eq('area_id', areaId)
+        .order('nombre');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error al cargar subáreas:', error);
+        throw error;
+      }
 
-      if (areaData && areaData.subareas) {
-        setSubareas(areaData.subareas);
+      console.log('Subáreas cargadas:', areaData);
+
+      if (areaData && areaData.length > 0) {
+        setSubareas(areaData);
       } else {
+        console.log('No se encontraron subáreas para el área:', areaId);
         setSubareas([]);
       }
     } catch (error) {
@@ -369,8 +447,10 @@ export default function ReportsPage() {
   // Actualizar el useEffect para cargar subáreas cuando cambia el área
   useEffect(() => {
     if (selectedArea) {
+      console.log('Área seleccionada cambió a:', selectedArea);
       loadSubareas(selectedArea);
     } else {
+      console.log('No hay área seleccionada, limpiando subáreas');
       setSubareas([]);
       setSelectedSubarea(null);
     }
@@ -496,11 +576,17 @@ export default function ReportsPage() {
 
       // Crear el nuevo reporte
       try {
+        const selectedType = contingencyTypes.find(type => type.id === contingencyType);
+        if (!selectedType) {
+          throw new Error('Tipo de contingencia no válido');
+        }
+
+        // Crear el reporte
         const newReport = {
-          title: contingencyType,
+          title: selectedType.name,
           description: JSON.stringify({
+            details: {
             area: selectedArea,
-            subarea: selectedSubarea,
             sala: selectedSala,
             fecha: new Date().toLocaleDateString(),
             horaInicio: new Date().toLocaleTimeString(),
@@ -512,23 +598,59 @@ export default function ReportsPage() {
               else if (index === 2) acc.final = url;
               return acc;
             }, {} as { inicial?: string; durante?: string; final?: string })
+            },
+            images: uploadedUrls
           }),
-          area_id: selectedArea,
-          subarea_id: selectedSubarea,  // Added subarea_id
-          organization_id: userData.organization_id,
-          created_by: session.user.id,
           status: 'pending',
           priority: 'medium',
-          assigned_to: session.user.id
+          area_id: selectedArea,
+          organization_id: userData.organization_id,
+          created_by: session.user.id,
+          assigned_to: session.user.id,
+          type_id: selectedType.id
         };
 
-        const { data, error: insertError } = await supabase
+        console.log('Guardando reporte con datos:', newReport);
+
+        // Insertar el reporte
+        const { data: reportData, error: insertError } = await supabase
           .from('contingencies')
           .insert([newReport])
-          .select('*')
+          .select()
           .single();
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error('Error detallado al insertar reporte:', insertError);
+          throw insertError;
+        }
+
+        if (!reportData) {
+          throw new Error('No se recibieron datos del reporte creado');
+        }
+
+        console.log('Reporte creado exitosamente:', reportData);
+
+        // Crear la asignación relacionada
+        const newAssignment = {
+          organization_id: userData.organization_id,
+          user_id: session.user.id,
+          area_id: selectedArea,
+          start_time: new Date().toISOString(),
+          end_time: new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
+          status: 'pending'
+        };
+
+        console.log('Guardando asignación con datos:', newAssignment);
+
+        const { error: assignmentError } = await supabase
+          .from('assignments')
+          .insert([newAssignment])
+          .select();
+
+        if (assignmentError) {
+          console.error('Error detallado al crear la asignación:', assignmentError);
+          throw new Error('Error al crear la asignación relacionada');
+        }
 
         // Actualizar la lista de reportes
         await loadData();
@@ -541,11 +663,11 @@ export default function ReportsPage() {
         setDescription('');
         setImages([]);
         setImageUrls([]);
-        setShowModal(false);  // Fixed: Changed setIsModalOpen to setShowModal
+        setShowModal(false);
 
-        toast.success('Reporte creado exitosamente');
+        toast.success('Reporte y asignación creados exitosamente');
       } catch (error: any) {
-        console.error('Error al guardar el reporte:', error);
+        console.error('Error detallado al guardar el reporte:', error);
         toast.error(error?.message || 'Error al guardar el reporte');
       }
     } catch (error: any) {
@@ -571,482 +693,41 @@ export default function ReportsPage() {
     }
   };
 
-  const orderedTaskDescriptions: string[] = [
-    "SE REALIZA HIGIENE DE MANOS Y SE COLOCA EL EQUIPO DE PROTECCION PERSONAL",
-    "SE CLASIFICA EL AREA SEGUN EL TIPO DE LIMPIEZA PROFUNDA",
-    "SE LIMPIA LA UNIDAD DEL PACIENTE CON WAYPALL EN METODO DE FRICCION Y ARRASTRE",
-    "SE LIMPIA LAS SUPERFICIES HORIZONTALES DEBEMOS LIMPIARLOS CON UN PAÑO EMBEBIDO DE DESINFECTANTES COMO MESAS, MOBILIARIOS DE MEDICAMENTOS, ESTACION DE ENFERMERIA, DISPENSADORES DE PAPEL TOALLA E HIGIENICO",
-    "SE ENJUAGA UNIDAD DE PACIENTE CON AGUA Y SE REALIZA METODO DE FRICCION CON WAYPALL",
-    "SE SELLO EN PISO BARRIDO HUMEDO, LIMPIEZA Y DESINFECCION CON TECNICA ZIGZAG",
-    "SE REALIZA DESINFECCION DE LA UNIDAD DEL PACIENTE CON VIRUGUAT Y WAYPALL METODO DE FRICCION",
-    "SE LIMPIA PISOS CON METODO DE DOS BALDES, BARRIDO HUMEDO Y TRAPEADO ENJABONADO Y LUEGO ENJUAGAR",
-    "AL ENTRAR AL AREA HOSPITALARIA REALIZAMOS LIMPIEZA INICIANDO POR EL TECHO, ELIMINANDO MANCHAS EN CIELO RASO",
-    "SE LIMPIA PUERTAS Y PERILLAS CON ATOMIZADOR, WAYPALL Y SEPTIN",
-    "SE REALIZA LIMPIEZA DE RODAPIES CON PAÑO Y DESINFECTANTE PANO DE MICROFIBRA",
-    "SE LIMPIA CORTINAS DE BAÑO Y SI ESTA EN MAL ESTADO SE REPORTA AL ENCARGADO DEL SERVICIO SU PRONTO CAMBIO",
-    "SE REALIZA LIMPIEZA DE VENTANAS FIJAS O PERSIANAS CON PAÑOS DE MICROFIBRA Y CRYSTAL MIX",
-    "LA SOLUCION DESINFECTANTE SE DEBE PREPARAR EN EL MOMENTO DE USO Y DESCARTAR LUEGO DE 24 HORAS",
-    "EN LAS AREAS DE AISLAMIENTO REALIZAMOS PROCEDIMIENTO CON EQUIPO EXCLUSIVO ADECUADO Y SE INICIA LA LIMPIEZA DE LIMPIO A LO SUCIO"
-  ];
+  const orderedTaskDescriptions: string[] = [];
 
   const handleDownloadPDF = async () => {
     if (!selectedReport) return;
 
     try {
-      const iframe = document.createElement('iframe');
-      iframe.style.visibility = 'hidden';
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      document.body.appendChild(iframe);
+      // Parsear la descripción JSON
+      let reportDetails;
+      try {
+        reportDetails = JSON.parse(selectedReport.description || '{}');
+      } catch (error) {
+        console.error('Error al parsear la descripción:', error);
+        reportDetails = {};
+      }
 
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!iframeDoc) throw new Error('No se pudo crear el iframe');
-
-      let reportData: ReportData = {
-        title: selectedReport.title || 'Reporte de Contingencia',
-        area: selectedReport.area || '',
+      const reportData = {
+        title: selectedReport.title,
+        type: 'contingencia' as const,
+        area: selectedReport.area,
         sala: selectedReport.sala || '',
         fecha: new Date(selectedReport.date).toLocaleDateString(),
-        horaInicio: selectedReport.start_time || new Date().toLocaleTimeString(),
-        horaFin: selectedReport.end_time || new Date().toLocaleTimeString(),
-        actividades: orderedTaskDescriptions,
-        imagenes: {}
+        horaInicio: reportDetails.horaInicio,
+        horaFin: reportDetails.horaFin,
+        description: selectedReport.description,
+        actividades: reportDetails.actividades || [],
+        imagenes: reportDetails.imagenes || {},
+        tasks: selectedReport.tasks || [] // Incluir las tareas
       };
 
-      if (selectedReport.description) {
-        try {
-          const parsedData = JSON.parse(selectedReport.description);
-          reportData = { ...reportData, ...parsedData };
-        } catch (e) {
-          console.error('Error parsing description:', e);
-        }
+      const success = await generateContingencyPDF(reportData);
+      if (success) {
+        toast.success('PDF generado exitosamente');
+      } else {
+        toast.error('Error al generar el PDF');
       }
-
-      // Dividir las actividades en grupos de 5 para múltiples páginas
-      const activitiesByPage = [];
-      for (let i = 0; i < orderedTaskDescriptions.length; i += 5) {
-        activitiesByPage.push(orderedTaskDescriptions.slice(i, i + 5));
-      }
-
-      // Escribir el contenido en el iframe con estilos mejorados
-      iframeDoc.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
-            <style>
-              @page { 
-                margin: 20mm;
-                size: A4;
-              }
-              body { 
-                margin: 0; 
-                font-family: 'Poppins', Arial, sans-serif;
-                color: #1a1a1a;
-                line-height: 1.6;
-              }
-              .page { 
-                width: 210mm;
-                min-height: 297mm;
-                padding: 20mm;
-                box-sizing: border-box;
-                background: white;
-                position: relative;
-                page-break-after: always;
-              }
-              .page:last-child {
-                page-break-after: avoid;
-              }
-              .logos { 
-                display: flex; 
-                justify-content: space-between; 
-                align-items: center; 
-                margin-bottom: 30px;
-                width: 100%;
-              }
-              .logos img { 
-                height: 60px; 
-                width: auto; 
-                object-fit: contain;
-              }
-              .header {
-                text-align: center;
-                margin-bottom: 40px;
-                border-bottom: 3px solid #2563eb;
-                padding-bottom: 20px;
-              }
-              .header h1 {
-                font-size: 28px;
-                font-weight: 600;
-                margin: 0;
-                margin-bottom: 15px;
-                letter-spacing: 1px;
-                color: #1e40af;
-                text-transform: uppercase;
-              }
-              .header p {
-                font-size: 18px;
-                margin: 5px 0;
-                color: #4b5563;
-              }
-              .subheader {
-                background: #f8fafc;
-                padding: 20px;
-                border-radius: 12px;
-                margin-bottom: 30px;
-                border: 1px solid #e2e8f0;
-              }
-              .subheader p {
-                margin: 8px 0;
-                font-size: 15px;
-                color: #4b5563;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-              }
-              .subheader strong {
-                color: #1e40af;
-                min-width: 120px;
-                display: inline-block;
-              }
-              .content {
-                font-size: 14px;
-                line-height: 1.8;
-              }
-              .section {
-                margin-bottom: 30px;
-              }
-              .section-title {
-                font-size: 20px;
-                font-weight: 600;
-                color: #1e40af;
-                margin-bottom: 20px;
-                padding-bottom: 10px;
-                border-bottom: 2px solid #e5e7eb;
-                text-transform: uppercase;
-              }
-              .area-info {
-                background: #f8fafc;
-                padding: 20px;
-                border-radius: 12px;
-                margin-bottom: 20px;
-                border: 1px solid #e2e8f0;
-              }
-              .area-info p {
-                margin: 8px 0;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-              }
-              .area-info strong {
-                color: #1e40af;
-                min-width: 100px;
-                display: inline-block;
-              }
-              .task-item {
-                background: #f8fafc;
-                padding: 15px;
-                margin-bottom: 15px;
-                border-radius: 8px;
-                border: 1px solid #e2e8f0;
-                display: flex;
-                align-items: flex-start;
-                gap: 15px;
-              }
-              .task-number {
-                background: #2563eb;
-                color: white;
-                width: 28px;
-                height: 28px;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-weight: 600;
-                flex-shrink: 0;
-              }
-              .task-text {
-                color: #4b5563;
-                font-size: 14px;
-                line-height: 1.6;
-              }
-              .evidence {
-                margin-top: 40px;
-              }
-              .evidence-title {
-                font-size: 20px;
-                font-weight: 600;
-                color: #1e40af;
-                margin-bottom: 25px;
-                text-transform: uppercase;
-              }
-              .evidence-grid {
-                display: grid;
-                grid-template-columns: repeat(1, 1fr);
-                gap: 30px;
-              }
-              .evidence-item {
-                text-align: center;
-                page-break-inside: avoid;
-                background: #f8fafc;
-                padding: 20px;
-                border-radius: 12px;
-                border: 1px solid #e2e8f0;
-              }
-              .evidence-item img {
-                width: 100%;
-                max-height: 180mm;
-                object-fit: contain;
-                margin-bottom: 15px;
-                border-radius: 8px;
-              }
-              .evidence-label {
-                font-weight: 500;
-                color: #1e40af;
-                margin-top: 15px;
-                font-size: 16px;
-                text-transform: uppercase;
-              }
-              .page-number {
-                position: absolute;
-                bottom: 10mm;
-                right: 10mm;
-                font-size: 12px;
-                color: #6b7280;
-                padding: 5px 10px;
-                background: #f8fafc;
-                border-radius: 4px;
-                border: 1px solid #e2e8f0;
-              }
-              .signatures {
-                margin-top: 50px;
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 50px;
-                page-break-inside: avoid;
-              }
-              .signature {
-                text-align: center;
-              }
-              .signature-line {
-                border-top: 2px solid #2563eb;
-                margin-top: 50px;
-                margin-bottom: 15px;
-              }
-              .signature-title {
-                color: #1e40af;
-                font-weight: 500;
-                font-size: 14px;
-              }
-              .status-badge {
-                display: inline-block;
-                padding: 5px 12px;
-                border-radius: 20px;
-                font-size: 14px;
-                font-weight: 500;
-                text-transform: uppercase;
-              }
-              .status-pending {
-                background: #fef3c7;
-                color: #92400e;
-              }
-              .status-completed {
-                background: #d1fae5;
-                color: #065f46;
-              }
-              .subareas-grid {
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 15px;
-                margin-top: 20px;
-              }
-              .subarea-item {
-                background: #f8fafc;
-                padding: 15px;
-                border-radius: 8px;
-                border: 1px solid #e2e8f0;
-              }
-              .subarea-name {
-                color: #1e40af;
-                font-weight: 500;
-                margin-bottom: 5px;
-              }
-              .subarea-description {
-                color: #6b7280;
-                font-size: 13px;
-              }
-            </style>
-          </head>
-          <body>
-            <!-- Primera página: Información general -->
-            <div class="page">
-              <div class="logos">
-                <img src="/sgs-iso.png" alt="SGS Logo" />
-                <img src="/logo.jpg" alt="Hombres de Blanco Logo" class="main-logo" />
-                <img src="/issa.png" alt="ISSA Member Logo" />
-              </div>
-            
-              <div class="header">
-                <h1>Reporte de Contingencia</h1>
-                <p>Hospital San Miguel Arcángel</p>
-                <p>Departamento de Mantenimiento y Limpieza</p>
-              </div>
-
-              <div class="subheader">
-                <p><strong>Fecha:</strong> ${reportData.fecha}</p>
-                <p><strong>Hora Inicio:</strong> ${reportData.horaInicio}</p>
-                <p><strong>Hora Fin:</strong> ${reportData.horaFin}</p>
-                <p><strong>Tipo:</strong> ${reportData.title}</p>
-                <p><strong>Estado:</strong> <span class="status-badge ${selectedReport.status === 'Pendiente' ? 'status-pending' : 'status-completed'}">${selectedReport.status}</span></p>
-              </div>
-            
-              <div class="content">
-                <div class="section">
-                  <div class="section-title">Ubicación</div>
-                  <div class="area-info">
-                    <p><strong>Área:</strong> ${reportData.area}</p>
-                    <p><strong>Sala:</strong> ${reportData.sala}</p>
-                  </div>
-                </div>
-
-                <div class="section">
-                  <div class="section-title">Subareas</div>
-                  <div class="subareas-grid">
-                    ${selectedReport.subareas.map(subarea => `
-                      <div class="subarea-item">
-                        <div class="subarea-name">${subarea.name}</div>
-                        ${subarea.description ? `<div class="subarea-description">${subarea.description}</div>` : ''}
-                      </div>
-                    `).join('')}
-                  </div>
-                </div>
-              </div>
-
-              <div class="page-number">Página 1</div>
-            </div>
-
-            <!-- Páginas de actividades -->
-            ${activitiesByPage.map((pageActivities, pageIndex) => `
-              <div class="page">
-                <div class="section">
-                  <div class="section-title">Actividades Realizadas</div>
-                  ${pageActivities.map((task, index) => `
-                    <div class="task-item">
-                      <div class="task-number">${(pageIndex * 5) + index + 1}</div>
-                      <div class="task-text">${task}</div>
-                    </div>
-                  `).join('')}
-                </div>
-
-                ${pageIndex === activitiesByPage.length - 1 ? `
-                  <div class="signatures">
-                    <div class="signature">
-                      <div class="signature-line"></div>
-                      <div class="signature-title">Firma del Supervisor</div>
-                    </div>
-                    <div class="signature">
-                      <div class="signature-line"></div>
-                      <div class="signature-title">Firma del Encargado</div>
-                    </div>
-                  </div>
-                ` : ''}
-
-                <div class="page-number">Página ${pageIndex + 2}</div>
-              </div>
-            `).join('')}
-
-            <!-- Página de evidencias fotográficas -->
-            ${(reportData.imagenes?.inicial || reportData.imagenes?.durante || reportData.imagenes?.final) ? `
-              <div class="page">
-                <div class="evidence">
-                  <div class="section-title">Evidencia Fotográfica</div>
-                  <div class="evidence-grid">
-                    ${reportData.imagenes.inicial ? `
-                      <div class="evidence-item">
-                        <img src="${reportData.imagenes.inicial}" alt="Foto inicial" />
-                        <div class="evidence-label">Antes</div>
-                      </div>
-                    ` : ''}
-                    
-                    ${reportData.imagenes.durante ? `
-                      <div class="evidence-item">
-                        <img src="${reportData.imagenes.durante}" alt="Foto durante" />
-                        <div class="evidence-label">Durante</div>
-                      </div>
-                    ` : ''}
-                    
-                    ${reportData.imagenes.final ? `
-                      <div class="evidence-item">
-                        <img src="${reportData.imagenes.final}" alt="Foto final" />
-                        <div class="evidence-label">Después</div>
-                      </div>
-                    ` : ''}
-                  </div>
-                </div>
-
-                <div class="page-number">Página ${activitiesByPage.length + 2}</div>
-              </div>
-            ` : ''}
-          </body>
-        </html>
-      `);
-      iframeDoc.close();
-
-      // Esperar a que las imágenes se carguen
-      await Promise.all(
-        Array.from(iframeDoc.images).map(
-          img => new Promise((resolve) => {
-            if (img.complete) resolve(null);
-            else {
-              img.onload = () => resolve(null);
-              img.onerror = () => resolve(null);
-            }
-          })
-        )
-      );
-
-      // Generar el PDF
-      const pages = Array.from(iframeDoc.querySelectorAll('.page')) as HTMLElement[];
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      for (let i = 0; i < pages.length; i++) {
-        if (i > 0) pdf.addPage();
-
-        const canvas = await html2canvas(pages[i], {
-          scale: 2,
-          useCORS: true,
-          allowTaint: true,
-          width: pages[i].offsetWidth,
-          height: pages[i].offsetHeight,
-          windowWidth: pages[i].offsetWidth,
-          windowHeight: pages[i].offsetHeight,
-          foreignObjectRendering: false,
-          removeContainer: true,
-          backgroundColor: null,
-          logging: false
-        });
-
-        const imgData = canvas.toDataURL('image/jpeg', 1.0);
-        pdf.addImage(
-          imgData,
-          'JPEG',
-          0,
-          0,
-          210,
-          297
-        );
-      }
-
-      pdf.save(`Reporte_${reportData.sala}_${reportData.fecha}.pdf`);
-      
-      // Limpiar
-      document.body.removeChild(iframe);
-      toast.success('PDF generado exitosamente');
     } catch (error) {
       console.error('Error al generar el PDF:', error);
       toast.error('Error al generar el PDF');
@@ -1057,226 +738,203 @@ export default function ReportsPage() {
     if (!selectedReport) return null;
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
-        <div className="bg-gradient-to-br from-white to-blue-50 rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto m-4 shadow-2xl border border-blue-100">
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-2xl p-6 w-[600px] max-h-[80vh] overflow-y-auto m-4 shadow-xl">
           {/* Header con gradiente */}
-          <div className="flex justify-between items-start mb-6 pb-4 border-b border-blue-100">
+          <div className="flex justify-between items-start mb-6 -mx-6 -mt-6 px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-800 rounded-t-2xl">
             <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
+              <h3 className="text-xl font-bold text-white">
                 Detalles del Reporte
               </h3>
-              <p className="text-sm text-gray-500 mt-1">
-                Creado el {new Date(selectedReport.date).toLocaleDateString()}
+              <p className="text-sm text-blue-100 mt-1 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                {new Date(selectedReport.date).toLocaleDateString()}
               </p>
             </div>
             <button
               onClick={() => setShowModal(false)}
-              className="text-gray-400 hover:text-red-500 transition-colors p-1 hover:bg-red-50 rounded-full"
+              className="text-white/70 hover:text-white transition-all duration-300 p-2 hover:bg-white/10 rounded-lg"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
-          {/* Información principal en cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-50 hover:shadow-md transition-shadow">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-500">Organización</p>
-                  <p className="text-sm font-semibold text-gray-900">{selectedReport.organization?.name || 'N/A'}</p>
-                </div>
-              </div>
-            </div>
+          {/* Contenido del reporte */}
+          <div className="space-y-6">
+            {selectedReport.description ? (
+              (() => {
+                try {
+                  const data = JSON.parse(selectedReport.description);
+                  const details = data.details || {};
+                  
+                  return (
+                    <>
+                      {/* Información básica */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="col-span-2 bg-gray-50 p-3 rounded-lg">
+                          <p className="text-gray-500 text-sm font-medium mb-1 flex items-center gap-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                            </svg>
+                            Organización
+                          </p>
+                          <p className="font-medium text-gray-900">{selectedReport.organization.name || 'No especificada'}</p>
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded-lg">
+                          <p className="text-gray-500 text-sm font-medium mb-1 flex items-center gap-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                            </svg>
+                            Sala
+                          </p>
+                          <p className="font-medium text-gray-900">{selectedReport.sala || 'No especificada'}</p>
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded-lg">
+                          <p className="text-gray-500 text-sm font-medium mb-1 flex items-center gap-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                            </svg>
+                            Área
+                          </p>
+                          <p className="font-medium text-gray-900">{selectedReport.area || 'No especificada'}</p>
+                        </div>
+                        <div className="col-span-2 bg-gray-50 p-3 rounded-lg">
+                          <p className="text-gray-500 text-sm font-medium mb-1 flex items-center gap-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            Fecha
+                          </p>
+                          <p className="font-medium text-gray-900">{new Date(selectedReport.date).toLocaleDateString()}</p>
+                        </div>
+                      </div>
 
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-50 hover:shadow-md transition-shadow">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-indigo-100 rounded-lg">
-                  <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-500">Área</p>
-                  <p className="text-sm font-semibold text-gray-900">{selectedReport.area}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-50 hover:shadow-md transition-shadow">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-500">Subárea</p>
-                  <p className="text-sm font-semibold text-gray-900">{selectedReport.subarea}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-blue-50 hover:shadow-md transition-shadow">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-yellow-100 rounded-lg">
-                  <svg className="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-500">Sala</p>
-                  <p className="text-sm font-semibold text-gray-900">{selectedReport.sala || 'No especificada'}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Subareas */}
-          <div className="mb-6 bg-white p-4 rounded-xl shadow-sm border border-blue-50">
-            <div className="flex items-center space-x-2 mb-2">
-              <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-              <h4 className="text-sm font-semibold text-gray-900">Subareas</h4>
-            </div>
-            <div className="ml-7 space-y-4">
-              {selectedReport.subareas && selectedReport.subareas.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {selectedReport.subareas.map((subarea) => (
-                    <div key={subarea.id} className="bg-gray-50 p-3 rounded-lg">
-                      <p className="font-medium text-gray-900">{subarea.name}</p>
-                      {subarea.description && (
-                        <p className="text-sm text-gray-600 mt-1">{subarea.description}</p>
+                      {/* Tipo de Contingencia */}
+                      {details.type && (
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            Tipo de Contingencia
+                          </h4>
+                          <p className="text-gray-700">{details.type}</p>
+                        </div>
                       )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">No hay subareas definidas</p>
-              )}
-            </div>
-          </div>
 
-          {/* Tipo de Contingencia */}
-          <div className="mb-6 bg-white p-4 rounded-xl shadow-sm border border-blue-50">
-            <div className="flex items-center space-x-2 mb-2">
-              <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <h4 className="text-sm font-semibold text-gray-900">Tipo de Contingencia</h4>
-            </div>
-            <p className="text-sm text-gray-700 ml-7">{selectedReport.type}</p>
-          </div>
+                      {/* Tareas */}
+                      {selectedReport.tasks && selectedReport.tasks.length > 0 && (
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                            </svg>
+                            Tareas del Área
+                          </h4>
+                          <div className="space-y-2">
+                            {selectedReport.tasks.map((task, index) => (
+                              <div key={task.id} className="flex items-start gap-3 bg-white p-3 rounded-lg shadow-sm">
+                                <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-sm font-medium ${
+                                  task.status === 'completed' 
+                                    ? 'bg-green-100 text-green-600' 
+                                    : 'bg-blue-100 text-blue-600'
+                                }`}>
+                                  {index + 1}
+                                </div>
+                                <div className="flex-1">
+                                  <h5 className="font-medium text-gray-900">{task.title}</h5>
+                                  {task.description && (
+                                    <p className="text-sm text-gray-500 mt-1">{task.description}</p>
+                                  )}
+                                  <div className="flex items-center gap-4 mt-2">
+                                    <span className={`text-xs px-2 py-1 rounded-full ${
+                                      task.status === 'completed' 
+                                        ? 'bg-green-100 text-green-800' 
+                                        : 'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {task.status === 'completed' ? 'Completada' : 'Pendiente'}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      Prioridad: {task.priority}
+                                    </span>
+                                    {task.estimated_hours && (
+                                      <span className="text-xs text-gray-500">
+                                        Tiempo estimado: {task.estimated_hours}h
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
-          {/* Descripción */}
-          <div className="mb-6 bg-white p-4 rounded-xl shadow-sm border border-blue-50">
-            <div className="flex items-center space-x-2 mb-2">
-              <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />
-              </svg>
-              <h4 className="text-sm font-semibold text-gray-900">Descripción</h4>
-            </div>
-            {(() => {
-              try {
-                const data = JSON.parse(selectedReport.description || '{}');
-                return (
-                  <div className="ml-7 space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-xs text-gray-500">Área</p>
-                        <p className="text-sm font-medium">{data.area}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Subárea</p>
-                        <p className="text-sm font-medium">{data.subarea || 'No especificada'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Sala</p>
-                        <p className="text-sm font-medium">{data.sala || 'No especificada'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Fecha</p>
-                        <p className="text-sm font-medium">{data.fecha}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Horario</p>
-                        <p className="text-sm font-medium">{data.horaInicio} - {data.horaFin}</p>
-                      </div>
-                    </div>
-                    {data.actividades && data.actividades.length > 0 && (
-                      <div>
-                        <p className="text-xs text-gray-500 mb-2">Actividades realizadas</p>
-                        <ul className="space-y-2">
-                          {data.actividades.map((actividad: string, index: number) => (
-                            <li key={index} className="text-sm flex items-start gap-2">
-                              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-medium">
-                                {index + 1}
-                              </span>
-                              <span className="text-gray-700">{actividad}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                );
-              } catch (error) {
-                return <p className="text-sm text-gray-700 ml-7 whitespace-pre-wrap">{selectedReport.description}</p>;
-              }
-            })()}
+                      {/* Imágenes */}
+                      {details.imagenes && (
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="text-lg font-semibold text-gray-900 mb-2">Evidencia Fotográfica</h4>
+                          <div className="grid grid-cols-3 gap-4">
+                            {details.imagenes.inicial && (
+                              <div className="space-y-1">
+                                <div className="aspect-video rounded-lg overflow-hidden shadow-sm">
+                                  <img 
+                                    src={details.imagenes.inicial} 
+                                    alt="Imagen inicial" 
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                                <p className="text-sm text-center text-gray-500">Antes</p>
+                              </div>
+                            )}
+                            {details.imagenes.durante && (
+                              <div className="space-y-1">
+                                <div className="aspect-video rounded-lg overflow-hidden shadow-sm">
+                                  <img 
+                                    src={details.imagenes.durante} 
+                                    alt="Imagen durante" 
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                                <p className="text-sm text-center text-gray-500">Durante</p>
+                              </div>
+                            )}
+                            {details.imagenes.final && (
+                              <div className="space-y-1">
+                                <div className="aspect-video rounded-lg overflow-hidden shadow-sm">
+                                  <img 
+                                    src={details.imagenes.final} 
+                                    alt="Imagen final" 
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                                <p className="text-sm text-center text-gray-500">Después</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                } catch (error) {
+                  console.error('Error al formatear el reporte:', error);
+                  return <p className="text-red-500">Error al cargar el contenido del reporte</p>;
+                }
+              })()
+            ) : (
+              <div className="text-gray-500">No hay descripción disponible</div>
+            )}
           </div>
-
-          {/* Imágenes */}
-          {selectedReport.attachments && selectedReport.attachments.length > 0 && (
-            <div className="mt-6">
-              <div className="flex items-center space-x-2 mb-4">
-                <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <h4 className="text-sm font-semibold text-gray-900">Imágenes adjuntas</h4>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {selectedReport.attachments.map((attachment, index) => (
-                  attachment.type === 'image' && (
-                    <div key={index} className="group relative aspect-square rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
-                      <Image
-                        src={attachment.url}
-                        alt={`Imagen ${index + 1}`}
-                        fill
-                        className="object-cover transform group-hover:scale-105 transition-transform duration-300"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                        <a
-                          href={attachment.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="absolute bottom-0 left-0 right-0 p-4 text-white text-center"
-                        >
-                          <span className="text-sm font-medium bg-black/30 px-3 py-1 rounded-full">
-                            Ver imagen
-                          </span>
-                        </a>
-                      </div>
-                    </div>
-                  )
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Botones de acción */}
-          <div className="mt-8 flex justify-end space-x-3">
+          <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end gap-2">
             <button
               onClick={handleDownloadPDF}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors flex items-center space-x-2"
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1285,7 +943,7 @@ export default function ReportsPage() {
             </button>
             <button
               onClick={() => setShowModal(false)}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
             >
               Cerrar
             </button>
@@ -1295,7 +953,7 @@ export default function ReportsPage() {
                   handleUpdateStatus(selectedReport.id, 'Completada');
                   setShowModal(false);
                 }}
-                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors flex items-center space-x-2"
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
@@ -1308,7 +966,7 @@ export default function ReportsPage() {
                   handleUpdateStatus(selectedReport.id, 'Pendiente');
                   setShowModal(false);
                 }}
-                className="px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-lg hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors flex items-center space-x-2"
+                className="px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-lg hover:bg-yellow-700 focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -1408,92 +1066,6 @@ export default function ReportsPage() {
         ))}
       </div>
     );
-  };
-
-  const formatReportContent = (content: string) => {
-    try {
-      const data = JSON.parse(content);
-      return (
-        <div className="space-y-6">
-          <div>
-            <h2 className="text-2xl font-semibold mb-4">{data.title}</h2>
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div>
-                <p className="text-gray-600">Área:</p>
-                <p className="font-medium">{data.area}</p>
-              </div>
-              <div>
-                <p className="text-gray-600">Sala:</p>
-                <p className="font-medium">{data.sala}</p>
-              </div>
-              <div>
-                <p className="text-gray-600">Fecha:</p>
-                <p className="font-medium">{data.fecha}</p>
-              </div>
-              <div>
-                <p className="text-gray-600">Horario:</p>
-                <p className="font-medium">{data.horaInicio} - {data.horaFin}</p>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-xl font-semibold mb-4">Tareas realizadas:</h3>
-            <div className="bg-gray-50 rounded-lg p-4">
-              {data.actividades.map((actividad: string, index: number) => (
-                <div key={index} className="flex items-start space-x-2 mb-2">
-                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-medium">
-                    {index + 1}
-                  </div>
-                  <p className="text-gray-700">{actividad.substring(actividad.indexOf('. ') + 2)}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {(data.imagenes?.inicial || data.imagenes?.durante || data.imagenes?.final) && (
-            <div>
-              <h3 className="text-xl font-semibold mb-4">Evidencia fotográfica:</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {data.imagenes?.inicial && (
-                  <div className="space-y-2">
-                    <p className="font-medium text-gray-700">Antes</p>
-                    <img 
-                      src={data.imagenes.inicial} 
-                      alt="Foto inicial" 
-                      className="w-full aspect-video object-cover rounded-lg"
-                    />
-                  </div>
-                )}
-                {data.imagenes?.durante && (
-                  <div className="space-y-2">
-                    <p className="font-medium text-gray-700">Durante</p>
-                    <img 
-                      src={data.imagenes.durante} 
-                      alt="Foto durante" 
-                      className="w-full aspect-video object-cover rounded-lg"
-                    />
-                  </div>
-                )}
-                {data.imagenes?.final && (
-                  <div className="space-y-2">
-                    <p className="font-medium text-gray-700">Después</p>
-                    <img 
-                      src={data.imagenes.final} 
-                      alt="Foto final" 
-                      className="w-full aspect-video object-cover rounded-lg"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    } catch (error) {
-      console.error('Error al formatear el reporte:', error);
-      return <p className="text-red-500">Error al cargar el contenido del reporte</p>;
-    }
   };
 
   if (error) {
@@ -1631,22 +1203,59 @@ export default function ReportsPage() {
                   />
                 </div>
 
+                {/* Mostrar subáreas automáticamente */}
+                {subareas.length > 0 && (
+                  <div className="col-span-2 md:col-span-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Subáreas del Área
+                    </label>
+                    <div className="space-y-2 bg-gray-50 p-3 rounded-lg">
+                      {subareas.map((subarea) => (
+                        <div key={subarea.id} className="flex items-start space-x-2 p-2 bg-white rounded-lg shadow-sm">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{subarea.nombre}</p>
+                            {subarea.descripcion && (
+                              <p className="text-xs text-gray-500 mt-1">{subarea.descripcion}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Tipo de Contingencia */}
                 <div className="col-span-2 md:col-span-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tipo de Contingencia
+                  </label>
                   <select
                     value={contingencyType}
                     onChange={(e) => {
                       setContingencyType(e.target.value);
                       console.log('Tipo de contingencia seleccionado:', e.target.value);
                     }}
-                    className="w-full rounded-lg border border-gray-200 text-sm focus:ring-blue-500"
+                    className="w-full h-10 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
                     required
+                    disabled={!userData?.organization_id}
                   >
-                    <option value="">Tipo de Contingencia</option>
-                    {tiposContingencia.map((tipo) => (
-                      <option key={tipo} value={tipo}>{tipo}</option>
+                    <option value="">Seleccionar tipo</option>
+                    {contingencyTypes.length === 0 && (
+                      <option value="" disabled>
+                        {userData?.organization_id ? 'No hay tipos disponibles' : 'Cargando...'}
+                      </option>
+                    )}
+                    {contingencyTypes.map((tipo) => (
+                      <option key={tipo.id} value={tipo.id}>
+                        {tipo.name}
+                      </option>
                     ))}
                   </select>
+                  {contingencyTypes.length === 0 && userData?.organization_id && (
+                    <p className="mt-1 text-sm text-red-500">
+                      No hay tipos de contingencia configurados para esta organización
+                    </p>
+                  )}
                 </div>
 
                 {/* Descripción */}
