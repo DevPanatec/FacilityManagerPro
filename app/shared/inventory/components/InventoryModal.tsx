@@ -17,6 +17,7 @@ interface InventoryModalProps {
 interface FormData {
   operationQuantity: number;
   date: string;
+  user_id?: string;
 }
 
 export default function InventoryModal({
@@ -28,7 +29,8 @@ export default function InventoryModal({
 }: InventoryModalProps) {
   const [formData, setFormData] = useState<FormData>({
     operationQuantity: 0,
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().split('T')[0],
+    user_id: ''
   });
 
   const [editFormData, setEditFormData] = useState({
@@ -44,6 +46,7 @@ export default function InventoryModal({
   const [restockHistory, setRestockHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false)
   const supabase = createClientComponentClient()
+  const [users, setUsers] = useState<Array<{ id: string, first_name: string, last_name: string }>>([]);
 
   // Función para cargar el historial
   const loadHistory = async () => {
@@ -86,13 +89,36 @@ export default function InventoryModal({
     }
   }
 
+  // Cargar usuarios cuando se abre el modal
+  useEffect(() => {
+    if (isOpen && (mode === 'use' || mode === 'restock')) {
+      loadUsers();
+    }
+  }, [isOpen, mode]);
+
+  const loadUsers = async () => {
+    try {
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .order('first_name');
+
+      if (error) throw error;
+      setUsers(userData || []);
+    } catch (error) {
+      console.error('Error al cargar usuarios:', error);
+      toast.error('Error al cargar la lista de usuarios');
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       console.log('Modal abierto:', { mode, item })
       // Resetear el formulario cuando se abre el modal
       setFormData({
         operationQuantity: 0,
-        date: new Date().toISOString().split('T')[0]
+        date: new Date().toISOString().split('T')[0],
+        user_id: ''
       });
 
       if (mode === 'edit' && item) {
@@ -157,7 +183,8 @@ export default function InventoryModal({
           // Limpiar formulario y cerrar modal
           setFormData({
             operationQuantity: 0,
-            date: new Date().toISOString().split('T')[0]
+            date: new Date().toISOString().split('T')[0],
+            user_id: ''
           })
           onClose()
         } catch (submitError) {
@@ -348,7 +375,9 @@ export default function InventoryModal({
                                 {restockHistory.map((record, index) => (
                                   <div key={index} className="bg-gray-50 p-2 rounded-lg text-sm">
                                     <div className="flex justify-between items-center">
-                                      <span className="font-medium">{record.supplier}</span>
+                                      <span className="font-medium">
+                                        {record.users?.first_name} {record.users?.last_name}
+                                      </span>
                                       <span className="text-green-600">+{record.quantity} unidades</span>
                                     </div>
                                     <div className="text-gray-500 text-xs mt-1">
@@ -368,44 +397,60 @@ export default function InventoryModal({
                 ) : (
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {activeTab === 'use' ? 'Cantidad a Usar' : 'Cantidad a Reponer'}
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700">Usuario</label>
+                      <select
+                        value={formData.user_id}
+                        onChange={(e) => setFormData(prev => ({ ...prev, user_id: e.target.value }))}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        required
+                      >
+                        <option value="">Seleccionar usuario</option>
+                        {users.map(user => (
+                          <option key={user.id} value={user.id}>
+                            {user.first_name} {user.last_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Cantidad</label>
                       <input
                         type="number"
                         value={formData.operationQuantity}
-                        onChange={(e) => {
-                          const value = parseInt(e.target.value) || 0;
-                          setFormData(prev => ({ ...prev, operationQuantity: value }));
-                        }}
-                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          operationQuantity: Number(e.target.value)
+                        }))}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         min="1"
+                        max={activeTab === 'use' ? item?.quantity || 0 : undefined}
                         required
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                      <label className="block text-sm font-medium text-gray-700">Fecha</label>
                       <input
                         type="date"
                         value={formData.date}
                         onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         required
                       />
                     </div>
 
-                    <div className="mt-4 flex justify-end space-x-3">
+                    <div className="mt-4 flex justify-end space-x-2">
                       <button
                         type="button"
                         onClick={onClose}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                       >
                         Cancelar
                       </button>
                       <button
                         type="submit"
-                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                       >
                         {activeTab === 'use' ? 'Registrar Uso' : 'Registrar Reposición'}
                       </button>

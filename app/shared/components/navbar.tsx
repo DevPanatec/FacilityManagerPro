@@ -122,13 +122,18 @@ export default function Navbar({ role = '', isEnterprise = false }) {
   const router = useRouter()
   const pathname = usePathname();
   const [userRole, setUserRole] = useState(role || 'enterprise');
+  const [organizationName, setOrganizationName] = useState('');
 
   useEffect(() => {
     const storedRole = localStorage.getItem('userRole');
+    const storedOrgName = localStorage.getItem('organizationName');
     if (storedRole) {
       setUserRole(storedRole.toLowerCase());
     } else if (isEnterprise) {
       setUserRole('enterprise');
+    }
+    if (storedOrgName) {
+      setOrganizationName(storedOrgName);
     }
   }, [role, isEnterprise]);
 
@@ -144,34 +149,26 @@ export default function Navbar({ role = '', isEnterprise = false }) {
 
   return (
     <header className="bg-gradient-to-r from-blue-700 to-blue-500 text-white shadow-lg">
-      <div className="max-w-7xl mx-auto flex items-center justify-between py-1 px-4">
+      <div className="max-w-7xl mx-auto flex items-center justify-between py-4 px-4">
         {/* Logo y nombre */}
         <div className="flex items-center space-x-3">
-          <div className="p-1 bg-white rounded-lg shadow-md">
-            {isEnterprise ? (
-              <Image
-                src={COMPANY_LOGO}
-                alt="Marpesca Logo"
-                width={32}
-                height={32}
-                className="object-contain"
-                priority
-              />
-            ) : (
+          {(isEnterprise || effectiveRole === 'enterprise') ? (
+            <h1 className="text-lg font-bold tracking-tight whitespace-nowrap">
+              Hospital San Miguel Arcángel
+            </h1>
+          ) : (
+            <>
               <Image
                 src="/logo.jpg"
-                alt="Logo Marpes"
-                width={32}
-                height={32}
-                className="object-contain"
-                priority
+                alt="Logo"
+                width={60}
+                height={60}
+                className=""
               />
-            )}
-          </div>
-          {!isEnterprise && (
-            <h1 className="text-lg font-bold tracking-tight whitespace-nowrap">
-              Hombres de Blanco
-            </h1>
+              <h1 className="text-lg font-bold tracking-tight whitespace-nowrap">
+                Hombres De Blanco
+              </h1>
+            </>
           )}
         </div>
 

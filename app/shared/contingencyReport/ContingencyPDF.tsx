@@ -1,6 +1,11 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
+interface ReportImage {
+  url: string;
+  caption: string;
+}
+
 interface ReportData {
   title: string;
   type: 'contingencia' | 'tarea';
@@ -26,6 +31,15 @@ interface ReportData {
   }>;
 }
 
+// Función auxiliar para dividir el array en grupos
+function chunk<T>(array: T[], size: number): T[][] {
+  const chunked: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunked.push(array.slice(i, i + size));
+  }
+  return chunked;
+}
+
 export const generateContingencyPDF = async (reportData: ReportData) => {
   try {
     // Función para cargar una imagen y convertirla a base64
@@ -38,10 +52,17 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
           canvas.width = img.width;
           canvas.height = img.height;
           const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL('image/png'));
+          if (ctx) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+          }
+          resolve(canvas.toDataURL('image/png', 1.0));
         };
-        img.onerror = () => reject(new Error('Error loading image'));
+        img.onerror = () => {
+          console.error('Error al cargar imagen:', url);
+          reject(new Error('Error loading image'));
+        };
         img.src = url;
       });
     };
@@ -52,65 +73,40 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
       logoHSMA = await loadImage('/logo.jpg');
     } catch (error) {
       console.warn('No se pudo cargar el logo HSMA:', error);
-      logoHSMA = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
     }
     try {
       logoMINSA = await loadImage('/issa.png');
     } catch (error) {
       console.warn('No se pudo cargar el logo MINSA:', error);
-      logoMINSA = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
     }
     try {
       logoCSS = await loadImage('/sgs-iso.png');
     } catch (error) {
       console.warn('No se pudo cargar el logo CSS:', error);
-      logoCSS = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
     }
 
-    // Función para capitalizar la primera letra
-    const capitalize = (str: string) => {
-      if (!str) return '';
-      return str.split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ');
-    };
-
-    // Parsear la descripción si es un string JSON
-    let parsedDescription = '';
-    let tasks: any[] = [];
-    let images: string[] = [];
-    try {
-      if (reportData.description) {
-        const descData = JSON.parse(reportData.description);
-        if (descData.details) {
-          const details = [];
-          
-          // Tipo de contingencia
-          if (descData.details.type) {
-            details.push(`Tipo: ${capitalize(descData.details.type)}`);
-          }
-
-          // Actividades
-          if (descData.details.actividades && descData.details.actividades.length > 0) {
-            details.push('Actividades realizadas:');
-            descData.details.actividades.forEach((act: string, index: number) => {
-              details.push(`${index + 1}. ${capitalize(act)}`);
-            });
-          }
-
-          parsedDescription = details.join('\n');
-        }
-
-        // Guardar las imágenes del JSON
-        if (descData.images && Array.isArray(descData.images)) {
-          images = descData.images;
-        }
-      }
-    } catch (e) {
-      console.log('La descripción no es un JSON válido, usando texto plano');
-      parsedDescription = reportData.description || '';
+    // Preparar imágenes del reporte
+    const reportImages: ReportImage[] = [];
+    if (reportData.imagenes.inicial) {
+      reportImages.push({
+        url: reportData.imagenes.inicial,
+        caption: 'Estado Inicial'
+      });
+    }
+    if (reportData.imagenes.durante) {
+      reportImages.push({
+        url: reportData.imagenes.durante,
+        caption: 'Durante el Proceso'
+      });
+    }
+    if (reportData.imagenes.final) {
+      reportImages.push({
+        url: reportData.imagenes.final,
+        caption: 'Estado Final'
+      });
     }
 
+    // Crear el iframe para el contenido del PDF
     const iframe = document.createElement('iframe');
     iframe.style.visibility = 'hidden';
     iframe.style.position = 'fixed';
@@ -128,135 +124,142 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
         <head>
           <style>
             @page { 
-              margin: 10mm;
+              margin: 20mm;
               size: A4 portrait;
             }
             body { 
               margin: 0;
               font-family: Arial, sans-serif;
-              background: white;
-              color: #333;
-              font-size: 12pt;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
+              color: #000000;
+              font-size: 14px !important;
+              line-height: 1.6 !important;
+              -webkit-font-smoothing: antialiased;
+              -moz-osx-font-smoothing: grayscale;
+              text-rendering: optimizeLegibility;
             }
             .page {
-              padding: 5mm;
-              background: white;
               width: 210mm;
-              height: 297mm;
+              min-height: 297mm;
+              padding: 20mm;
+              box-sizing: border-box;
+              background: white;
               position: relative;
+              page-break-after: always;
+            }
+            .page:last-child {
+              page-break-after: avoid;
             }
             .header {
               display: flex;
               justify-content: space-between;
               align-items: center;
-              margin-bottom: 3mm;
-              padding-bottom: 2mm;
-              border-bottom: 1px solid #ccc;
+              margin-bottom: 20mm;
             }
             .logo {
               height: 20mm;
               width: auto;
               object-fit: contain;
+              background: transparent;
             }
             .title {
               text-align: center;
-              font-size: 24pt;
+              font-size: 20px !important;
               font-weight: bold;
-              margin: 3mm 0;
+              margin: 10mm 0;
               text-transform: uppercase;
+              letter-spacing: 0.5px;
             }
-            .basic-info {
-              margin-bottom: 4mm;
+            .info-section {
+              margin-bottom: 10mm;
             }
             .info-row {
-              margin-bottom: 1mm;
               display: flex;
-              align-items: baseline;
+              margin-bottom: 3mm;
             }
             .info-label {
-              font-size: 12pt;
-              color: #666;
-              width: 40mm;
-              font-weight: 500;
+              width: 35mm;
+              font-weight: bold;
+              font-size: 14px !important;
             }
             .info-value {
-              font-size: 12pt;
-              margin-left: 2mm;
+              flex: 1;
+              font-size: 14px !important;
             }
             .section-title {
-              font-size: 16pt;
+              font-size: 16px !important;
               font-weight: bold;
-              margin: 4mm 0 2mm 0;
-              color: #444;
-              border-bottom: 0.5pt solid #ccc;
-              padding-bottom: 1mm;
+              margin: 10mm 0 5mm;
+              border-bottom: 1.5pt solid #000;
+              padding-bottom: 2mm;
+              text-transform: uppercase;
+              letter-spacing: 0.3px;
             }
-            .activities-list {
-              margin: 0;
-              padding-left: 3mm;
-              list-style-type: decimal;
+            .task-item {
+              margin-bottom: 5mm;
+              page-break-inside: avoid;
             }
-            .activity-item {
-              font-size: 12pt;
-              margin-bottom: 1mm;
+            .task-title {
+              font-size: 14px !important;
+              font-weight: bold;
+              letter-spacing: 0.2px;
             }
-            .images-grid {
-              display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 10mm;
-              margin-top: 5mm;
-              width: 100%;
+            .task-description {
+              font-size: 14px !important;
+              margin: 2mm 0;
+            }
+            .image-section {
+              page-break-before: always;
+              text-align: center;
             }
             .image-container {
-              text-align: center;
-              width: 100%;
+              margin: 5mm 0;
+              display: inline-block;
+              width: 48%;
+              vertical-align: top;
+              padding: 2mm;
             }
             .report-image {
               width: 100%;
-              height: 60mm;
-              object-fit: cover;
-              border: 1px solid #ddd;
-              border-radius: 4mm;
+              max-height: 100mm;
+              object-fit: contain;
+              margin-bottom: 3mm;
             }
             .image-caption {
-              font-size: 10pt;
-              color: #666;
               margin-top: 2mm;
+              font-weight: bold;
+              font-size: 14px !important;
               text-align: center;
             }
-            .description-text {
-              font-size: 12pt;
-              margin-bottom: 3mm;
-              white-space: pre-wrap;
-            }
-            .page-break {
-              page-break-before: always;
+            .page-number {
+              position: absolute;
+              bottom: 10mm;
+              right: 10mm;
+              font-size: 12px !important;
             }
           </style>
         </head>
         <body>
+          <!-- Primera página -->
           <div class="page">
             <div class="header">
               <img src="${logoCSS}" alt="Logo CSS" class="logo" />
               <img src="${logoHSMA}" alt="Logo HSMA" class="logo" />
               <img src="${logoMINSA}" alt="Logo MINSA" class="logo" />
             </div>
-
+            
             <div class="title">
-              REPORTE DE ${reportData.type === 'contingencia' ? 'CONTINGENCIA' : 'TAREA'}
+              REPORTE DE ${reportData.type.toUpperCase()}
             </div>
 
-            <div class="basic-info">
+            <div class="info-section">
               <div class="info-row">
                 <div class="info-label">Área:</div>
-                <div class="info-value">${capitalize(reportData.area)}</div>
+                <div class="info-value">${reportData.area}</div>
               </div>
               ${reportData.sala ? `
               <div class="info-row">
                 <div class="info-label">Sala:</div>
-                <div class="info-value">${capitalize(reportData.sala)}</div>
+                <div class="info-value">${reportData.sala}</div>
               </div>
               ` : ''}
               <div class="info-row">
@@ -277,92 +280,83 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
               ` : ''}
             </div>
 
-            ${parsedDescription ? `
-            <div class="section-title">Descripción</div>
-            <div class="description-text">${parsedDescription}</div>
-            ` : ''}
-
             ${reportData.tasks && reportData.tasks.length > 0 ? `
-            <div class="section-title">Tareas Asignadas</div>
-            <div class="tasks-list">
-              ${reportData.tasks.map((task, index) => `
-                <div class="task-item" style="margin-bottom: 10px; padding: 10px; border: 1px solid #eee; border-radius: 4px;">
-                  <div style="font-weight: bold;">${index + 1}. ${task.title}</div>
-                  ${task.description ? `<div style="margin-top: 5px;">${task.description}</div>` : ''}
-                  <div style="margin-top: 5px; color: #666;">
-                    Estado: ${task.status === 'completed' ? 'Completada' : 'Pendiente'} | 
-                    Prioridad: ${task.priority} | 
-                    Tiempo estimado: ${task.estimated_hours}h
-                  </div>
-                </div>
-              `).join('')}
-            </div>
+            <div class="section-title">TAREAS ASIGNADAS</div>
+            ${reportData.tasks.map((task, index) => `
+              <div class="task-item">
+                <div class="task-title">${index + 1}. ${task.title}</div>
+                ${task.description ? `<div class="task-description">${task.description}</div>` : ''}
+                <div>Estado: ${task.status === 'completed' ? 'Completada' : 'Pendiente'}</div>
+                <div>Prioridad: ${task.priority}</div>
+              </div>
+            `).join('')}
             ` : ''}
 
             ${reportData.actividades.length > 0 ? `
-            <div class="section-title">Actividades Realizadas</div>
-            <ul class="activities-list">
-              ${reportData.actividades.map(actividad => `
-                <li class="activity-item">${capitalize(actividad)}</li>
-              `).join('')}
-            </ul>
-            ` : ''}
-
-            ${(images.length > 0) ? `
-            <div class="page-break"></div>
-            <div class="section-title">Imágenes Adjuntas</div>
-            <div class="images-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10mm;">
-              ${images.map((imageUrl, index) => `
-                <div class="image-container">
-                  <img src="${imageUrl}" alt="Imagen ${index + 1}" class="report-image" style="width: 100%; height: 60mm; object-fit: cover;" />
-                  <div class="image-caption">Imagen ${index + 1}</div>
+            <div class="section-title">ACTIVIDADES REALIZADAS</div>
+            <div class="activities-section">
+              ${reportData.actividades.map((actividad, index) => `
+                <div class="task-item">
+                  <div class="task-title">${index + 1}. ${actividad}</div>
                 </div>
               `).join('')}
             </div>
             ` : ''}
-
-            ${(reportData.imagenes.inicial || reportData.imagenes.durante || reportData.imagenes.final) ? `
-            <div class="page-break"></div>
-            <div class="section-title">Evidencia Fotográfica</div>
-            <div class="images-grid">
-              ${reportData.imagenes.inicial ? `
-              <div class="image-container">
-                <img src="${reportData.imagenes.inicial}" alt="Imagen inicial" class="report-image" style="width: 100%; height: 60mm; object-fit: cover;" />
-                <div class="image-caption">Antes</div>
-              </div>
-              ` : ''}
-              ${reportData.imagenes.durante ? `
-              <div class="image-container">
-                <img src="${reportData.imagenes.durante}" alt="Imagen durante" class="report-image" style="width: 100%; height: 60mm; object-fit: cover;" />
-                <div class="image-caption">Durante</div>
-              </div>
-              ` : ''}
-              ${reportData.imagenes.final ? `
-              <div class="image-container">
-                <img src="${reportData.imagenes.final}" alt="Imagen final" class="report-image" style="width: 100%; height: 60mm; object-fit: cover;" />
-                <div class="image-caption">Después</div>
-              </div>
-              ` : ''}
-            </div>
-            ` : ''}
+            
+            <div class="page-number">1</div>
           </div>
+
+          ${reportImages.length > 0 ? `
+          <!-- Página de imágenes -->
+          <div class="page">
+            <div class="section-title" style="text-align: center; margin-bottom: 15mm;">
+              EVIDENCIA FOTOGRÁFICA
+            </div>
+            <div style="text-align: center;">
+              ${reportImages.map((image, index) => `
+                <div class="image-container">
+                  <img src="${image.url}" alt="${image.caption}" class="report-image" />
+                  <div class="image-caption">${image.caption}</div>
+                </div>
+              `).join('')}
+            </div>
+            <div class="page-number">2</div>
+          </div>
+          ` : ''}
         </body>
       </html>
     `);
     iframeDoc.close();
 
     // Esperar a que las imágenes se carguen
-    await Promise.all(
-      Array.from(iframeDoc.images).map(
-        img => new Promise((resolve) => {
-          if (img.complete) resolve(null);
-          else {
-            img.onload = () => resolve(null);
-            img.onerror = () => resolve(null);
-          }
-        })
-      )
-    );
+    await new Promise((resolve) => {
+      const images = iframeDoc.getElementsByTagName('img');
+      let loadedImages = 0;
+      const totalImages = images.length;
+
+      function checkAllImagesLoaded() {
+        loadedImages++;
+        if (loadedImages === totalImages) {
+          resolve(null);
+        }
+      }
+
+      Array.from(images).forEach(img => {
+        if (img.complete) {
+          checkAllImagesLoaded();
+        } else {
+          img.onload = checkAllImagesLoaded;
+          img.onerror = checkAllImagesLoaded;
+        }
+      });
+
+      if (totalImages === 0) {
+        resolve(null);
+      }
+    });
+
+    // Esperar un momento para asegurar el renderizado
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Generar el PDF
     const pages = Array.from(iframeDoc.querySelectorAll('.page')) as HTMLElement[];
@@ -373,31 +367,6 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
       compress: true
     });
 
-    // Cargar y procesar las imágenes primero
-    if (reportData.imagenes.inicial || reportData.imagenes.durante || reportData.imagenes.final) {
-      try {
-        // Cargar todas las imágenes primero
-        const imagePromises = [];
-        if (reportData.imagenes.inicial) {
-          imagePromises.push(loadImage(reportData.imagenes.inicial));
-        }
-        if (reportData.imagenes.durante) {
-          imagePromises.push(loadImage(reportData.imagenes.durante));
-        }
-        if (reportData.imagenes.final) {
-          imagePromises.push(loadImage(reportData.imagenes.final));
-        }
-
-        // Esperar a que todas las imágenes se carguen
-        await Promise.all(imagePromises);
-
-        // Esperar un momento adicional para asegurar que las imágenes se rendericen
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } catch (error) {
-        console.error('Error al cargar las imágenes:', error);
-      }
-    }
-
     // Procesar cada página
     for (let i = 0; i < pages.length; i++) {
       if (i > 0) pdf.addPage();
@@ -406,50 +375,18 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
         scale: 2,
         useCORS: true,
         allowTaint: true,
-        width: pages[i].offsetWidth,
-        height: pages[i].offsetHeight,
-        windowWidth: pages[i].offsetWidth,
-        windowHeight: pages[i].offsetHeight,
-        foreignObjectRendering: true,
-        removeContainer: true,
-        backgroundColor: '#ffffff',
-        logging: true,
-        imageTimeout: 30000,
-        onclone: function(clonedDoc) {
-          const images = Array.from(clonedDoc.getElementsByTagName('img'));
-          images.forEach(img => {
-            img.crossOrigin = 'anonymous';
-            if (img.classList.contains('report-image')) {
-              img.style.width = '100%';
-              img.style.height = '60mm';
-              img.style.objectFit = 'cover';
-            }
-          });
-        }
+        logging: false,
+        backgroundColor: '#ffffff'
       });
 
-      const pageWidth = 210;
-      const pageHeight = 297;
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-
-      pdf.addImage(
-        imgData,
-        'JPEG',
-        0,
-        0,
-        pageWidth,
-        pageHeight,
-        undefined,
-        'FAST'
-      );
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
     }
 
-    // Guardar el PDF
     pdf.save(`Reporte_${reportData.type}_${new Date().toLocaleDateString()}.pdf`);
-    
-    // Limpiar
     document.body.removeChild(iframe);
     return true;
+
   } catch (error) {
     console.error('Error al generar el PDF:', error);
     return false;

@@ -119,23 +119,25 @@ interface Employee {
 }
 
 interface InventoryItem {
-  id: string
-  organization_id: string
-  area_id: string | null
-  name: string
-  description: string | null
-  category: string | null
-  quantity: number
-  minimum_quantity: number
-  status: 'active' | 'inactive' | 'discontinued'
-  created_at: string | null
-  updated_at: string | null
-  supplier_info: any
-  cost_history: any[]
-  location_data: any
-  barcode: string | null
-  reorder_point: number | null
-  unit_of_measure: string | null
+  id: string;
+  organization_id: string;
+  area_id: string | null;
+  name: string;
+  description: string | null;
+  category: string | null;
+  quantity: number;
+  minimum_quantity: number | null;
+  status: 'available' | 'low' | 'out_of_stock';
+  created_at: string | null;
+  updated_at: string | null;
+  supplier_info: any;
+  cost_history: any[];
+  location_data: any;
+  barcode: string | null;
+  reorder_point: number | null;
+  unit_of_measure: string | null;
+  min_stock: number;
+  unit: string;
 }
 
 interface FormattedEmployee extends Employee {
@@ -373,9 +375,16 @@ export default function EnterpriseOverviewPage() {
         .from('tasks')
         .select(`
           *,
-          assignee:assigned_to(id, first_name, last_name)
+          assignee:assigned_to(id, first_name, last_name),
+          area:area_id(id, name)
         `)
-        .eq('organization_id', userProfile.organization_id);
+        .eq('organization_id', userProfile.organization_id)
+        .is('parent_task_id', null)  // Solo tareas principales, no subtareas
+        .not('area_id', 'is', null)  // Solo tareas que tienen un área asignada
+        .order('created_at', { ascending: false }); // Ordenar por fecha de creación, más recientes primero
+
+      console.log('Tasks data:', tasksData);
+      console.log('Tasks error:', tasksError);
 
       if (tasksError) {
         console.error('Error al cargar tareas:', tasksError);
@@ -391,11 +400,12 @@ export default function EnterpriseOverviewPage() {
         const formattedSalas = salasData.map(sala => {
           const salaAreas = areasData?.filter(area => area.sala_id === sala.id) || [];
           const salaTasks = tasksData?.filter(task => 
-            salaAreas.some(area => area.id === task.area_id)
+            salaAreas.some(area => area.id === task.area_id) && !task.parent_task_id
           ).map(task => ({
             ...task,
             assigned_name: task.assignee ? `${task.assignee.first_name} ${task.assignee.last_name}` : 'Sin asignar',
-            area_id: task.area_id
+            area_id: task.area_id,
+            area_name: task.area?.name || 'Sin área'
           })) || [];
 
           return {
@@ -408,6 +418,7 @@ export default function EnterpriseOverviewPage() {
           };
         });
 
+        console.log('Formatted salas with tasks:', formattedSalas);
         setAreas(formattedSalas);
         setAreasTasks(formattedSalas);
       }
@@ -415,9 +426,29 @@ export default function EnterpriseOverviewPage() {
       // 7. Cargar inventario
       const { data: inventoryData, error: inventoryError } = await supabase
         .from('inventory_items')
-        .select('*')
+        .select(`
+          id,
+          organization_id,
+          area_id,
+          name,
+          description,
+          category,
+          quantity,
+          minimum_quantity,
+          status,
+          created_at,
+          updated_at,
+          supplier_info,
+          cost_history,
+          location_data,
+          barcode,
+          reorder_point,
+          unit_of_measure,
+          min_stock,
+          unit
+        `)
         .eq('organization_id', userProfile.organization_id)
-        .eq('status', 'active')
+        .eq('status', 'available')
         .order('quantity', { ascending: true })
         .limit(3);
 
@@ -673,11 +704,11 @@ export default function EnterpriseOverviewPage() {
             </div>
             <div className="bg-white rounded-xl shadow-lg p-4" style={{ height: '628px' }}>
               <div className="space-y-3">
-                {inventory.map(item => {
-                  const stockPercentage = (item.quantity / (item.minimum_quantity || 1)) * 100;
+                {inventory.map((item) => {
+                  const stockPercentage = (item.quantity / (item.min_stock || 1)) * 100;
                   const status = stockPercentage <= 25 ? 'critical' : 
-                               stockPercentage <= 50 ? 'low' : 
-                               stockPercentage <= 75 ? 'medium' : 'good';
+                                 stockPercentage <= 50 ? 'low' : 
+                                 stockPercentage <= 75 ? 'medium' : 'good';
                   const statusColors = {
                     critical: 'text-red-500 bg-red-50',
                     low: 'text-orange-500 bg-orange-50',
@@ -693,14 +724,14 @@ export default function EnterpriseOverviewPage() {
                           <p className="text-sm text-gray-500">{item.category || 'Sin categoría'}</p>
                         </div>
                         <span className={`px-2 py-1 rounded-full text-sm font-medium ${statusColors[status]}`}>
-                          {item.quantity} {item.unit_of_measure || 'unidades'}
+                          {item.quantity} {item.unit || 'unidades'}
                         </span>
                       </div>
                       <div className="relative pt-1">
                         <div className="flex mb-1 items-center justify-between">
                           <div>
                             <span className="text-xs font-semibold inline-block text-gray-600">
-                              Stock mínimo: {item.minimum_quantity || 0}
+                              Stock mínimo: {item.min_stock || 0}
                             </span>
                           </div>
                           <div>

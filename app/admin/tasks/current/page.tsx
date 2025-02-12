@@ -194,57 +194,50 @@ export default function CurrentTaskPage() {
         area: formattedMainTask.area?.name
       });
 
-      // Obtener las tareas del área
-      const { data: areaTasks, error: tasksError } = await supabase
-        .from('tasks')
+      // Primero obtenemos el área
+      const { data: areaData, error: areaError } = await supabase
+        .from('areas')
         .select(`
           id,
-          title,
-          description,
-          status,
-          priority,
-          estimated_hours,
-          created_at,
-          organization_id,
-          type,
-          area_id,
-          sala_id,
-          assigned_to,
-          users!tasks_assigned_to_fkey (
-            first_name,
-            last_name
+          name,
+          tasks (
+            id,
+            title,
+            description,
+            status,
+            priority,
+            estimated_hours,
+            created_at,
+            organization_id,
+            type,
+            area_id,
+            sala_id,
+            assigned_to,
+            users!tasks_assigned_to_fkey (
+              first_name,
+              last_name
+            )
           )
         `)
-        .eq('organization_id', userProfile.organization_id)
-        .eq('area_id', mainTask.area_id)
-        .eq('sala_id', mainTask.sala_id)
-        .eq('status', 'pending')
-        .eq('type', 'template')
-        .is('parent_task_id', null)
-        .order('created_at', { ascending: true });
+        .eq('id', mainTask.area_id)
+        .single();
 
-      console.log('Debug - Tareas del área:', {
-        area_id: mainTask.area_id,
-        sala_id: mainTask.sala_id,
-        organization_id: userProfile.organization_id,
-        totalTasks: areaTasks?.length,
-        tasks: areaTasks?.map(t => ({
+      console.log('Debug - Área y sus tareas:', {
+        area: areaData?.name,
+        totalTasks: areaData?.tasks?.length,
+        tasks: areaData?.tasks?.map(t => ({
           id: t.id,
           title: t.title,
-          description: t.description,
-          status: t.status,
-          type: t.type,
-          assigned_to: t.assigned_to,
-          assignee: t.users
+          status: t.status
         }))
       });
 
-      if (tasksError) {
-        console.error('Error al obtener tareas del área:', tasksError);
-        throw new Error('Error al obtener las tareas del área');
+      if (areaError) {
+        console.error('Error al obtener área:', areaError);
+        throw new Error('Error al obtener el área y sus tareas');
       }
 
-      if (!areaTasks || areaTasks.length === 0) {
+      if (!areaData || !areaData.tasks) {
         console.log('No se encontraron tareas en el área');
         setCurrentTask(formattedMainTask);
         setLoading(false);
@@ -252,23 +245,25 @@ export default function CurrentTaskPage() {
       }
 
       // Formatear las tareas del área
-      const formattedTasks: Task[] = areaTasks.map(task => ({
-        id: task.id,
-        title: task.title,
-        description: task.description || '',
-        status: task.status as Task['status'],
-        priority: task.priority as Task['priority'] || 'medium',
-        assigned_to: task.assigned_to || '',
-        created_at: task.created_at,
-        due_date: mainTask.due_date,
-        area_id: task.area_id,
-        organization_id: task.organization_id,
-        estimated_hours: task.estimated_hours || 0.5,
-        assignee: task.users?.[0] ? {
-          first_name: task.users[0].first_name,
-          last_name: task.users[0].last_name
-        } : undefined
-      }));
+      const formattedTasks: Task[] = areaData.tasks
+        .filter(task => task.id !== mainTask.id && task.status !== 'cancelled')
+        .map(task => ({
+          id: task.id,
+          title: task.title,
+          description: task.description || '',
+          status: task.status as Task['status'],
+          priority: task.priority as Task['priority'] || 'medium',
+          assigned_to: task.assigned_to || '',
+          created_at: task.created_at,
+          due_date: mainTask.due_date, // Usar la fecha de vencimiento de la tarea principal
+          area_id: task.area_id,
+          organization_id: task.organization_id,
+          estimated_hours: task.estimated_hours || 0.5,
+          assignee: task.users?.[0] ? {
+            first_name: task.users[0].first_name,
+            last_name: task.users[0].last_name
+          } : undefined
+        }));
 
       setAreaTasks(formattedTasks);
       
@@ -690,37 +685,82 @@ export default function CurrentTaskPage() {
                   areaTasks.map((task, index) => (
                     <div 
                       key={task.id} 
-                      style={{ backgroundColor: task.status === 'completed' ? '#f0fdf4' : '#ffffff', borderColor: '#e5e7eb' }} 
-                      className="flex items-start space-x-2 p-4 rounded-lg border shadow-sm hover:shadow-md transition-all duration-200"
+                      className={`flex items-start space-x-2 p-4 rounded-lg border ${
+                        task.status === 'completed' 
+                          ? 'bg-green-50 border-green-200' 
+                          : task.status === 'in_progress'
+                          ? 'bg-blue-50 border-blue-200'
+                          : 'bg-white border-gray-200'
+                      } shadow-sm hover:shadow-md transition-all duration-200`}
                     >
                       <div 
-                        style={{ 
-                          backgroundColor: task.status === 'completed' ? '#dcfce7' : '#dbeafe', 
-                          color: task.status === 'completed' ? '#16a34a' : '#2563eb' 
-                        }} 
-                        className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm"
+                        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${
+                          task.status === 'completed'
+                            ? 'bg-green-100 text-green-600'
+                            : task.status === 'in_progress'
+                            ? 'bg-blue-100 text-blue-600'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
                       >
                         {index + 1}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-start gap-3">
+                        <div className="flex items-start justify-between gap-3">
                           <div className="flex-1">
-                            <h3 
-                              style={{ 
-                                color: task.status === 'completed' ? '#16a34a' : '#111827'
-                              }} 
-                              className="font-medium text-base"
-                            >
+                            <h3 className={`font-medium text-base ${
+                              task.status === 'completed'
+                                ? 'text-green-700'
+                                : task.status === 'in_progress'
+                                ? 'text-blue-700'
+                                : 'text-gray-900'
+                            }`}>
                               {task.title}
                             </h3>
-                            <p 
-                              style={{ 
-                                color: task.status === 'completed' ? '#4ade80' : '#4b5563'
-                              }} 
-                              className="text-sm mt-1"
-                            >
+                            <p className="text-sm text-gray-600 mt-1">
                               {task.description}
                             </p>
+                            <div className="flex items-center gap-4 mt-2 text-sm">
+                              {task.assignee && (
+                                <span className="flex items-center text-gray-600">
+                                  <FaUserCircle className="mr-1" />
+                                  {task.assignee.first_name} {task.assignee.last_name}
+                                </span>
+                              )}
+                              {task.estimated_hours && (
+                                <span className="flex items-center text-gray-600">
+                                  <FaClock className="mr-1" />
+                                  {task.estimated_hours}h
+                                </span>
+                              )}
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                task.status === 'completed'
+                                  ? 'bg-green-100 text-green-700'
+                                  : task.status === 'in_progress'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-gray-100 text-gray-700'
+                              }`}>
+                                {task.status === 'completed' 
+                                  ? 'Completada' 
+                                  : task.status === 'in_progress'
+                                  ? 'En progreso'
+                                  : 'Pendiente'}
+                              </span>
+                              {task.priority && (
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                  task.priority === 'high'
+                                    ? 'bg-red-100 text-red-700'
+                                    : task.priority === 'medium'
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : 'bg-green-100 text-green-700'
+                                }`}>
+                                  {task.priority === 'high' 
+                                    ? 'Alta' 
+                                    : task.priority === 'medium'
+                                    ? 'Media'
+                                    : 'Baja'}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -728,10 +768,10 @@ export default function CurrentTaskPage() {
                   ))
                 ) : (
                   <div className="text-center py-6">
-                    <div style={{ backgroundColor: '#f3f4f6' }} className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-3">
-                      <FaListUl style={{ color: '#9ca3af' }} className="w-6 h-6" />
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 mb-3">
+                      <FaListUl className="w-6 h-6 text-gray-400" />
                     </div>
-                    <p style={{ color: '#6b7280' }} className="text-sm">No hay tareas disponibles para esta área</p>
+                    <p className="text-gray-500 text-sm">No hay tareas disponibles para esta área</p>
                   </div>
                 )}
               </div>

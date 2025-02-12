@@ -123,6 +123,14 @@ export default function ReportsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [userData, setUserData] = useState<{ role: string; organization_id: string | null } | null>(null);
+  const [areaTasks, setAreaTasks] = useState<Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    status: string;
+    priority: string;
+    estimated_hours: number;
+  }>>([]);
 
   // Estado para paginación
   const [page, setPage] = useState(1);
@@ -276,7 +284,7 @@ export default function ReportsPage() {
               descripcion,
               area_id
             ),
-            tasks(
+            tasks!inner(
               id,
               title,
               description,
@@ -284,7 +292,8 @@ export default function ReportsPage() {
               priority,
               estimated_hours,
               created_at,
-              updated_at
+              updated_at,
+              area_id
             )
           ),
           organization:organizations!organization_id(
@@ -456,6 +465,40 @@ export default function ReportsPage() {
     }
   }, [selectedArea]);
 
+  // Cargar tareas cuando cambia el área seleccionada
+  useEffect(() => {
+    const loadAreaTasks = async () => {
+      if (!selectedArea || !userData?.organization_id) return;
+
+      try {
+        const { data: tasks, error } = await supabase
+          .from('tasks')
+          .select(`
+            id,
+            title,
+            description,
+            status,
+            priority,
+            estimated_hours,
+            area_id
+          `)
+          .eq('organization_id', userData.organization_id)
+          .eq('area_id', selectedArea)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        
+        console.log('Tareas del área cargadas:', tasks);
+        setAreaTasks(tasks || []);
+      } catch (error) {
+        console.error('Error al cargar tareas del área:', error);
+        toast.error('Error al cargar las tareas del área');
+      }
+    };
+
+    loadAreaTasks();
+  }, [selectedArea, userData?.organization_id]);
+
   const handleSaveReport = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -591,7 +634,7 @@ export default function ReportsPage() {
             fecha: new Date().toLocaleDateString(),
             horaInicio: new Date().toLocaleTimeString(),
             horaFin: new Date().toLocaleTimeString(),
-            actividades: orderedTaskDescriptions,
+            actividades: areaTasks.map(task => task.title),
             imagenes: uploadedUrls.reduce((acc, url, index) => {
               if (index === 0) acc.inicial = url;
               else if (index === 1) acc.durante = url;
@@ -1217,6 +1260,53 @@ export default function ReportsPage() {
                             {subarea.descripcion && (
                               <p className="text-xs text-gray-500 mt-1">{subarea.descripcion}</p>
                             )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tareas del Área */}
+                {selectedArea && areaTasks.length > 0 && (
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Tareas del Área
+                    </label>
+                    <div className="space-y-2 bg-gray-50 p-3 rounded-lg max-h-60 overflow-y-auto">
+                      {areaTasks.map((task) => (
+                        <div key={task.id} className="flex items-start space-x-3 p-3 bg-white rounded-lg shadow-sm">
+                          <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-sm font-medium ${
+                            task.status === 'completed' 
+                              ? 'bg-green-100 text-green-600' 
+                              : 'bg-blue-100 text-blue-600'
+                          }`}>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <h5 className="font-medium text-gray-900">{task.title}</h5>
+                            {task.description && (
+                              <p className="text-sm text-gray-500 mt-1">{task.description}</p>
+                            )}
+                            <div className="flex items-center gap-4 mt-2">
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                task.status === 'completed' 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {task.status === 'completed' ? 'Completada' : 'Pendiente'}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                Prioridad: {task.priority}
+                              </span>
+                              {task.estimated_hours && (
+                                <span className="text-xs text-gray-500">
+                                  Tiempo estimado: {task.estimated_hours}h
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       ))}
