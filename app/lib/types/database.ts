@@ -9,6 +9,67 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      salas: {
+        Row: {
+          id: string
+          nombre: string
+          organization_id: string
+          estado: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          nombre: string
+          organization_id: string
+          estado?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          nombre?: string
+          organization_id?: string
+          estado?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      areas: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          organization_id: string
+          parent_id: string | null
+          status: 'active' | 'inactive'
+          sala_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          organization_id: string
+          parent_id?: string | null
+          status?: 'active' | 'inactive'
+          sala_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          organization_id?: string
+          parent_id?: string | null
+          status?: 'active' | 'inactive'
+          sala_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
       users: {
         Row: {
           id: string
@@ -76,38 +137,6 @@ export interface Database {
           updated_at?: string
         }
       }
-      areas: {
-        Row: {
-          id: string
-          name: string
-          description: string | null
-          organization_id: string
-          parent_id: string | null
-          status: 'active' | 'inactive'
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          description?: string | null
-          organization_id: string
-          parent_id?: string | null
-          status?: 'active' | 'inactive'
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          description?: string | null
-          organization_id?: string
-          parent_id?: string | null
-          status?: 'active' | 'inactive'
-          created_at?: string
-          updated_at?: string
-        }
-      }
       tasks: {
         Row: {
           id: string
@@ -127,6 +156,9 @@ export interface Database {
           type: string | null
           frequency: 'diario' | 'semanal' | 'quincenal' | 'mensual' | null
           sala_id: string | null
+          parent_task_id: string | null
+          order: number | null
+          estimated_hours: number | null
         }
         Insert: {
           id?: string
@@ -146,6 +178,9 @@ export interface Database {
           type?: string | null
           frequency?: 'diario' | 'semanal' | 'quincenal' | 'mensual' | null
           sala_id?: string | null
+          parent_task_id?: string | null
+          order?: number | null
+          estimated_hours?: number | null
         }
         Update: {
           id?: string
@@ -165,6 +200,9 @@ export interface Database {
           type?: string | null
           frequency?: 'diario' | 'semanal' | 'quincenal' | 'mensual' | null
           sala_id?: string | null
+          parent_task_id?: string | null
+          order?: number | null
+          estimated_hours?: number | null
         }
       }
       work_shifts: {
@@ -179,6 +217,8 @@ export interface Database {
           created_by: string
           created_at: string
           updated_at: string
+          organization_id: string
+          shift_type: 'morning' | 'afternoon' | 'night'
         }
         Insert: {
           id?: string
@@ -191,6 +231,8 @@ export interface Database {
           created_by: string
           created_at?: string
           updated_at?: string
+          organization_id: string
+          shift_type: 'morning' | 'afternoon' | 'night'
         }
         Update: {
           id?: string
@@ -203,6 +245,8 @@ export interface Database {
           created_by?: string
           created_at?: string
           updated_at?: string
+          organization_id?: string
+          shift_type?: 'morning' | 'afternoon' | 'night'
         }
       }
       inventory_items: {

@@ -67,7 +67,7 @@ export function useSupabaseConnection() {
     
     // Configurar handlers
     Object.entries(handlers).forEach(([event, handler]) => {
-      channel.on(event as any, handler as any)
+      channel.on(event as any, {} as any, handler as any)
     })
 
     // Suscribirse al canal

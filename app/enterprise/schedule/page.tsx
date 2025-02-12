@@ -3,21 +3,20 @@ import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import Calendar from '@/app/shared/schedule/components/Calendar'
 import TaskModal from './components/TaskModal'
+import { Database } from '@/lib/types/database'
 
-interface Task {
-  id: string
-  title: string
-  description?: string
-  status: string
-  priority: string
-  assigned_to?: string
-  created_by: string
-  organization_id: string
-  created_at?: string
-  updated_at?: string
-  area_id?: string
-  area?: string
-  due_date?: string
+type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
+type TaskPriority = 'low' | 'medium' | 'high'
+
+type Task = Database['public']['Tables']['tasks']['Row'] & {
+  assignee?: {
+    first_name: string | null
+    last_name: string | null
+  }
+  organization?: {
+    id: string
+    name: string
+  }
 }
 
 interface CustomError {
@@ -175,31 +174,13 @@ export default function EnterpriseSchedulePage() {
     return <div className="min-h-screen bg-gray-50 p-6">Error: {error}</div>
   }
 
-  const transformedTasks = tasks.map(task => {
-    const priorityMap = {
-      'baja': 'low',
-      'media': 'medium',
-      'alta': 'high'
-    } as const;
-
-    const taskPriority = task.priority as keyof typeof priorityMap;
-
-    return {
-      id: task.id,
-      title: task.title,
-      description: task.description,
-      area_id: task.area_id,
-      area: task.area,
-      assigned_to: task.assigned_to,
-      priority: priorityMap[taskPriority] || 'medium',
-      status: task.status,
-      due_date: task.due_date,
-      created_by: userProfile?.id || '',
-      organization_id: userProfile?.organization_id || '',
-      created_at: task.created_at || new Date().toISOString(),
-      updated_at: task.updated_at || new Date().toISOString()
-    }
-  })
+  const transformedTasks = tasks.map(task => ({
+    ...task,
+    organization: userProfile?.organization ? {
+      id: userProfile.organization.id,
+      name: userProfile.organization.name
+    } : undefined
+  }))
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">

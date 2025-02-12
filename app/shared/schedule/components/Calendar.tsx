@@ -3,13 +3,13 @@ import { useState, useMemo } from 'react'
 import { Database } from '@/lib/types/database'
 
 type Task = Database['public']['Tables']['tasks']['Row'] & {
+  assignee?: {
+    first_name: string | null
+    last_name: string | null
+  }
   organization?: {
     id: string
     name: string
-  }
-  assignee?: {
-    first_name: string
-    last_name: string
   }
 }
 
@@ -24,6 +24,13 @@ interface CalendarDay {
   date: Date
   isCurrentMonth: boolean
   isWeekend: boolean
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-yellow-100 border-yellow-200',
+  in_progress: 'bg-blue-100 border-blue-200',
+  completed: 'bg-green-100 border-green-200',
+  cancelled: 'bg-red-100 border-red-200'
 }
 
 export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }: CalendarProps) {
@@ -102,8 +109,9 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
   // Función para obtener las tareas de un día específico
   const getTasksForDate = (date: Date) => {
     return tasks.filter(task => {
-      if (!task.due_date) return false
-      const taskDate = new Date(task.due_date)
+      const dueDate = task.due_date
+      if (!dueDate) return false
+      const taskDate = new Date(dueDate)
       return (
         taskDate.getDate() === date.getDate() &&
         taskDate.getMonth() === date.getMonth() &&
@@ -119,54 +127,52 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
 
     return (
       <div className="space-y-1">
-        {dayTasks.map(task => (
-          <div
-            key={task.id}
-            className={`
-              p-2 rounded-lg text-xs font-medium shadow-sm
-              transition-all duration-200 hover:shadow-md
-              ${task.status === 'completed'
-                ? 'bg-green-50 text-green-700 hover:bg-green-100'
-                : task.status === 'cancelled'
-                ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                : task.priority === 'high'
-                ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                : task.priority === 'medium'
-                ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
-                : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-              }
-            `}
-            onClick={() => onTaskClick(task)}
-          >
-            <div className="flex items-center gap-2">
-              <span className={`h-2 w-2 rounded-full ${
-                task.status === 'completed' ? 'bg-green-500' :
-                task.status === 'cancelled' ? 'bg-red-500' :
-                task.priority === 'high' ? 'bg-red-500' :
-                task.priority === 'medium' ? 'bg-yellow-500' :
-                'bg-blue-500'
-              }`} />
-              <span>{new Date(task.due_date || '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        {dayTasks.map(task => {
+          const dueDate = task.due_date ? new Date(task.due_date) : null
+          const timeString = dueDate ? dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+
+          return (
+            <div
+              key={task.id}
+              className={`
+                p-2 rounded-lg text-xs font-medium shadow-sm
+                transition-all duration-200 hover:shadow-md
+                ${task.status === 'completed'
+                  ? 'bg-green-50 text-green-700 hover:bg-green-100'
+                  : task.status === 'cancelled'
+                  ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                  : task.priority === 'high'
+                  ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                  : task.priority === 'medium'
+                  ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
+                  : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                }
+              `}
+              onClick={() => onTaskClick(task)}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${
+                  task.status === 'completed' ? 'bg-green-500' :
+                  task.status === 'cancelled' ? 'bg-red-500' :
+                  task.priority === 'high' ? 'bg-red-500' :
+                  task.priority === 'medium' ? 'bg-yellow-500' :
+                  'bg-blue-500'
+                }`} />
+                <span>{timeString}</span>
+              </div>
+              <p className="mt-1 truncate">{task.title}</p>
             </div>
-            <p className="mt-1 truncate">{task.title}</p>
-          </div>
-        ))}
+          )
+        })}
       </div>
     )
   }
 
   const renderTask = (task: Task) => {
-    const statusColors = {
-      pending: 'bg-yellow-100 border-yellow-200',
-      in_progress: 'bg-blue-100 border-blue-200',
-      completed: 'bg-green-100 border-green-200',
-      cancelled: 'bg-red-100 border-red-200'
-    }
-
     return (
       <div
         key={task.id}
-        className={`p-2 mb-1 rounded-lg border cursor-pointer ${statusColors[task.status] || 'bg-gray-100 border-gray-200'}`}
+        className={`p-2 mb-1 rounded-lg border cursor-pointer ${STATUS_COLORS[task.status as string] || 'bg-gray-100 border-gray-200'}`}
         onClick={() => onTaskClick(task)}
       >
         <div className="font-medium text-sm truncate">{task.title}</div>

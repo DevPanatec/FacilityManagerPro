@@ -6,8 +6,20 @@ import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { COMPANY_LOGO } from '../../config/brandConfig';
 
+type UserRole = 'superadmin' | 'admin' | 'enterprise' | 'usuario';
+
+type NavItem = {
+  label: string;
+  href: string;
+  icon: string;
+};
+
+type NavItems = {
+  [K in UserRole]: NavItem[];
+};
+
 // Configuración de rutas por rol
-const NAV_ITEMS = {
+const NAV_ITEMS: NavItems = {
   superadmin: [
     { 
       label: 'Panel Principal',
@@ -118,22 +130,27 @@ const NAV_ITEMS = {
   ]
 };
 
-export default function Navbar({ role = '', isEnterprise = false }) {
+interface NavbarProps {
+  role?: string;
+  isEnterprise?: boolean;
+}
+
+export default function Navbar({ role = '', isEnterprise = false }: NavbarProps) {
   const router = useRouter()
   const pathname = usePathname();
-  const [userRole, setUserRole] = useState(role || 'enterprise');
+  const [userRole, setUserRole] = useState<UserRole>((role || 'enterprise') as UserRole);
 
   useEffect(() => {
     const storedRole = localStorage.getItem('userRole');
     if (storedRole) {
-      setUserRole(storedRole.toLowerCase());
+      setUserRole(storedRole.toLowerCase() as UserRole);
     } else if (isEnterprise) {
       setUserRole('enterprise');
     }
   }, [role, isEnterprise]);
 
   // Si isEnterprise es true, forzamos el rol enterprise
-  const effectiveRole = isEnterprise ? 'enterprise' : userRole;
+  const effectiveRole = (isEnterprise ? 'enterprise' : userRole) as UserRole;
   const navItems = NAV_ITEMS[effectiveRole] || [];
 
   const handleLogout = () => {

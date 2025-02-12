@@ -554,6 +554,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           const uploadedFiles = await fileService.uploadFiles(
             files,
             userData.organization_id,
+            'chat-files',
             onUploadProgress
           )
           
@@ -625,7 +626,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const attachments = state.attachments[messageId] || []
       for (const attachment of attachments) {
         if (attachment.file_type === 'image') {
-          await fileService.deleteFile(attachment.file_url)
+          const filePath = attachment.file_url.split('/').pop() || ''
+          await fileService.deleteContingencyFile(attachment.id, filePath)
         }
       }
       

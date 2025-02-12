@@ -1,75 +1,68 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase/client'
-import { Task } from '@/lib/types/tasks'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import SalaAreaSelector from '@/app/shared/components/componentes/SalaAreaSelector'
-import { Sala, Area } from '@/lib/types/database'
+import { Database } from '@/types/supabase'
+import { Button } from '@/components/ui/button'
+
+type TaskModalProps = {
+  isOpen: boolean
+  onClose: () => void
+  onSave: (taskData: Database['public']['Tables']['tasks']['Insert']) => void
+  task?: Database['public']['Tables']['tasks']['Row'] | null
+  organizationId: string
+}
+
+interface Area {
+  id: string
+  name: string
+  description: string | null
+  organization_id: string
+  parent_id: string | null
+  status: 'active' | 'inactive'
+  sala_id: string | null
+  created_at: string
+  updated_at: string
+}
 
 interface User {
   id: string
-  first_name: string
-  last_name: string
+  email: string
+  first_name: string | null
+  last_name: string | null
 }
 
-interface TaskModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onSave: (taskData: Partial<Task>) => Promise<void>
-  task?: Task | null
-}
+type TaskPriority = Database['public']['Tables']['tasks']['Row']['priority']
+type TaskStatus = Database['public']['Tables']['tasks']['Row']['status']
 
-export function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
+export function TaskModal({ isOpen, onClose, onSave, task, organizationId }: TaskModalProps) {
+  const supabase = createClientComponentClient<Database>()
+
   const [title, setTitle] = useState(task?.title || '')
-  const [description, setDescription] = useState(task?.description || '')
-  const [priority, setPriority] = useState<Task['priority']>(task?.priority || 'medium')
-  const [status, setStatus] = useState<Task['status']>(task?.status || 'pending')
-  const [dueDate, setDueDate] = useState(task?.due_date || new Date().toISOString().split('T')[0])
-  const [selectedSala, setSelectedSala] = useState(task?.sala_id || '')
-  const [selectedArea, setSelectedArea] = useState(task?.area_id || '')
-  const [assignedTo, setAssignedTo] = useState(task?.assigned_to || '')
-  const [startTime, setStartTime] = useState(task?.start_time || '')
-  const [endTime, setEndTime] = useState(task?.end_time || '')
+  const [description, setDescription] = useState<string | undefined>(task?.description || undefined)
+  const [priority, setPriority] = useState<TaskPriority | undefined>(task?.priority || undefined)
+  const [status, setStatus] = useState<TaskStatus | undefined>(task?.status || undefined)
+  const [dueDate, setDueDate] = useState<string | undefined>(task?.due_date || undefined)
+  const [selectedArea, setSelectedArea] = useState<string | undefined>(task?.area_id || undefined)
+  const [assignedTo, setAssignedTo] = useState<string | undefined>(task?.assigned_to || undefined)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [salas, setSalas] = useState<Sala[]>([])
   const [areas, setAreas] = useState<Area[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState({
-    salas: false,
     areas: false,
     users: false
   })
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!task?.organization_id) {
-        return
-      }
-
-      setLoading(prev => ({ ...prev, salas: true, users: true }))
+      setLoading(prev => ({ ...prev, users: true }))
 
       try {
-        // Obtener salas
-        const { data: salasData, error: salasError } = await supabase
-          .from('salas')
-          .select('id, nombre, estado, organization_id')
-          .eq('organization_id', task.organization_id)
-          .eq('estado', true)
-          .order('nombre')
-
-        if (salasError) {
-          console.error('Error fetching salas:', salasError)
-          setError('Error al cargar las salas')
-          return
-        }
-
-        setSalas(salasData || [])
-
-        // Obtener usuarios
         const { data: usersData, error: usersError } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name')
-          .eq('organization_id', task.organization_id)
+          .from('users')
+          .select()
+          .eq('organization_id', organizationId)
           .eq('status', 'active')
 
         if (usersError) {
@@ -82,31 +75,22 @@ export function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
       } catch (error) {
         console.error('Error en fetchData:', error)
       } finally {
-        setLoading(prev => ({ ...prev, salas: false, users: false }))
+        setLoading(prev => ({ ...prev, users: false }))
       }
     }
 
-    if (isOpen) {
-      fetchData()
-    }
-  }, [isOpen, task])
+    fetchData()
+  }, [organizationId])
 
-  // Efecto para cargar áreas cuando se selecciona una sala
   useEffect(() => {
     const fetchAreas = async () => {
-      if (!selectedSala) {
-        setAreas([])
-        return
-      }
-
       setLoading(prev => ({ ...prev, areas: true }))
 
       try {
         const { data: areasData, error: areasError } = await supabase
           .from('areas')
-          .select('id, name, sala_id, status, organization_id')
-          .eq('organization_id', task?.organization_id)
-          .eq('sala_id', selectedSala)
+          .select()
+          .eq('organization_id', organizationId)
           .eq('status', 'active')
           .order('name')
 
@@ -116,7 +100,19 @@ export function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
           return
         }
 
-        setAreas(areasData || [])
+        const validAreas = areasData?.map(area => ({
+          id: area.id,
+          name: area.name,
+          description: area.description,
+          organization_id: area.organization_id,
+          parent_id: area.parent_id,
+          status: area.status as 'active' | 'inactive',
+          sala_id: area.sala_id,
+          created_at: area.created_at || new Date().toISOString(),
+          updated_at: area.updated_at || new Date().toISOString()
+        })) || []
+
+        setAreas(validAreas)
       } catch (error) {
         console.error('Error en fetchAreas:', error)
       } finally {
@@ -125,49 +121,31 @@ export function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
     }
 
     fetchAreas()
-  }, [selectedSala, task])
+  }, [organizationId])
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
     setIsSubmitting(true)
 
-    try {
-      // Validar campos requeridos
-      if (!title.trim()) {
-        throw new Error('El título es requerido')
-      }
-
-      if (!selectedArea) {
-        throw new Error('Debe seleccionar un área')
-      }
-
-      if (!dueDate) {
-        throw new Error('La fecha de vencimiento es requerida')
-      }
-
-      // Crear objeto de tarea
-      const taskData: Partial<Task> = {
-        title: title.trim(),
-        description: description.trim(),
-        priority,
-        status,
-        due_date: dueDate,
-        area_id: selectedArea,
-        sala_id: selectedSala || undefined,
-        assigned_to: assignedTo || undefined,
-        start_time: startTime || undefined,
-        end_time: endTime || undefined
-      }
-
-      await onSave(taskData)
-      onClose()
-    } catch (err) {
-      console.error('Error al guardar la tarea:', err)
-      setError(err instanceof Error ? err.message : 'Error al guardar la tarea')
-    } finally {
-      setIsSubmitting(false)
+    if (!title) {
+      alert('El título es requerido')
+      return
     }
+
+    const taskData: Database['public']['Tables']['tasks']['Insert'] = {
+      title,
+      description: description || null,
+      priority: priority || 'medium',
+      status: status || 'pending',
+      due_date: dueDate || null,
+      area_id: selectedArea || null,
+      assigned_to: assignedTo || null,
+      organization_id: organizationId,
+    }
+
+    onSave(taskData)
+    onClose()
   }
 
   if (!isOpen) return null
@@ -195,122 +173,76 @@ export function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Título</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Descripción</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              rows={3}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Fecha de vencimiento</label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Hora de inicio</label>
-              <input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Hora de fin</label>
-              <input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Prioridad</label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as Task['priority'])}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="low">Baja</option>
-                <option value="medium">Media</option>
-                <option value="high">Alta</option>
-                <option value="urgent">Urgente</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Estado</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as Task['status'])}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="pending">Pendiente</option>
-                <option value="in_progress">En Progreso</option>
-                <option value="completed">Completado</option>
-                <option value="cancelled">Cancelado</option>
-              </select>
-            </div>
-          </div>
-
-          <SalaAreaSelector
-            onSalaChange={(sala) => setSelectedSala(sala?.id || '')}
-            onAreaChange={(area) => setSelectedArea(area?.id || '')}
-            initialSalaId={selectedSala}
-            initialAreaId={selectedArea}
+          <input
+            type="text"
+            placeholder="Título de la tarea"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full p-2 border rounded-lg"
           />
 
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md disabled:opacity-50"
-              disabled={isSubmitting}
+          <textarea
+            placeholder="Descripción"
+            value={description || ''}
+            onChange={(e) => setDescription(e.target.value || undefined)}
+            className="w-full p-2 border rounded-lg"
+          />
+
+          <div className="grid grid-cols-2 gap-4">
+            <select 
+              value={priority || ''} 
+              onChange={(e) => setPriority(e.target.value as TaskPriority)}
+              className="w-full p-2 border rounded-lg"
             >
+              <option value="">Prioridad</option>
+              <option value="low">Baja</option>
+              <option value="medium">Media</option>
+              <option value="high">Alta</option>
+            </select>
+
+            <select 
+              value={status || ''} 
+              onChange={(e) => setStatus(e.target.value as TaskStatus)}
+              className="w-full p-2 border rounded-lg"
+            >
+              <option value="">Estado</option>
+              <option value="pending">Pendiente</option>
+              <option value="in_progress">En progreso</option>
+              <option value="completed">Completada</option>
+              <option value="cancelled">Cancelada</option>
+            </select>
+          </div>
+
+          <input
+            type="datetime-local"
+            value={dueDate ? new Date(dueDate).toISOString().slice(0, 16) : ''}
+            onChange={(e) => setDueDate(e.target.value)}
+            className="w-full p-2 border rounded-lg"
+          />
+
+          <SalaAreaSelector
+            defaultAreaId={task?.area_id || undefined}
+            onAreaChange={(area: Area | null) => setSelectedArea(area?.id)}
+          />
+
+          <select
+            value={assignedTo || ''}
+            onChange={(e) => setAssignedTo(e.target.value)}
+            className="w-full p-2 border rounded-lg"
+          >
+            <option value="">Asignar a...</option>
+            {users.map(user => (
+              <option key={user.id} value={user.id}>
+                {user.first_name} {user.last_name}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={onClose}>
               Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 flex items-center space-x-2"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Guardando...</span>
-                </>
-              ) : (
-                <span>{task ? 'Actualizar' : 'Crear'}</span>
-              )}
-            </button>
+            </Button>
+            <Button type="submit">Guardar</Button>
           </div>
         </form>
       </div>

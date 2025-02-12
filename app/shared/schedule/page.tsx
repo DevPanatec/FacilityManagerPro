@@ -9,12 +9,12 @@ import { Database } from '@/lib/types/database'
 
 type Task = Database['public']['Tables']['tasks']['Row'] & {
   assignee?: {
-    first_name: string
-    last_name: string
+    first_name: string | null
+    last_name: string | null
   }
 }
 
-type TaskInput = Partial<Database['public']['Tables']['tasks']['Insert']>
+type TaskInput = Database['public']['Tables']['tasks']['Insert']
 
 export default function SchedulePage() {
   const [tasks, setTasks] = useState<Task[]>([])
@@ -22,6 +22,7 @@ export default function SchedulePage() {
   const [showTaskModal, setShowTaskModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string>('')
 
   const supabase = createClientComponentClient<Database>()
 
@@ -129,8 +130,8 @@ export default function SchedulePage() {
       if (!userProfile) throw new Error('Usuario no encontrado')
 
       // Asegurar que todos los campos requeridos estén presentes
-      if (!taskData.title || !taskData.area_id || !taskData.due_date) {
-        throw new Error('Faltan campos requeridos')
+      if (!taskData.title) {
+        throw new Error('El título es requerido')
       }
 
       if (selectedTask) {
@@ -225,6 +226,7 @@ export default function SchedulePage() {
         }}
         onAddTask={(date) => {
           setSelectedTask(null)
+          setSelectedDate(date)
           setShowTaskModal(true)
         }}
         onDeleteTask={handleDeleteTask}
@@ -238,6 +240,7 @@ export default function SchedulePage() {
         }}
         onSave={handleSaveTask}
         task={selectedTask}
+        organizationId={tasks[0]?.organization_id || ''}
       />
     </div>
   )

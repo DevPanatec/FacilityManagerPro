@@ -2,7 +2,28 @@
 
 import { useEffect, useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { Area, Sala } from '@/lib/types/database'
+import type { Database } from '@/lib/types/database'
+
+interface Area {
+  id: string
+  name: string
+  description: string | null
+  organization_id: string
+  parent_id: string | null
+  status: 'active' | 'inactive'
+  sala_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface Sala {
+  id: string
+  nombre: string
+  organization_id: string
+  estado: boolean
+  created_at: string
+  updated_at: string
+}
 
 interface SalaAreaSelectorProps {
   onSalaChange?: (sala: Sala | null) => void
