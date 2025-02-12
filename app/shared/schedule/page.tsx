@@ -7,7 +7,14 @@ import Calendar from './components/Calendar'
 import { TaskModal } from './components/TaskModal'
 import { Database } from '@/lib/types/database'
 
-type Task = Database['public']['Tables']['tasks']['Row']
+type Task = Database['public']['Tables']['tasks']['Row'] & {
+  assignee?: {
+    first_name: string
+    last_name: string
+  }
+}
+
+type TaskInput = Partial<Database['public']['Tables']['tasks']['Insert']>
 
 export default function SchedulePage() {
   const [tasks, setTasks] = useState<Task[]>([])
@@ -20,6 +27,25 @@ export default function SchedulePage() {
 
   useEffect(() => {
     loadTasks()
+
+    // Suscribirse a cambios en tiempo real
+    const channel = supabase
+      .channel('tasks_changes')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'tasks' 
+        }, 
+        () => {
+          loadTasks()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      channel.unsubscribe()
+    }
   }, [])
 
   const loadTasks = async () => {
@@ -27,44 +53,40 @@ export default function SchedulePage() {
       setLoading(true)
       setError(null)
 
-      const { data: { user } } = await supabase.auth.getUser()
+      // 1. Verificar autenticación
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      if (authError) {
+        console.error('Error de autenticación:', authError)
+        throw new Error('Error de autenticación')
+      }
       if (!user) throw new Error('No autorizado')
 
-      const { data: userData } = await supabase
+      // 2. Obtener perfil del usuario
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role, organization_id')
         .eq('id', user.id)
         .single()
 
+      if (userError) {
+        console.error('Error al obtener usuario:', userError)
+        throw new Error('Error al obtener información del usuario')
+      }
       if (!userData) throw new Error('Usuario no encontrado')
 
+      // 3. Consulta base de tareas
       let query = supabase
         .from('tasks')
         .select(`
-          id,
-          title,
-          description,
-          organization_id,
-          area_id,
-          status,
-          priority,
-          assigned_to,
-          due_date,
-          created_by,
-          created_at,
-          updated_at,
+          *,
           assignee:assigned_to(
             first_name,
             last_name
-          ),
-          organization:organizations(
-            id,
-            name
           )
         `)
         .order('due_date', { ascending: true })
 
-      // Si no es superadmin, filtrar por organization_id
+      // 4. Aplicar filtros según el rol
       if (userData.role !== 'superadmin') {
         if (!userData.organization_id) {
           throw new Error('Usuario no tiene organización asignada')
@@ -72,21 +94,28 @@ export default function SchedulePage() {
         query = query.eq('organization_id', userData.organization_id)
       }
 
-      const { data: tasks, error } = await query
+      // 5. Ejecutar la consulta
+      const { data: tasks, error: tasksError } = await query
       
-      if (error) throw error
+      if (tasksError) {
+        console.error('Error al cargar tareas:', tasksError)
+        throw new Error('Error al cargar las tareas')
+      }
       
       setTasks(tasks || [])
     } catch (error) {
-      console.error('Error loading tasks:', error)
+      console.error('Error detallado al cargar tareas:', {
+        message: error instanceof Error ? error.message : 'Error desconocido',
+        error
+      })
       setError('Error al cargar las tareas')
-      toast.error('Error al cargar las tareas')
+      toast.error('Error al cargar las tareas. Por favor, intenta de nuevo.')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSaveTask = async (taskData: Partial<Task>) => {
+  const handleSaveTask = async (taskData: TaskInput) => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No autorizado')
@@ -100,19 +129,8 @@ export default function SchedulePage() {
       if (!userProfile) throw new Error('Usuario no encontrado')
 
       // Asegurar que todos los campos requeridos estén presentes
-      const requiredFields = {
-        title: taskData.title,
-        area_id: taskData.area_id,
-        status: taskData.status || 'pending',
-        priority: taskData.priority || 'medium',
-        due_date: taskData.due_date
-      }
-
-      // Verificar campos requeridos
-      for (const [field, value] of Object.entries(requiredFields)) {
-        if (!value) {
-          throw new Error(`El campo ${field} es requerido`)
-        }
+      if (!taskData.title || !taskData.area_id || !taskData.due_date) {
+        throw new Error('Faltan campos requeridos')
       }
 
       if (selectedTask) {
@@ -125,10 +143,7 @@ export default function SchedulePage() {
           })
           .eq('id', selectedTask.id)
 
-        if (updateError) {
-          console.error('Error de actualización:', updateError)
-          throw new Error('Error al actualizar la tarea: ' + updateError.message)
-        }
+        if (updateError) throw updateError
         toast.success('Tarea actualizada correctamente')
       } else {
         // Crear nueva tarea
@@ -146,10 +161,7 @@ export default function SchedulePage() {
           .from('tasks')
           .insert(newTask)
 
-        if (insertError) {
-          console.error('Error de inserción:', insertError)
-          throw new Error('Error al crear la tarea: ' + insertError.message)
-        }
+        if (insertError) throw insertError
         toast.success('Tarea creada correctamente')
       }
 

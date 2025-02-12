@@ -111,42 +111,60 @@ export interface Database {
       tasks: {
         Row: {
           id: string
+          organization_id: string
           title: string
           description: string | null
-          area_id: string
-          assigned_to: string | null
-          priority: 'low' | 'medium' | 'high'
+          area_id: string | null
           status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+          priority: 'low' | 'medium' | 'high'
+          assigned_to: string | null
           due_date: string | null
-          created_by: string
+          created_by: string | null
           created_at: string
           updated_at: string
+          start_time: string | null
+          end_time: string | null
+          type: string | null
+          frequency: 'diario' | 'semanal' | 'quincenal' | 'mensual' | null
+          sala_id: string | null
         }
         Insert: {
           id?: string
+          organization_id: string
           title: string
           description?: string | null
-          area_id: string
-          assigned_to?: string | null
-          priority?: 'low' | 'medium' | 'high'
+          area_id?: string | null
           status?: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+          priority?: 'low' | 'medium' | 'high'
+          assigned_to?: string | null
           due_date?: string | null
-          created_by: string
+          created_by?: string | null
           created_at?: string
           updated_at?: string
+          start_time?: string | null
+          end_time?: string | null
+          type?: string | null
+          frequency?: 'diario' | 'semanal' | 'quincenal' | 'mensual' | null
+          sala_id?: string | null
         }
         Update: {
           id?: string
+          organization_id?: string
           title?: string
           description?: string | null
-          area_id?: string
-          assigned_to?: string | null
-          priority?: 'low' | 'medium' | 'high'
+          area_id?: string | null
           status?: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+          priority?: 'low' | 'medium' | 'high'
+          assigned_to?: string | null
           due_date?: string | null
-          created_by?: string
+          created_by?: string | null
           created_at?: string
           updated_at?: string
+          start_time?: string | null
+          end_time?: string | null
+          type?: string | null
+          frequency?: 'diario' | 'semanal' | 'quincenal' | 'mensual' | null
+          sala_id?: string | null
         }
       }
       work_shifts: {
