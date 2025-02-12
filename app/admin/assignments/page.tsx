@@ -45,15 +45,18 @@ interface Task {
   };
 }
 
+interface SalaData {
+  id: string;
+  nombre: string;
+  areas: Area[];
+}
+
 interface Sala {
   id: string;
   nombre: string;
   color: string;
   tareas: Task[];
-  areas: {
-    id: string;
-    name: string;
-  }[];
+  areas: Area[];
 }
 
 interface WorkShiftWithUsers {
@@ -64,8 +67,40 @@ interface WorkShiftWithUsers {
     id: string;
     first_name: string;
     last_name: string;
-    avatar_url?: string;
+    avatar_url?: string | null;
   }[];
+}
+
+interface Area {
+  id: string;
+  name: string;
+  description?: string | null;
+  organization_id: string;
+  parent_id?: string | null;
+  status: 'active' | 'inactive';
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface AreaWithSala {
+  id: string;
+  name: string;
+  sala_id: string;
+  salas: {
+    id: string;
+    nombre: string;
+    areas: Area[];
+  };
+}
+
+interface ShiftWithUsers {
+  id: string;
+  users: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    avatar_url: string | null;
+  } | null;
 }
 
 export default function AssignmentsPage() {
@@ -224,8 +259,8 @@ export default function AssignmentsPage() {
               color: getSalaColor(sala.nombre),
               tareas: [],
               areas: (sala.areas || [])
-                .filter(area => area.status === 'active')
-                .map(area => ({
+                .filter((area: Area) => area.status === 'active')
+                .map((area: Area) => ({
                   id: area.id,
                   name: area.name
                 }))
@@ -254,8 +289,8 @@ export default function AssignmentsPage() {
             color: getSalaColor(sala.nombre),
             tareas: formattedTasks,
             areas: (sala.areas || [])
-              .filter(area => area.status === 'active')
-              .map(area => ({
+              .filter((area: Area) => area.status === 'active')
+              .map((area: Area) => ({
                 id: area.id,
                 name: area.name
               }))
@@ -328,13 +363,14 @@ export default function AssignmentsPage() {
       // 1. Obtener información del área con más detalles
       const { data: areaData } = await supabase
         .from('areas')
-        .select(`
+        .select<string, AreaWithSala>(`
           id,
           name,
           sala_id,
           salas:salas (
             id,
-            nombre
+            nombre,
+            areas
           )
         `)
         .eq('id', selectedArea)
@@ -514,7 +550,7 @@ export default function AssignmentsPage() {
     try {
       const { data: shiftUsers } = await supabase
         .from('work_shifts')
-        .select(`
+        .select<string, ShiftWithUsers>(`
           id,
           users!work_shifts_user_id_fkey (
             id,
@@ -526,12 +562,19 @@ export default function AssignmentsPage() {
         .eq('id', turno.id)
         .single();
 
-      if (shiftUsers) {
+      if (shiftUsers && shiftUsers.users) {
+        const usuario = {
+          id: shiftUsers.users.id,
+          first_name: shiftUsers.users.first_name,
+          last_name: shiftUsers.users.last_name,
+          avatar_url: shiftUsers.users.avatar_url
+        };
+        
         setSelectedShiftDetails({
           id: turno.id,
           nombre: turno.nombre,
           horario: turno.horario,
-          usuarios: shiftUsers.users ? [shiftUsers.users] : []
+          usuarios: [usuario]
         });
         setShowShiftDetailsModal(true);
       }
