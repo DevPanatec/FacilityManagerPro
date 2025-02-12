@@ -40,9 +40,9 @@ export async function getUserProfile() {
   const supabase = createClientComponentClient<Database>()
   try {
     const { data: profile, error } = await supabase
-      .from('profiles')
+      .from('users')
       .select('*')
-      .eq('user_id', session.user.id)
+      .eq('id', session.user.id)
       .single()
 
     if (error) throw error
