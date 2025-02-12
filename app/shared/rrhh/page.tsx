@@ -684,7 +684,7 @@ export default function RRHHPage() {
         {/* Grid container for Personal Registrado and Usuarios Especiales */}
         <div className="mt-8 grid grid-cols-2 gap-6">
           {/* Personal Registrado Section */}
-          <div className="bg-white rounded-lg shadow">
+          <div className="bg-white rounded-lg shadow h-[600px] flex flex-col">
             <div className="p-6 border-b">
               <div className="flex items-center gap-2">
                 <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -695,14 +695,13 @@ export default function RRHHPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Personal</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cargo</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Departamento</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                   </tr>
                 </thead>
@@ -720,23 +719,20 @@ export default function RRHHPage() {
                                 </span>
                               </div>
                             </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">
-                                {employee.first_name} {employee.last_name}
+                            <div className="ml-4 flex items-center">
+                              <div>
+                                <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                  {employee.first_name} {employee.last_name}
+                                  <div className={`w-2 h-2 rounded-full ${employee.status === 'active' ? 'bg-green-500' : 'bg-red-500'}`} 
+                                       title={employee.status === 'active' ? 'Activo' : 'Inactivo'}></div>
+                                </div>
+                                <div className="text-sm text-gray-500">ID: {employee.id}</div>
                               </div>
-                              <div className="text-sm text-gray-500">ID: {employee.id}</div>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500">{employee.position}</td>
                         <td className="px-6 py-4 text-sm text-gray-500">{employee.department}</td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            employee.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {employee.status === 'active' ? 'Activo' : 'Inactivo'}
-                          </span>
-                        </td>
                         <td className="px-6 py-4 text-sm">
                           <button onClick={() => handleEditEmployee(employee)} className="text-blue-600 hover:text-blue-900 mr-4">
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -757,7 +753,7 @@ export default function RRHHPage() {
           </div>
 
           {/* Usuarios Especiales Section */}
-          <div className="bg-white rounded-lg shadow">
+          <div className="bg-white rounded-lg shadow h-[600px] flex flex-col">
             <div className="p-6 border-b">
               <div className="flex items-center gap-2">
                 <svg className="w-6 h-6 text-cyan-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -768,11 +764,11 @@ export default function RRHHPage() {
               </div>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
               {employees
                 .filter(emp => emp.role === 'admin' || emp.role === 'enterprise' || emp.role === 'admin_principal')
                 .map(employee => (
-                  <div key={employee.id} className="group p-4 bg-white rounded-xl border border-gray-200 hover:border-cyan-200 hover:shadow-sm">
+                  <div key={employee.id} className="group p-4 bg-white rounded-xl border border-gray-200 hover:border-cyan-200 hover:shadow-sm transition-all">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
                         <div className="h-12 w-12 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
@@ -969,6 +965,23 @@ export default function RRHHPage() {
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #888;
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #666;
+        }
+      `}</style>
     </div>
   );
 }

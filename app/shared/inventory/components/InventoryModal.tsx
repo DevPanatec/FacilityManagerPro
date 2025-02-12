@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Dialog } from '@headlessui/react'
 import { toast } from 'react-hot-toast'
 import type { InventoryItem } from '../types'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 interface InventoryModalProps {
   isOpen: boolean
@@ -13,6 +14,11 @@ interface InventoryModalProps {
   mode: 'edit' | 'use' | 'restock' | 'create'
 }
 
+interface FormData {
+  operationQuantity: number;
+  date: string;
+}
+
 export default function InventoryModal({
   isOpen,
   onClose,
@@ -20,12 +26,10 @@ export default function InventoryModal({
   item,
   mode
 }: InventoryModalProps) {
-  const [activeTab, setActiveTab] = useState<'use' | 'restock'>('use')
-  const [formData, setFormData] = useState({
-    quantity: 0,
-    user: '',
+  const [formData, setFormData] = useState<FormData>({
+    operationQuantity: 0,
     date: new Date().toISOString().split('T')[0]
-  })
+  });
 
   const [editFormData, setEditFormData] = useState({
     name: '',
@@ -33,10 +37,64 @@ export default function InventoryModal({
     quantity: 0,
     min_stock: 0,
     unit: 'unidades'
-  })
+  });
+
+  const [activeTab, setActiveTab] = useState<'use' | 'restock' | 'history'>('use');
+  const [usageHistory, setUsageHistory] = useState<any[]>([]);
+  const [restockHistory, setRestockHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const supabase = createClientComponentClient()
+
+  // Función para cargar el historial
+  const loadHistory = async () => {
+    if (!item) return
+    
+    setLoadingHistory(true)
+    try {
+      // Cargar historial de uso
+      const { data: usageData } = await supabase
+        .from('inventory_usage')
+        .select(`
+          quantity,
+          date,
+          users (
+            first_name,
+            last_name
+          )
+        `)
+        .eq('inventory_id', item.id)
+        .order('date', { ascending: false })
+
+      // Cargar historial de reposición
+      const { data: restockData } = await supabase
+        .from('inventory_restock')
+        .select(`
+          quantity,
+          date,
+          supplier
+        `)
+        .eq('inventory_id', item.id)
+        .order('date', { ascending: false })
+
+      setUsageHistory(usageData || [])
+      setRestockHistory(restockData || [])
+    } catch (error) {
+      console.error('Error al cargar historial:', error)
+      toast.error('Error al cargar el historial')
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
 
   useEffect(() => {
     if (isOpen) {
+      console.log('Modal abierto:', { mode, item })
+      // Resetear el formulario cuando se abre el modal
+      setFormData({
+        operationQuantity: 0,
+        date: new Date().toISOString().split('T')[0]
+      });
+
       if (mode === 'edit' && item) {
         setEditFormData({
           name: item.name || '',
@@ -44,36 +102,76 @@ export default function InventoryModal({
           quantity: item.quantity || 0,
           min_stock: item.min_stock || 0,
           unit: item.unit || 'unidades'
-        })
-      } else if (mode === 'use') {
-        setFormData({
-          quantity: 0,
-          user: '',
-          date: new Date().toISOString().split('T')[0]
-        })
-        setActiveTab('use')
+        });
+      } else if (mode === 'use' || mode === 'restock') {
+        setActiveTab(mode);
+        loadHistory();
       }
     }
-  }, [isOpen, item, mode])
+  }, [isOpen, item, mode]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    console.log('Iniciando handleSubmit:', { mode, activeTab, formData })
     
-    if (mode === 'use') {
-      if (activeTab === 'use') {
-        if (!formData.quantity || formData.quantity <= 0) {
+    try {
+      if (mode === 'use' || mode === 'restock') {
+        console.log('Validando datos del formulario:', {
+          operationQuantity: formData.operationQuantity,
+          date: formData.date,
+          itemStock: item?.quantity
+        })
+
+        // Validaciones básicas
+        if (!formData.operationQuantity || formData.operationQuantity <= 0) {
+          console.log('Error: Cantidad inválida')
           toast.error('La cantidad debe ser mayor a 0')
           return
         }
         
-        if (item && formData.quantity > item.quantity) {
+        if (mode === 'use' && item && formData.operationQuantity > item.quantity) {
+          console.log('Error: Cantidad excede el stock disponible')
           toast.error('La cantidad no puede ser mayor al stock disponible')
           return
         }
+
+        if (!formData.date) {
+          console.log('Error: Fecha no especificada')
+          toast.error('La fecha es requerida')
+          return
+        }
+
+        const dataToSubmit = {
+          ...formData,
+          type: activeTab,
+          quantity: formData.operationQuantity,
+          inventory_id: item?.id
+        }
+
+        console.log('Enviando datos al servidor:', dataToSubmit)
+
+        try {
+          await onSubmit(dataToSubmit)
+          console.log('Datos enviados exitosamente')
+          
+          // Limpiar formulario y cerrar modal
+          setFormData({
+            operationQuantity: 0,
+            date: new Date().toISOString().split('T')[0]
+          })
+          onClose()
+        } catch (submitError) {
+          console.error('Error al enviar datos:', submitError)
+          throw submitError
+        }
+      } else if (mode === 'edit' || mode === 'create') {
+        console.log('Enviando datos de edición/creación:', editFormData)
+        await onSubmit(editFormData)
+        onClose()
       }
-      onSubmit({ ...formData, type: activeTab })
-    } else if (mode === 'edit' || mode === 'create') {
-      onSubmit(editFormData)
+    } catch (error) {
+      console.error('Error en el formulario:', error)
+      toast.error('Error al procesar la operación')
     }
   }
 
@@ -87,24 +185,11 @@ export default function InventoryModal({
         <Dialog.Overlay className="fixed inset-0 bg-black opacity-30" />
 
         <div className="relative bg-white rounded-lg max-w-md w-full p-6">
-          <div className="flex justify-between items-center mb-4">
-            <Dialog.Title className="text-lg font-medium">
-              {mode === 'edit' ? 'Editar Item' : 
-               mode === 'create' ? 'Crear Nuevo Item' : 
-               'Gestionar Stock'}
-            </Dialog.Title>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-500"
-            >
-              <span className="sr-only">Cerrar</span>
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+          <Dialog.Title className="text-lg font-medium text-gray-900 mb-4">
+            {mode === 'edit' ? 'Editar Item' : mode === 'use' ? 'Registrar Uso' : 'Registrar Reposición'}
+          </Dialog.Title>
 
-          {(mode === 'edit' || mode === 'create') ? (
+          {mode === 'edit' || mode === 'create' ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Nombre</label>
@@ -114,7 +199,6 @@ export default function InventoryModal({
                   onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 
                            focus:ring-blue-500 sm:text-sm"
-                  placeholder="Nombre del item"
                   required
                 />
               </div>
@@ -126,7 +210,6 @@ export default function InventoryModal({
                   onChange={(e) => setEditFormData(prev => ({ ...prev, description: e.target.value }))}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 
                            focus:ring-blue-500 sm:text-sm"
-                  placeholder="Descripción del item"
                   rows={3}
                 />
               </div>
@@ -214,72 +297,126 @@ export default function InventoryModal({
                   >
                     Registrar Reposición
                   </button>
+                  <button
+                    onClick={() => setActiveTab('history')}
+                    className={`flex-1 py-2 px-4 text-center ${
+                      activeTab === 'history' ? 'bg-blue-100 text-blue-700 font-medium' : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Historial
+                  </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {activeTab === 'use' ? 'Cantidad a Usar' : 'Cantidad a Reponer'}
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.quantity}
-                      onChange={(e) => setFormData({ ...formData, quantity: Number(e.target.value) })}
-                      className="w-full p-2 border rounded-lg"
-                      placeholder="0"
-                      min="0"
-                      required
-                    />
-                    <span className="text-sm text-gray-500 mt-1">{item?.unit || 'unidades'}</span>
-                  </div>
+                {activeTab === 'history' ? (
+                  <div className="mt-4">
+                    {loadingHistory ? (
+                      <div className="flex justify-center py-4">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-900 mb-2">Historial de Uso</h3>
+                          <div className="max-h-48 overflow-y-auto">
+                            {usageHistory.length > 0 ? (
+                              <div className="space-y-2">
+                                {usageHistory.map((record, index) => (
+                                  <div key={index} className="bg-gray-50 p-2 rounded-lg text-sm">
+                                    <div className="flex justify-between items-center">
+                                      <span className="font-medium">
+                                        {record.users?.first_name} {record.users?.last_name}
+                                      </span>
+                                      <span className="text-red-600">-{record.quantity} unidades</span>
+                                    </div>
+                                    <div className="text-gray-500 text-xs mt-1">
+                                      {new Date(record.date).toLocaleDateString()}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-gray-500 text-sm text-center py-2">No hay registros de uso</p>
+                            )}
+                          </div>
+                        </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {activeTab === 'use' ? 'Usuario' : 'Proveedor'}
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.user}
-                      onChange={(e) => setFormData({ ...formData, user: e.target.value })}
-                      className="w-full p-2 border rounded-lg"
-                      required
-                    />
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-900 mb-2">Historial de Reposición</h3>
+                          <div className="max-h-48 overflow-y-auto">
+                            {restockHistory.length > 0 ? (
+                              <div className="space-y-2">
+                                {restockHistory.map((record, index) => (
+                                  <div key={index} className="bg-gray-50 p-2 rounded-lg text-sm">
+                                    <div className="flex justify-between items-center">
+                                      <span className="font-medium">{record.supplier}</span>
+                                      <span className="text-green-600">+{record.quantity} unidades</span>
+                                    </div>
+                                    <div className="text-gray-500 text-xs mt-1">
+                                      {new Date(record.date).toLocaleDateString()}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-gray-500 text-sm text-center py-2">No hay registros de reposición</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
+                ) : (
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {activeTab === 'use' ? 'Cantidad a Usar' : 'Cantidad a Reponer'}
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.operationQuantity}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value) || 0;
+                          setFormData(prev => ({ ...prev, operationQuantity: value }));
+                        }}
+                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        min="1"
+                        required
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Fecha
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.date}
-                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                      className="w-full p-2 border rounded-lg"
-                      required
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                      <input
+                        type="date"
+                        value={formData.date}
+                        onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
 
-                  <div className="mt-4 flex justify-between">
-                    <button
-                      type="button"
-                      onClick={onClose}
-                      className="px-4 py-2 text-gray-700 hover:text-gray-900"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                      {activeTab === 'use' ? 'Registrar Uso' : 'Registrar Reposición'}
-                    </button>
-                  </div>
-                </form>
+                    <div className="mt-4 flex justify-end space-x-3">
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      >
+                        {activeTab === 'use' ? 'Registrar Uso' : 'Registrar Reposición'}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
           )}
         </div>
       </div>
     </Dialog>
-  )
+  );
 } 

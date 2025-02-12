@@ -64,6 +64,7 @@ interface SupabaseReport {
   status: string;
   priority: string;
   area_id: string;
+  subarea_id: string | null;  // Added subarea_id field
   organization_id: string;
   created_by: string;
   attachments: Array<{
@@ -90,6 +91,11 @@ interface SupabaseReport {
       } | null;
     }[] | null;
   };
+  subarea?: {
+    id: string;
+    nombre: string;
+    descripcion: string | null;
+  };
 }
 
 interface ReportData {
@@ -111,6 +117,8 @@ export default function ReportsPage() {
   const [timeFilter, setTimeFilter] = useState('dia');
   const [selectedArea, setSelectedArea] = useState('');
   const [selectedSala, setSelectedSala] = useState<string | null>(null);
+  const [selectedSubarea, setSelectedSubarea] = useState<string | null>(null);
+  const [subareas, setSubareas] = useState<Array<{id: string; nombre: string; descripcion: string | null}>>([]);
   const [contingencyType, setContingencyType] = useState('');
   const [description, setDescription] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -214,6 +222,11 @@ export default function ReportsPage() {
               nombre,
               descripcion
             )
+          ),
+          subarea:subareas!subarea_id(
+            id,
+            nombre,
+            descripcion
           ),
           organization:organizations!organization_id(id, name)
         `)
@@ -324,6 +337,44 @@ export default function ReportsPage() {
     onDrop,
     multiple: true
   });
+
+  // Función para cargar subáreas cuando se selecciona un área
+  const loadSubareas = async (areaId: string) => {
+    try {
+      const { data: areaData, error } = await supabase
+        .from('areas')
+        .select(`
+          id,
+          subareas (
+            id,
+            nombre
+          )
+        `)
+        .eq('id', areaId)
+        .single();
+
+      if (error) throw error;
+
+      if (areaData && areaData.subareas) {
+        setSubareas(areaData.subareas);
+      } else {
+        setSubareas([]);
+      }
+    } catch (error) {
+      console.error('Error al cargar subáreas:', error);
+      toast.error('Error al cargar las subáreas');
+    }
+  };
+
+  // Actualizar el useEffect para cargar subáreas cuando cambia el área
+  useEffect(() => {
+    if (selectedArea) {
+      loadSubareas(selectedArea);
+    } else {
+      setSubareas([]);
+      setSelectedSubarea(null);
+    }
+  }, [selectedArea]);
 
   const handleSaveReport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -449,6 +500,7 @@ export default function ReportsPage() {
           title: contingencyType,
           description: JSON.stringify({
             area: selectedArea,
+            subarea: selectedSubarea,
             sala: selectedSala,
             fecha: new Date().toLocaleDateString(),
             horaInicio: new Date().toLocaleTimeString(),
@@ -462,6 +514,7 @@ export default function ReportsPage() {
             }, {} as { inicial?: string; durante?: string; final?: string })
           }),
           area_id: selectedArea,
+          subarea_id: selectedSubarea,  // Added subarea_id
           organization_id: userData.organization_id,
           created_by: session.user.id,
           status: 'pending',
@@ -475,16 +528,7 @@ export default function ReportsPage() {
           .select('*')
           .single();
 
-        if (insertError) {
-          throw insertError;
-        }
-
-        console.log('Reporte creado exitosamente:', {
-          id: data.id,
-          titulo: data.title,
-          estado: data.status,
-          imagenes: uploadedUrls.length
-        });
+        if (insertError) throw insertError;
 
         // Actualizar la lista de reportes
         await loadData();
@@ -493,31 +537,19 @@ export default function ReportsPage() {
         setContingencyType('');
         setSelectedSala(null);
         setSelectedArea('');
+        setSelectedSubarea(null);
         setDescription('');
         setImages([]);
         setImageUrls([]);
+        setShowModal(false);  // Fixed: Changed setIsModalOpen to setShowModal
 
         toast.success('Reporte creado exitosamente');
       } catch (error: any) {
-        console.error('Error al guardar el reporte:', {
-          mensaje: error?.message || 'Error desconocido',
-          detalles: error?.details || {},
-          codigo: error?.code || ''
-        });
-        
+        console.error('Error al guardar el reporte:', error);
         toast.error(error?.message || 'Error al guardar el reporte');
       }
     } catch (error: any) {
-      console.error('Error detallado al guardar el reporte:', {
-        tipo: typeof error,
-        mensaje: error?.message || 'Error desconocido',
-        detalles: error?.details || {},
-        sugerencia: error?.hint || '',
-        codigo: error?.code || '',
-        stack: error?.stack,
-        errorCompleto: error
-      });
-      
+      console.error('Error detallado al guardar el reporte:', error);
       toast.error(error?.message || 'Error al guardar el reporte');
     }
   };
@@ -1163,8 +1195,12 @@ export default function ReportsPage() {
                         <p className="text-sm font-medium">{data.area}</p>
                       </div>
                       <div>
+                        <p className="text-xs text-gray-500">Subárea</p>
+                        <p className="text-sm font-medium">{data.subarea || 'No especificada'}</p>
+                      </div>
+                      <div>
                         <p className="text-xs text-gray-500">Sala</p>
-                        <p className="text-sm font-medium">{data.sala}</p>
+                        <p className="text-sm font-medium">{data.sala || 'No especificada'}</p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">Fecha</p>

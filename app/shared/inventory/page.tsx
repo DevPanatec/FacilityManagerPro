@@ -128,26 +128,33 @@ export default function InventoryPage() {
   // Función para actualizar items
   const updateInventoryItem = async (item: InventoryItem) => {
     try {
+      const updateData = {
+        name: item.name,
+        description: item.description,
+        quantity: item.quantity,
+        min_stock: item.min_stock,
+        unit: item.unit || 'unidad',
+        status: item.status,
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('Actualizando item con datos:', updateData);
+
       const { error } = await supabase
         .from('inventory_items')
-        .update({
-          name: item.name,
-          description: item.description,
-          quantity: item.quantity,
-          min_stock: item.min_stock,
-          unit: item.unit,
-          status: item.status,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', item.id)
+        .update(updateData)
+        .eq('id', item.id);
 
-      if (error) throw error
+      if (error) {
+        console.error('Error detallado:', error);
+        throw error;
+      }
 
-      await loadInventoryItems()
-      toast.success('Item actualizado correctamente')
+      await loadInventoryItems();
+      toast.success('Item actualizado correctamente');
     } catch (error) {
-      console.error('Error updating item:', error)
-      toast.error('Error al actualizar el item')
+      console.error('Error updating item:', error);
+      toast.error('Error al actualizar el item');
     }
   }
 
@@ -164,15 +171,17 @@ export default function InventoryPage() {
         .single()
 
       if (!userData) throw new Error('Usuario no encontrado')
+      if (!userData.organization_id) throw new Error('Usuario no tiene organización asignada')
 
       const newItem = {
         name: item.name,
         description: item.description || null,
-        quantity: item.quantity || 0,
-        min_stock: item.min_stock || 0,
-        unit: item.unit,
         organization_id: userData.organization_id,
-        status: item.quantity === 0 ? 'discontinued' : 'active',
+        quantity: item.quantity || 0,
+        unit: item.unit,
+        min_stock: item.min_stock || 0,
+        status: item.quantity === 0 ? 'out_of_stock' : 
+                item.quantity <= item.min_stock ? 'low' : 'available',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }
@@ -197,187 +206,87 @@ export default function InventoryPage() {
   }
 
   // Función para registrar uso de item
-  const registerItemUsage = async (itemId: string, data: { quantity: number, user: string, date: string, type: 'use' | 'restock' }) => {
+  const registerItemUsage = async (itemId: string, data: any) => {
     try {
+      console.log('Iniciando registerItemUsage:', { itemId, data })
+
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No autorizado')
 
-      // Obtener el item actual
       const item = items.find(i => i.id === itemId)
-      if (!item) throw new Error('Item no encontrado')
+      if (!item) {
+        console.error('Item no encontrado:', itemId)
+        throw new Error('Item no encontrado')
+      }
+
+      console.log('Item encontrado:', item)
 
       const now = new Date().toISOString()
       const isRestock = data.type === 'restock'
+      const quantity = parseInt(data.quantity)
 
-      // Validar cantidad
-      if (!data.quantity || data.quantity <= 0) {
+      if (isNaN(quantity) || quantity <= 0) {
         throw new Error('La cantidad debe ser mayor a 0')
       }
 
-      if (!isRestock && data.quantity > item.quantity) {
+      if (!isRestock && quantity > item.quantity) {
         throw new Error('La cantidad no puede ser mayor al stock disponible')
       }
 
-      // Registrar movimiento
-      if (isRestock) {
-        try {
-          const timestamp = new Date(data.date).toISOString();
-          
-          // Validar datos básicos
-          if (!data.quantity || data.quantity <= 0) {
-            throw new Error('La cantidad debe ser mayor a 0')
-          }
-          if (!data.user || data.user.trim() === '') {
-            throw new Error('Proveedor es requerido')
-          }
-
-          const restockData = {
-            inventory_id: itemId,
-            quantity: parseInt(data.quantity.toString()),
-            supplier: data.user.trim(),
-            date: timestamp,
-            created_at: now,
-            updated_at: now
-          };
-
-          console.log('Intentando insertar reposición con datos:', restockData);
-
-          const { error: restockError } = await supabase
-            .from('inventory_restock')
-            .insert([restockData])
-
-          if (restockError) {
-            console.error('Error completo:', restockError);
-            throw new Error(`Error al registrar reposición: ${restockError.message}`);
-          }
-
-          // Actualizar la cantidad en inventory_items
-          const newQuantity = item.quantity + parseInt(data.quantity.toString());
-          
-          const { error: updateItemsError } = await supabase
-            .from('inventory_items')
-            .update({
+      const newQuantity = isRestock ? item.quantity + quantity : Math.max(0, item.quantity - quantity)
+      const updateData = {
         quantity: newQuantity,
-              updated_at: now
-            })
-            .eq('id', itemId);
-
-          if (updateItemsError) {
-            console.error('Error al actualizar cantidad en inventory_items:', updateItemsError);
-            throw new Error('Error al actualizar la cantidad en inventory_items');
-          }
-
-          await loadInventoryItems();
-          return restockData;
-
-        } catch (error: any) {
-          console.error('Error completo de reposición:', {
-            message: error.message,
-            code: error?.code,
-            details: error?.details,
-            hint: error?.hint,
-            stack: error?.stack
-          });
-          throw error;
-        }
-      } else {
-        try {
-          const timestamp = new Date(data.date).toISOString();
-          
-          // Obtener el perfil del usuario con su organización
-          const { data: userData } = await supabase
-            .from('users')
-            .select('organization_id')
-            .eq('id', user.id)
-            .single();
-
-          if (!userData?.organization_id) {
-            throw new Error('Usuario no tiene una organización asignada');
-          }
-
-          // Validar que el item pertenezca a la organización del usuario
-          const { data: itemData } = await supabase
-            .from('inventory_items')
-            .select('organization_id')
-            .eq('id', itemId)
-            .single();
-
-          if (!itemData || itemData.organization_id !== userData.organization_id) {
-            throw new Error('No tienes permiso para modificar este item');
-          }
-
-          // Validar datos antes de insertar
-          if (!itemId) {
-            throw new Error('ID del item es requerido')
-          }
-          if (!data.quantity || isNaN(data.quantity)) {
-            throw new Error('Cantidad inválida')
-          }
-          if (!user.id) {
-            throw new Error('Usuario no autorizado')
-          }
-          if (!timestamp) {
-            throw new Error('Fecha inválida')
-          }
-
-          const usageData = {
-            inventory_id: itemId,
-            quantity: parseInt(data.quantity.toString()),
-            user_id: user.id,
-            date: timestamp
-          };
-
-          console.log('Datos de uso a insertar:', usageData);
-
-          const { data: insertedData, error: usageError } = await supabase
-            .from('inventory_usage')
-            .insert(usageData)
-            .select()
-
-          if (usageError) {
-            console.error('Error detallado de uso:', {
-              code: usageError.code,
-              message: usageError.message,
-              details: usageError.details,
-              hint: usageError.hint
-            })
-            throw new Error(`Error al registrar uso: ${usageError.message}`)
-          }
-
-          // Actualizar la cantidad en inventory_items
-          const newQuantity = item.quantity - parseInt(data.quantity.toString());
-          
-          const { error: updateError } = await supabase
-            .from('inventory_items')
-            .update({
-              quantity: newQuantity,
-              updated_at: now
-            })
-            .eq('id', itemId);
-
-          if (updateError) {
-            console.error('Error al actualizar cantidad:', updateError);
-            throw new Error('Error al actualizar la cantidad');
-          }
-
-          console.log('Uso registrado:', insertedData)
-
-        } catch (error: any) {
-          console.error('Error completo de uso:', {
-            message: error.message,
-            code: error?.code,
-            details: error?.details,
-            hint: error?.hint,
-            stack: error?.stack
-          });
-          throw error;
-        }
+        status: newQuantity === 0 ? 'out_of_stock' : 
+                newQuantity <= item.min_stock ? 'low' : 'available',
+        updated_at: now
       }
 
+      if (isRestock) {
+        const restockData = {
+          inventory_id: itemId,
+          quantity: quantity,
+          supplier: data.user || 'Sistema',
+          date: data.date,
+          created_at: now,
+          updated_at: now,
+          organization_id: item.organization_id
+        }
+
+        const { error: restockError } = await supabase
+          .from('inventory_restock')
+          .insert([restockData])
+
+        if (restockError) throw restockError;
+      } else {
+        const usageData = {
+          inventory_id: itemId,
+          quantity: quantity,
+          user_id: user.id,
+          date: data.date,
+          created_at: now,
+          updated_at: now,
+          organization_id: item.organization_id
+        }
+
+        const { error: usageError } = await supabase
+          .from('inventory_usage')
+          .insert([usageData])
+
+        if (usageError) throw usageError;
+      }
+
+      const { error: updateError } = await supabase
+        .from('inventory_items')
+        .update(updateData)
+        .eq('id', itemId)
+
+      if (updateError) throw updateError;
+
+      console.log('Operación completada exitosamente')
       await loadInventoryItems()
       toast.success(isRestock ? 'Reposición registrada correctamente' : 'Uso registrado correctamente')
     } catch (error: any) {
-      console.error('Error en operación de inventario:', error)
+      console.error('Error detallado en operación de inventario:', error)
       toast.error(error.message || 'Error al procesar la operación')
       throw error
     }
@@ -427,7 +336,7 @@ export default function InventoryPage() {
   // Calcular estado basado en la cantidad
   const calculateItemStatus = (item: InventoryItem) => {
     if (item.quantity === 0) return 'out_of_stock';
-    if (item.quantity <= item.min_stock) return 'low_stock';
+    if (item.quantity <= item.min_stock) return 'low';
     return 'available';
   };
 

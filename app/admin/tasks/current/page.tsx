@@ -44,6 +44,7 @@ export default function CurrentTaskPage() {
   const router = useRouter();
   const [supabase] = useState(() => createClientComponentClient<Database>());
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
+  const [areaTasks, setAreaTasks] = useState<Task[]>([]);
   const [checklist, setChecklist] = useState<{ id: number; text: string; completed: boolean; }[]>([]);
   const [startTime, setStartTime] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -120,23 +121,36 @@ export default function CurrentTaskPage() {
       const { data: mainTask, error: mainTaskError } = await supabase
         .from('tasks')
         .select(`
-          *,
+          id,
+          title,
+          description,
+          status,
+          priority,
+          assigned_to,
+          due_date,
+          created_at,
+          start_time,
+          end_time,
+          area_id,
+          sala_id,
+          type,
+          organization_id,
           assignee:users!tasks_assigned_to_fkey(
             first_name,
             last_name
           ),
           area:areas!inner(
+            id,
             name,
-            id
+            status
           ),
           sala:salas!inner(
-            nombre,
-            id
+            id,
+            nombre
           )
         `)
         .eq('assigned_to', user.id)
         .eq('status', 'in_progress')
-        .eq('type', 'assignment')
         .is('parent_task_id', null)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -163,16 +177,25 @@ export default function CurrentTaskPage() {
         return;
       }
 
+      // Formatear la tarea principal
+      const formattedMainTask: Task = {
+        ...mainTask,
+        assignee: mainTask.assignee?.[0] || undefined,
+        area: mainTask.area?.[0],
+        sala: mainTask.sala?.[0],
+        subtasks: []
+      };
+
       console.log('Tarea principal encontrada:', {
-        id: mainTask.id,
-        title: mainTask.title,
-        status: mainTask.status,
-        area_id: mainTask.area_id,
-        area: mainTask.area?.[0]?.name
+        id: formattedMainTask.id,
+        title: formattedMainTask.title,
+        status: formattedMainTask.status,
+        area_id: formattedMainTask.area_id,
+        area: formattedMainTask.area?.name
       });
 
-      // Obtener las tareas asignadas
-      const { data: assignedTasks, error: tasksError } = await supabase
+      // Obtener las tareas del área
+      const { data: areaTasks, error: tasksError } = await supabase
         .from('tasks')
         .select(`
           id,
@@ -184,72 +207,73 @@ export default function CurrentTaskPage() {
           created_at,
           organization_id,
           type,
-          parent_task_id
+          area_id,
+          sala_id,
+          assigned_to,
+          users!tasks_assigned_to_fkey (
+            first_name,
+            last_name
+          )
         `)
         .eq('organization_id', userProfile.organization_id)
         .eq('area_id', mainTask.area_id)
         .eq('sala_id', mainTask.sala_id)
-        .eq('type', 'subtask')
-        .eq('parent_task_id', mainTask.id)
+        .eq('status', 'pending')
+        .eq('type', 'template')
+        .is('parent_task_id', null)
         .order('created_at', { ascending: true });
 
-      console.log('Debug - Tareas asignadas:', {
-        parent_task_id: mainTask.id,
+      console.log('Debug - Tareas del área:', {
         area_id: mainTask.area_id,
         sala_id: mainTask.sala_id,
         organization_id: userProfile.organization_id,
-        totalTasks: assignedTasks?.length,
-        tasks: assignedTasks?.map(t => ({
+        totalTasks: areaTasks?.length,
+        tasks: areaTasks?.map(t => ({
           id: t.id,
           title: t.title,
           description: t.description,
           status: t.status,
-          parent_task_id: t.parent_task_id
+          type: t.type,
+          assigned_to: t.assigned_to,
+          assignee: t.users
         }))
       });
 
       if (tasksError) {
-        console.error('Error al obtener tareas asignadas:', tasksError);
-        throw new Error('Error al obtener las tareas asignadas');
+        console.error('Error al obtener tareas del área:', tasksError);
+        throw new Error('Error al obtener las tareas del área');
       }
 
-      if (!assignedTasks || assignedTasks.length === 0) {
-        console.log('No se encontraron tareas asignadas');
-        setCurrentTask({
-          ...mainTask,
-          subtasks: []
-        });
+      if (!areaTasks || areaTasks.length === 0) {
+        console.log('No se encontraron tareas en el área');
+        setCurrentTask(formattedMainTask);
         setLoading(false);
         return;
       }
 
-      // Formatear las tareas asignadas
-      const formattedTasks = assignedTasks.map(task => ({
+      // Formatear las tareas del área
+      const formattedTasks: Task[] = areaTasks.map(task => ({
         id: task.id,
         title: task.title,
-        description: task.description,
+        description: task.description || '',
         status: task.status as Task['status'],
         priority: task.priority as Task['priority'] || 'medium',
-        assigned_to: mainTask.assigned_to,
+        assigned_to: task.assigned_to || '',
         created_at: task.created_at,
         due_date: mainTask.due_date,
-        area_id: mainTask.area_id,
-        organization_id: mainTask.organization_id,
-        estimated_hours: task.estimated_hours || 0.5
+        area_id: task.area_id,
+        organization_id: task.organization_id,
+        estimated_hours: task.estimated_hours || 0.5,
+        assignee: task.users?.[0] ? {
+          first_name: task.users[0].first_name,
+          last_name: task.users[0].last_name
+        } : undefined
       }));
 
-      // Actualizar la tarea principal con las tareas asignadas
-      const formattedTask: Task = {
-        ...mainTask,
-        subtasks: formattedTasks
-      };
-
-      console.log('Debug - Tarea formateada:', {
-        mainTask: formattedTask,
-        subtasksCount: formattedTasks.length
-      });
-
-      setCurrentTask(formattedTask);
+      setAreaTasks(formattedTasks);
+      
+      // Actualizar la tarea principal
+      setCurrentTask(formattedMainTask);
       setProgress(0);
       setStartTime(mainTask.start_time || '');
 
@@ -662,8 +686,8 @@ export default function CurrentTaskPage() {
             <div>
               <h2 style={{ color: '#1f2937' }} className="text-xl font-semibold mb-4">Tareas del Área</h2>
               <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                {currentTask.subtasks && currentTask.subtasks.length > 0 ? (
-                  currentTask.subtasks.map((task, index) => (
+                {areaTasks && areaTasks.length > 0 ? (
+                  areaTasks.map((task, index) => (
                     <div 
                       key={task.id} 
                       style={{ backgroundColor: task.status === 'completed' ? '#f0fdf4' : '#ffffff', borderColor: '#e5e7eb' }} 
@@ -680,29 +704,20 @@ export default function CurrentTaskPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            checked={task.status === 'completed'}
-                            onChange={() => handleSubtaskStatusChange(task)}
-                            style={{ color: '#2563eb' }}
-                            className="mt-1.5 h-5 w-5 rounded border-gray-300 focus:ring-blue-500 transition-colors duration-200"
-                          />
                           <div className="flex-1">
                             <h3 
                               style={{ 
-                                color: task.status === 'completed' ? '#16a34a' : '#111827',
-                                textDecoration: task.status === 'completed' ? 'line-through' : 'none'
+                                color: task.status === 'completed' ? '#16a34a' : '#111827'
                               }} 
-                              className="font-medium text-base transition-all duration-200"
+                              className="font-medium text-base"
                             >
                               {task.title}
                             </h3>
                             <p 
                               style={{ 
-                                color: task.status === 'completed' ? '#4ade80' : '#4b5563',
-                                textDecoration: task.status === 'completed' ? 'line-through' : 'none'
+                                color: task.status === 'completed' ? '#4ade80' : '#4b5563'
                               }} 
-                              className="text-sm mt-1 transition-all duration-200"
+                              className="text-sm mt-1"
                             >
                               {task.description}
                             </p>
