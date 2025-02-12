@@ -4,7 +4,16 @@ import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Database } from '@/lib/types/database';
 
-type Reporte = Database['public']['Tables']['contingencies']['Row'];
+type Reporte = {
+  id: string;
+  title: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+  organization_id: string;
+  user_id: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+};
 
 export default function ReportesPage() {
   const [reportes, setReportes] = useState<Reporte[]>([]);
@@ -13,7 +22,7 @@ export default function ReportesPage() {
   useEffect(() => {
     const fetchReportes = async () => {
       const { data, error } = await supabase
-        .from('contingencies')
+        .from('reports')
         .select('*')
         .order('created_at', { ascending: false });
 

@@ -22,6 +22,17 @@ export class DatabaseError extends Error {
   }
 }
 
+export class AppError extends Error {
+  constructor(
+    message: string,
+    public status: number = 500,
+    public code?: string
+  ) {
+    super(message)
+    this.name = 'AppError'
+  }
+}
+
 // Manejador de errores centralizado
 export const errorHandler = {
   handle(error: Error) {
@@ -83,5 +94,87 @@ export const errorHandler = {
       message: error.message,
       stack: error.stack
     })
+  }
+}
+
+export const handleError = (error: unknown) => {
+  if (error instanceof AppError) {
+    return NextResponse.json(
+      { error: error.message },
+      { status: error.status }
+    )
+  }
+
+  if (error instanceof Error) {
+    // Manejar errores específicos de Supabase o del sistema
+    if (error.message.includes('No autorizado') || error.message.includes('not authorized')) {
+      return NextResponse.json(
+        { error: 'No autorizado' },
+        { status: 403 }
+      )
+    }
+
+    if (error.message.includes('not found') || error.message.includes('no encontrado')) {
+      return NextResponse.json(
+        { error: 'Recurso no encontrado' },
+        { status: 404 }
+      )
+    }
+
+    // Error genérico pero con mensaje
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    )
+  }
+
+  // Error completamente desconocido
+  return NextResponse.json(
+    { error: 'Error interno del servidor' },
+    { status: 500 }
+  )
+}
+
+export const throwError = (message: string, status: number = 500, code?: string) => {
+  throw new AppError(message, status, code)
+}
+
+// Helper para validar y extraer el ID de usuario del token
+export const validateAuthAndGetUserId = async (supabase: any) => {
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  
+  if (authError) {
+    throw new AppError('Error de autenticación', 401)
+  }
+  
+  if (!user) {
+    throw new AppError('No autorizado', 403)
+  }
+
+  return user.id
+}
+
+// Helper para validar y extraer la organización del usuario
+export const validateAndGetUserOrg = async (supabase: any) => {
+  const userId = await validateAuthAndGetUserId(supabase)
+  
+  const { data: userProfile, error: userError } = await supabase
+    .from('users')
+    .select('organization_id, role')
+    .eq('id', userId)
+    .single()
+
+  if (userError) {
+    throw new AppError('Error al obtener perfil de usuario', 500)
+  }
+
+  if (!userProfile?.organization_id) {
+    throw new AppError('Usuario sin organización asignada', 400)
+  }
+
+  return {
+    userId,
+    organizationId: userProfile.organization_id,
+    role: userProfile.role
   }
 } 

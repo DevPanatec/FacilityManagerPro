@@ -1,38 +1,33 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { handleError, validateAndGetUserOrg } from '@/app/utils/errorHandler'
 
 // GET /api/notifications - Obtener notificaciones
 export async function GET(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
     const { searchParams } = new URL(request.url)
-    const unreadOnly = searchParams.get('unread') === 'true'
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const unreadOnly = searchParams.get('unreadOnly') === 'true'
 
     let query = supabase
       .from('notifications')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
+      .eq('organization_id', organizationId)
 
     if (unreadOnly) {
       query = query.eq('read', false)
     }
 
-    const { data: notifications, error } = await query
-      .order('created_at', { ascending: false })
+    const { data, error } = await query.order('created_at', { ascending: false })
 
     if (error) throw error
 
-    return NextResponse.json(notifications)
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al obtener notificaciones' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -40,56 +35,46 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
     const body = await request.json()
 
     const { data, error } = await supabase
       .from('notifications')
-      .insert([
-        {
-          user_id: body.user_id,
-          title: body.title,
-          content: body.content,
-          type: body.type
-        }
-      ])
+      .insert([{
+        ...body,
+        user_id: userId,
+        organization_id: organizationId
+      }])
       .select()
 
     if (error) throw error
 
     return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al crear notificación' },
-      { status: 500 }
-    )
+    return handleError(error)
   }
 }
 
-// PUT /api/notifications/[id] - Marcar notificación como leída
+// PUT /api/notifications/[id] - Actualizar notificación
 export async function PUT(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
     const body = await request.json()
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
 
     const { data, error } = await supabase
       .from('notifications')
-      .update({ read: true })
+      .update(body)
       .eq('id', body.id)
-      .eq('user_id', user.id) // Asegurar que la notificación pertenece al usuario
+      .eq('user_id', userId)
+      .eq('organization_id', organizationId)
       .select()
 
     if (error) throw error
 
     return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al actualizar notificación' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -97,26 +82,23 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+
+    if (!id) throw new Error('ID no proporcionado')
 
     const { error } = await supabase
       .from('notifications')
       .delete()
       .eq('id', id)
-      .eq('user_id', user.id) // Asegurar que la notificación pertenece al usuario
+      .eq('user_id', userId)
+      .eq('organization_id', organizationId)
 
     if (error) throw error
 
     return NextResponse.json({ message: 'Notificación eliminada exitosamente' })
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al eliminar notificación' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 } 

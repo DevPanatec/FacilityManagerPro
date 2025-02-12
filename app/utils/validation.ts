@@ -1,11 +1,68 @@
 import { z } from 'zod'
 import type { Database } from '@/lib/types/database'
 
-type User = Database['public']['Tables']['users']['Row']
-type Task = Database['public']['Tables']['tasks']['Row']
-type Organization = Database['public']['Tables']['organizations']['Row']
-type Notification = Database['public']['Tables']['notifications']['Row']
-type Area = Database['public']['Tables']['areas']['Row']
+type User = {
+  id: string
+  email: string
+  role: 'superadmin' | 'admin' | 'enterprise' | 'usuario'
+  status: 'active' | 'inactive' | 'pending'
+  first_name?: string
+  last_name?: string
+  organization_id?: string
+  avatar_url?: string
+  created_at?: string
+  updated_at?: string
+}
+
+type Task = {
+  id: string
+  title: string
+  description?: string
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  priority: 'low' | 'medium' | 'high'
+  assigned_to?: string
+  created_by: string
+  organization_id: string
+  area_id?: string
+  due_date?: string
+  created_at?: string
+  updated_at?: string
+}
+
+type Organization = {
+  id: string
+  name: string
+  description?: string
+  logo_url?: string
+  status: 'active' | 'inactive'
+  created_at?: string
+  updated_at?: string
+}
+
+type Area = {
+  id: string
+  name: string
+  description?: string
+  organization_id: string
+  parent_id?: string
+  status: 'active' | 'inactive'
+  sala_id?: string
+  created_at?: string
+  updated_at?: string
+}
+
+type Notification = {
+  id: string
+  user_id: string
+  title: string
+  message: string
+  type: 'task' | 'work_shift' | 'inventory' | 'system'
+  priority: 'low' | 'medium' | 'high'
+  read: boolean
+  action_url?: string
+  created_at: string
+  updated_at: string
+}
 
 // Esquemas de validación
 const userSchema = z.object({
@@ -99,4 +156,65 @@ export const validator = {
     }
     return id
   }
+}
+
+export const validateUser = (data: any): string[] => {
+  const requiredFields = ['email', 'role', 'status']
+  const errors: string[] = []
+
+  requiredFields.forEach(field => {
+    if (!data[field]) {
+      errors.push(`El campo ${field} es requerido`)
+    }
+  })
+
+  if (data.email && !isValidEmail(data.email)) {
+    errors.push('El email no es válido')
+  }
+
+  return errors
+}
+
+export const validateOrganization = (data: any): string[] => {
+  const requiredFields = ['name', 'status']
+  const errors: string[] = []
+
+  requiredFields.forEach(field => {
+    if (!data[field]) {
+      errors.push(`El campo ${field} es requerido`)
+    }
+  })
+
+  return errors
+}
+
+export const validateTask = (data: any): string[] => {
+  const requiredFields = ['title', 'status', 'priority', 'created_by']
+  const errors: string[] = []
+
+  requiredFields.forEach(field => {
+    if (!data[field]) {
+      errors.push(`El campo ${field} es requerido`)
+    }
+  })
+
+  return errors
+}
+
+export const validateNotification = (data: any): string[] => {
+  const requiredFields = ['title', 'message', 'type', 'user_id', 'priority']
+  const errors: string[] = []
+
+  requiredFields.forEach(field => {
+    if (!data[field]) {
+      errors.push(`El campo ${field} es requerido`)
+    }
+  })
+
+  return errors
+}
+
+const isValidEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
 } 

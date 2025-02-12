@@ -25,9 +25,10 @@ export const isAuthenticated = async () => {
 
 export const logout = async () => {
   try {
-    await supabaseService.auth.logout()
+    await supabaseService.auth.signOut()
     clearSession()
   } catch (error) {
     console.error('Error al cerrar sesión:', error)
+    throw error
   }
 } 

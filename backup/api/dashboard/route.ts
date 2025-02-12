@@ -1,96 +1,80 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { handleError, validateAndGetUserOrg } from '@/app/utils/errorHandler'
 
 // GET /api/dashboard - Obtener datos del dashboard
 export async function GET(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
-    const { searchParams } = new URL(request.url)
-    const period = searchParams.get('period') || 'week' // week, month, year
-    
-    // Obtener el usuario y su organización
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const { organizationId } = await validateAndGetUserOrg(supabase)
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .single()
+    // Obtener estadísticas de tareas
+    const { data: taskStats, error: taskError } = await supabase
+      .from('tasks')
+      .select('status')
+      .eq('organization_id', organizationId)
 
-    if (!profile) throw new Error('Perfil no encontrado')
+    if (taskError) throw taskError
 
-    // Calcular fechas según el periodo
-    const now = new Date()
-    const startDate = new Date()
-    switch(period) {
-      case 'week':
-        startDate.setDate(now.getDate() - 7)
-        break
-      case 'month':
-        startDate.setMonth(now.getMonth() - 1)
-        break
-      case 'year':
-        startDate.setFullYear(now.getFullYear() - 1)
-        break
-    }
+    const taskStatusCount = taskStats.reduce((acc: { [key: string]: number }, task) => {
+      acc[task.status] = (acc[task.status] || 0) + 1
+      return acc
+    }, {})
 
-    // Obtener datos analíticos
-    const { data: analyticsData, error: analyticsError } = await supabase
-      .from('analytics_data')
+    // Obtener estadísticas de áreas
+    const { data: areaStats, error: areaError } = await supabase
+      .from('areas')
+      .select('*')
+      .eq('organization_id', organizationId)
+
+    if (areaError) throw areaError
+
+    // Obtener estadísticas de equipos
+    const { data: equipmentStats, error: equipmentError } = await supabase
+      .from('equipment')
+      .select('status')
+      .eq('organization_id', organizationId)
+
+    if (equipmentError) throw equipmentError
+
+    const equipmentStatusCount = equipmentStats.reduce((acc: { [key: string]: number }, equipment) => {
+      acc[equipment.status] = (acc[equipment.status] || 0) + 1
+      return acc
+    }, {})
+
+    // Obtener últimas actividades
+    const { data: recentActivities, error: activitiesError } = await supabase
+      .from('activity_logs')
       .select(`
-        id,
-        data_type,
-        data_value,
-        period_start,
-        period_end
+        *,
+        profiles:user_id (
+          full_name,
+          avatar_url
+        )
       `)
-      .eq('organization_id', profile.organization_id)
-      .gte('period_start', startDate.toISOString().split('T')[0])
-      .lte('period_end', now.toISOString().split('T')[0])
-      .order('period_start', { ascending: false })
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: false })
+      .limit(5)
 
-    if (analyticsError) throw analyticsError
+    if (activitiesError) throw activitiesError
 
-    // Obtener métricas de rendimiento
-    const { data: performanceData, error: performanceError } = await supabase
-      .from('performance_metrics')
-      .select(`
-        id,
-        metric_type,
-        metric_value,
-        measured_at
-      `)
-      .eq('organization_id', profile.organization_id)
-      .gte('measured_at', startDate.toISOString())
-      .lte('measured_at', now.toISOString())
-      .order('measured_at', { ascending: false })
-
-    if (performanceError) throw performanceError
-
-    // Estructurar respuesta
-    const dashboardData = {
-      analytics: {
-        data: analyticsData,
-        period: period,
-        timeRange: {
-          start: startDate.toISOString(),
-          end: now.toISOString()
-        }
+    return NextResponse.json({
+      taskStats: {
+        total: taskStats.length,
+        byStatus: taskStatusCount
       },
-      performance: {
-        metrics: performanceData,
-        lastUpdated: performanceData[0]?.measured_at || null
-      }
-    }
-
-    return NextResponse.json(dashboardData)
+      areaStats: {
+        total: areaStats.length
+      },
+      equipmentStats: {
+        total: equipmentStats.length,
+        byStatus: equipmentStatusCount
+      },
+      recentActivities
+    })
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al obtener datos del dashboard' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -98,41 +82,22 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
     const body = await request.json()
-    
-    // Obtener el usuario y su organización
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!profile) throw new Error('Perfil no encontrado')
-
-    // Registrar datos analíticos
     const { data, error } = await supabase
       .from('analytics_data')
-      .insert([
-        {
-          organization_id: profile.organization_id,
-          data_type: body.data_type,
-          data_value: body.data_value,
-          period_start: body.period_start,
-          period_end: body.period_end || new Date().toISOString().split('T')[0]
-        }
-      ])
+      .insert([{
+        ...body,
+        user_id: userId,
+        organization_id: organizationId
+      }])
       .select()
 
     if (error) throw error
 
     return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al registrar datos analíticos' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 } 

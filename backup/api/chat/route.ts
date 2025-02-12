@@ -1,86 +1,36 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { handleError, validateAndGetUserOrg } from '@/app/utils/errorHandler'
 
 // GET /api/chat - Obtener salas de chat y mensajes
 export async function GET(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { organizationId } = await validateAndGetUserOrg(supabase)
     const { searchParams } = new URL(request.url)
-    const roomId = searchParams.get('roomId')
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const before = searchParams.get('before')
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const taskId = searchParams.get('taskId')
 
-    // Si se proporciona roomId, obtener mensajes de esa sala
-    if (roomId) {
-      let query = supabase
-        .from('chat_messages')
-        .select(`
-          *,
-          sender:profiles!chat_messages_sender_id_fkey (
-            first_name,
-            last_name,
-            avatar_url
-          )
-        `)
-        .eq('chat_room_id', roomId)
-        .order('created_at', { ascending: false })
-        .limit(limit)
+    if (!taskId) throw new Error('Task ID no proporcionado')
 
-      if (before) {
-        query = query.lt('created_at', before)
-      }
-
-      const { data: messages, error } = await query
-
-      if (error) throw error
-
-      // Marcar mensajes como leídos
-      await supabase
-        .from('chat_participants')
-        .update({ last_read_at: new Date().toISOString() })
-        .eq('chat_room_id', roomId)
-        .eq('user_id', user.id)
-
-      return NextResponse.json(messages)
-    }
-
-    // Si no hay roomId, obtener las salas de chat del usuario
-    const { data: rooms, error: roomsError } = await supabase
-      .from('chat_rooms')
+    const { data, error } = await supabase
+      .from('chat_messages')
       .select(`
         *,
-        chat_participants!chat_rooms_id_fkey (
-          user_id,
-          last_read_at,
-          profiles (
-            first_name,
-            last_name,
-            avatar_url
-          )
-        ),
-        chat_messages!chat_rooms_id_fkey (
-          content,
-          created_at,
-          sender:profiles!chat_messages_sender_id_fkey (
-            first_name
-          )
+        profiles:user_id (
+          full_name,
+          avatar_url
         )
       `)
-      .order('updated_at', { ascending: false })
+      .eq('task_id', taskId)
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: true })
 
-    if (roomsError) throw roomsError
+    if (error) throw error
 
-    return NextResponse.json(rooms)
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al obtener chat' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -88,99 +38,30 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
     const body = await request.json()
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
 
-    // Si se proporciona roomId, enviar mensaje
-    if (body.roomId) {
-      // Verificar que el usuario es participante
-      const { data: participant } = await supabase
-        .from('chat_participants')
-        .select('id')
-        .eq('chat_room_id', body.roomId)
-        .eq('user_id', user.id)
-        .single()
-
-      if (!participant) {
-        throw new Error('No eres participante de esta sala')
-      }
-
-      // Enviar mensaje
-      const { data: message, error } = await supabase
-        .from('chat_messages')
-        .insert([
-          {
-            chat_room_id: body.roomId,
-            sender_id: user.id,
-            content: body.content
-          }
-        ])
-        .select(`
-          *,
-          sender:profiles!chat_messages_sender_id_fkey (
-            first_name,
-            last_name,
-            avatar_url
-          )
-        `)
-
-      if (error) throw error
-
-      // Actualizar timestamp de la sala
-      await supabase
-        .from('chat_rooms')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', body.roomId)
-
-      return NextResponse.json(message[0])
-    }
-
-    // Si no hay roomId, crear nueva sala
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('user_id', user.id)
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .insert([{
+        ...body,
+        user_id: userId,
+        organization_id: organizationId
+      }])
+      .select(`
+        *,
+        profiles:user_id (
+          full_name,
+          avatar_url
+        )
+      `)
       .single()
 
-    if (!profile) throw new Error('Perfil no encontrado')
+    if (error) throw error
 
-    // Crear sala
-    const { data: room, error: roomError } = await supabase
-      .from('chat_rooms')
-      .insert([
-        {
-          organization_id: profile.organization_id,
-          name: body.name,
-          is_direct: body.is_direct || false
-        }
-      ])
-      .select()
-      .single()
-
-    if (roomError) throw roomError
-
-    // Añadir participantes
-    const participants = [user.id, ...(body.participants || [])]
-    const { error: participantsError } = await supabase
-      .from('chat_participants')
-      .insert(
-        participants.map(userId => ({
-          chat_room_id: room.id,
-          user_id: userId
-        }))
-      )
-
-    if (participantsError) throw participantsError
-
-    return NextResponse.json(room)
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al crear chat' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -188,41 +69,21 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { organizationId } = await validateAndGetUserOrg(supabase)
     const body = await request.json()
 
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
-
-    // Verificar que el usuario es participante
-    const { data: participant } = await supabase
-      .from('chat_participants')
-      .select('id')
-      .eq('chat_room_id', body.id)
-      .eq('user_id', user.id)
-      .single()
-
-    if (!participant) {
-      throw new Error('No eres participante de esta sala')
-    }
-
     const { data, error } = await supabase
-      .from('chat_rooms')
-      .update({
-        name: body.name,
-        updated_at: new Date().toISOString()
-      })
+      .from('chat_messages')
+      .update(body)
       .eq('id', body.id)
+      .eq('organization_id', organizationId)
       .select()
 
     if (error) throw error
 
-    return NextResponse.json(data[0])
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al actualizar sala' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -230,27 +91,22 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { organizationId } = await validateAndGetUserOrg(supabase)
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
 
-    // Eliminar participación del usuario
+    if (!id) throw new Error('ID no proporcionado')
+
     const { error } = await supabase
-      .from('chat_participants')
+      .from('chat_messages')
       .delete()
-      .eq('chat_room_id', id)
-      .eq('user_id', user.id)
+      .eq('id', id)
+      .eq('organization_id', organizationId)
 
     if (error) throw error
 
-    return NextResponse.json({ message: 'Saliste de la sala exitosamente' })
+    return NextResponse.json({ message: 'Mensaje eliminado exitosamente' })
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al salir de la sala' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 } 

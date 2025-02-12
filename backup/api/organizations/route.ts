@@ -2,37 +2,23 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { ORGANIZATION_STATUS } from './types'
+import { handleError } from '@/app/utils/errorHandler'
 
 // GET /api/organizations - Obtener organizaciones
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const supabase = createRouteHandlerClient({ cookies })
-    const { searchParams } = new URL(request.url)
-    const id = searchParams.get('id')
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
 
-    let query = supabase
+    const { data: organizations, error } = await supabase
       .from('organizations')
       .select('*')
-      .order('name', { ascending: true })
-
-    if (id) {
-      query = query.eq('id', id)
-    }
-
-    const { data: organizations, error } = await query
+      .order('created_at', { ascending: false })
 
     if (error) throw error
 
     return NextResponse.json(organizations)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al obtener organizaciones' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -52,7 +38,7 @@ export async function POST(request: Request) {
     }
 
     // Crear organización
-    const { data, error } = await supabase
+    const { data: organization, error } = await supabase
       .from('organizations')
       .insert([
         {
@@ -65,13 +51,14 @@ export async function POST(request: Request) {
         }
       ])
       .select()
+      .single()
 
     if (error) throw error
 
     // Crear perfil para el usuario creador
     const { error: profileError } = await supabase
       .from('profiles')
-      .update({ organization_id: data[0].id })
+      .update({ organization_id: organization.id })
       .eq('user_id', user.id)
 
     if (profileError) throw profileError
@@ -87,12 +74,9 @@ export async function POST(request: Request) {
         }
       ])
 
-    return NextResponse.json(data[0])
+    return NextResponse.json(organization)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al crear organización' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -101,6 +85,7 @@ export async function PUT(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
     const body = await request.json()
+    const { id, ...updateData } = body
 
     // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
@@ -113,7 +98,7 @@ export async function PUT(request: Request) {
       .eq('user_id', user.id)
       .single()
 
-    if (!profile || profile.organization_id !== body.id) {
+    if (!profile || profile.organization_id !== id) {
       throw new Error('No autorizado para actualizar esta organización')
     }
 
@@ -122,28 +107,18 @@ export async function PUT(request: Request) {
       throw new Error('Estado no válido')
     }
 
-    const { data, error } = await supabase
+    const { data: organization, error } = await supabase
       .from('organizations')
-      .update({
-        name: body.name,
-        description: body.description,
-        logo_url: body.logo_url,
-        website: body.website,
-        tax_id: body.tax_id,
-        status: body.status,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', body.id)
+      .update(updateData)
+      .eq('id', id)
       .select()
+      .single()
 
     if (error) throw error
 
-    return NextResponse.json(data[0])
+    return NextResponse.json(organization)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al actualizar organización' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -154,6 +129,10 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     
+    if (!id) {
+      throw new Error('ID de organización no proporcionado')
+    }
+
     // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
@@ -189,9 +168,6 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Organización eliminada exitosamente' })
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al eliminar organización' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 } 

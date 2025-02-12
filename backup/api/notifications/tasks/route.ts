@@ -1,15 +1,29 @@
-import { NextResponse } from 'next/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import { handleError, validateAndGetUserOrg } from '@/app/utils/errorHandler'
 
+// POST /api/notifications/tasks - Enviar notificación de tareas
 export async function POST(request: Request) {
   try {
-    const data = await request.json();
-    // Lógica para manejar nuevas tareas
-    // - Notificar al asignado
-    // - Actualizar lista de tareas
-    // - Registrar en el calendario
+    const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
+    const body = await request.json()
 
-    return NextResponse.json({ success: true });
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert([{
+        ...body,
+        user_id: userId,
+        organization_id: organizationId,
+        type: 'task'
+      }])
+      .select()
+
+    if (error) throw error
+
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return handleError(error)
   }
 } 

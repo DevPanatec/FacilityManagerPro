@@ -1,44 +1,26 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { handleError, validateAndGetUserOrg } from '@/app/utils/errorHandler'
 import { RESOURCES, ACTIONS } from './types'
 
 // GET /api/permissions - Obtener permisos
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const supabase = createRouteHandlerClient({ cookies })
-    const { searchParams } = new URL(request.url)
-    const roleId = searchParams.get('roleId')
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const { organizationId } = await validateAndGetUserOrg(supabase)
 
-    let query = supabase
+    const { data: permissions, error } = await supabase
       .from('permissions')
-      .select(`
-        *,
-        role:roles (
-          id,
-          name
-        )
-      `)
-      .order('resource', { ascending: true })
-
-    if (roleId) {
-      query = query.eq('role_id', roleId)
-    }
-
-    const { data: permissions, error } = await query
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: false })
 
     if (error) throw error
 
     return NextResponse.json(permissions)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al obtener permisos' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -46,66 +28,44 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { organizationId } = await validateAndGetUserOrg(supabase)
     const body = await request.json()
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
 
-    // Validar resource y action
-    if (!(body.resource in RESOURCES)) {
-      throw new Error('Recurso no válido')
-    }
-    if (!(body.action in ACTIONS)) {
-      throw new Error('Acción no válida')
-    }
-
-    // Verificar que el rol existe
-    const { data: role } = await supabase
-      .from('roles')
-      .select('id')
-      .eq('id', body.role_id)
-      .single()
-
-    if (!role) throw new Error('Rol no encontrado')
-
-    // Crear permiso
-    const { data, error } = await supabase
+    const { data: permission, error } = await supabase
       .from('permissions')
-      .insert([
-        {
-          role_id: body.role_id,
-          resource: body.resource,
-          action: body.action
-        }
-      ])
-      .select(`
-        *,
-        role:roles (
-          id,
-          name
-        )
-      `)
+      .insert([{ ...body, organization_id: organizationId }])
+      .select()
+      .single()
 
     if (error) throw error
 
-    // Registrar en activity_logs
-    await supabase
-      .from('activity_logs')
-      .insert([
-        {
-          user_id: user.id,
-          action: 'create_permission',
-          description: `Permission created: ${body.resource}:${body.action} for role ${role.id}`
-        }
-      ])
-
-    return NextResponse.json(data[0])
+    return NextResponse.json(permission)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al crear permiso' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
+  }
+}
+
+// PUT /api/permissions/[id] - Actualizar permiso
+export async function PUT(request: Request) {
+  try {
+    const supabase = createRouteHandlerClient({ cookies })
+    const { organizationId } = await validateAndGetUserOrg(supabase)
+    const body = await request.json()
+    const { id, ...updateData } = body
+
+    const { data: permission, error } = await supabase
+      .from('permissions')
+      .update(updateData)
+      .eq('id', id)
+      .eq('organization_id', organizationId)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    return NextResponse.json(permission)
+  } catch (error) {
+    return handleError(error)
   }
 }
 
@@ -113,34 +73,24 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { organizationId } = await validateAndGetUserOrg(supabase)
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
 
-    // Verificar que el permiso existe
-    const { data: permission } = await supabase
-      .from('permissions')
-      .select('id')
-      .eq('id', id)
-      .single()
-
-    if (!permission) throw new Error('Permiso no encontrado')
+    if (!id) {
+      throw new Error('ID de permiso no proporcionado')
+    }
 
     const { error } = await supabase
       .from('permissions')
       .delete()
       .eq('id', id)
+      .eq('organization_id', organizationId)
 
     if (error) throw error
 
     return NextResponse.json({ message: 'Permiso eliminado exitosamente' })
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al eliminar permiso' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }

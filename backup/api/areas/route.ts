@@ -1,11 +1,13 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { handleError, validateAndGetUserOrg } from '@/app/utils/errorHandler'
 
 // GET /api/areas - Obtener áreas
 export async function GET(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { organizationId } = await validateAndGetUserOrg(supabase)
     const { searchParams } = new URL(request.url)
     const departmentId = searchParams.get('departmentId')
     
@@ -19,6 +21,7 @@ export async function GET(request: Request) {
           organization_id
         )
       `)
+      .eq('organization_id', organizationId)
 
     if (departmentId) {
       query = query.eq('department_id', departmentId)
@@ -31,7 +34,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(areas)
   } catch (error) {
-    return NextResponse.json({ error: 'Error al obtener áreas' }, { status: 500 })
+    return handleError(error)
   }
 }
 
@@ -39,17 +42,15 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
     const body = await request.json()
 
     const { data, error } = await supabase
       .from('areas')
-      .insert([
-        {
-          department_id: body.department_id,
-          name: body.name,
-          description: body.description
-        }
-      ])
+      .insert([{
+        ...body,
+        organization_id: organizationId
+      }])
       .select()
 
     if (error) throw error
@@ -57,20 +58,16 @@ export async function POST(request: Request) {
     // Registrar en activity_logs
     await supabase
       .from('activity_logs')
-      .insert([
-        {
-          user_id: (await supabase.auth.getUser()).data.user?.id,
-          action: 'create_area',
-          description: `Area created: ${body.name}`
-        }
-      ])
+      .insert([{
+        user_id: userId,
+        action: 'create_area',
+        description: `Area created: ${body.name}`,
+        organization_id: organizationId
+      }])
 
     return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al crear área' },
-      { status: 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -78,6 +75,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
     const body = await request.json()
 
     const { data, error } = await supabase
@@ -88,13 +86,14 @@ export async function PUT(request: Request) {
         department_id: body.department_id
       })
       .eq('id', body.id)
+      .eq('organization_id', organizationId)
       .select()
 
     if (error) throw error
 
     return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json({ error: 'Error al actualizar área' }, { status: 500 })
+    return handleError(error)
   }
 }
 
@@ -102,18 +101,22 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+
+    if (!id) throw new Error('ID no proporcionado')
 
     const { error } = await supabase
       .from('areas')
       .delete()
       .eq('id', id)
+      .eq('organization_id', organizationId)
 
     if (error) throw error
 
     return NextResponse.json({ message: 'Área eliminada exitosamente' })
   } catch (error) {
-    return NextResponse.json({ error: 'Error al eliminar área' }, { status: 500 })
+    return handleError(error)
   }
 } 

@@ -1,55 +1,25 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { handleError, validateAndGetUserOrg } from '@/app/utils/errorHandler'
 
 // GET /api/attendance - Obtener registros de asistencia
 export async function GET(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
-    const { searchParams } = new URL(request.url)
-    const employeeId = searchParams.get('employeeId')
-    const startDate = searchParams.get('startDate')
-    const endDate = searchParams.get('endDate')
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const { organizationId } = await validateAndGetUserOrg(supabase)
 
-    let query = supabase
-      .from('attendance_records')
-      .select(`
-        *,
-        employee:employee_records!attendance_records_employee_id_fkey (
-          id,
-          first_name,
-          last_name,
-          position,
-          department_id
-        )
-      `)
-      .order('check_in', { ascending: false })
-
-    // Aplicar filtros
-    if (employeeId) {
-      query = query.eq('employee_id', employeeId)
-    }
-    if (startDate) {
-      query = query.gte('check_in', startDate)
-    }
-    if (endDate) {
-      query = query.lte('check_in', endDate)
-    }
-
-    const { data: attendance, error } = await query
+    const { data, error } = await supabase
+      .from('attendance')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: false })
 
     if (error) throw error
 
-    return NextResponse.json(attendance)
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al obtener registros de asistencia' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -57,64 +27,23 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
     const body = await request.json()
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
 
-    // Verificar si ya existe un registro para hoy
-    const today = new Date().toISOString().split('T')[0]
-    const { data: existingRecord } = await supabase
-      .from('attendance_records')
-      .select('id')
-      .eq('employee_id', body.employee_id || user.id)
-      .gte('check_in', today)
-      .lte('check_in', today + 'T23:59:59')
-      .maybeSingle()
-
-    if (existingRecord) {
-      throw new Error('Ya existe un registro de asistencia para hoy')
-    }
-
-    // Crear registro de asistencia
     const { data, error } = await supabase
-      .from('attendance_records')
-      .insert([
-        {
-          employee_id: body.employee_id || user.id,
-          check_in: body.check_in || new Date().toISOString(),
-          check_out: body.check_out,
-          location_data: body.location_data || null
-        }
-      ])
-      .select(`
-        *,
-        employee:employee_records!attendance_records_employee_id_fkey (
-          first_name,
-          last_name
-        )
-      `)
+      .from('attendance')
+      .insert([{
+        ...body,
+        user_id: userId,
+        organization_id: organizationId
+      }])
+      .select()
 
     if (error) throw error
 
-    // Registrar en activity_logs
-    await supabase
-      .from('activity_logs')
-      .insert([
-        {
-          user_id: user.id,
-          action: 'create_attendance',
-          description: `Attendance check-in recorded`
-        }
-      ])
-
-    return NextResponse.json(data[0])
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al registrar asistencia' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -122,54 +51,43 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
     const body = await request.json()
 
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
-
-    // Verificar que es el registro del usuario
-    const { data: attendance } = await supabase
-      .from('attendance_records')
-      .select('*')
-      .eq('id', body.id)
-      .single()
-
-    if (!attendance) {
-      throw new Error('Registro no encontrado')
-    }
-
-    // Verificar que el registro es del usuario o tiene permisos
-    const { data: employee } = await supabase
-      .from('employee_records')
-      .select('user_id')
-      .eq('id', attendance.employee_id)
-      .single()
-
-    if (!employee || employee.user_id !== user.id) {
-      throw new Error('No autorizado para actualizar este registro')
-    }
-
     const { data, error } = await supabase
-      .from('attendance_records')
-      .update({
-        check_out: body.check_out || new Date().toISOString(),
-        location_data: {
-          ...(attendance.location_data || {}),
-          ...(body.location_data || {})
-        },
-        updated_at: new Date().toISOString()
-      })
+      .from('attendance')
+      .update(body)
       .eq('id', body.id)
+      .eq('organization_id', organizationId)
       .select()
 
     if (error) throw error
 
-    return NextResponse.json(data[0])
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al actualizar registro de asistencia' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (!id) throw new Error('ID no proporcionado')
+
+    const { error } = await supabase
+      .from('attendance')
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', organizationId)
+
+    if (error) throw error
+
+    return NextResponse.json({ message: 'Registro eliminado exitosamente' })
+  } catch (error) {
+    return handleError(error)
   }
 } 

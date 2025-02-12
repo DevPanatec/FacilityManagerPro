@@ -2,14 +2,68 @@
 import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import SalaAreaSelector from '@/app/shared/components/componentes/SalaAreaSelector'
-import { Database } from '@/types/supabase'
+import { Database } from '@/lib/types/database'
 import { Button } from '@/components/ui/button'
+
+type Task = {
+  id: string
+  organization_id: string
+  title: string
+  description: string | null
+  area_id: string | null
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  priority: 'low' | 'medium' | 'high'
+  assigned_to: string | null
+  due_date: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  start_time: string | null
+  end_time: string | null
+  type: string | null
+  frequency: 'diario' | 'semanal' | 'quincenal' | 'mensual' | null
+  sala_id: string | null
+  parent_task_id: string | null
+  order: number | null
+  estimated_hours: number | null
+  assignee?: {
+    first_name: string | null
+    last_name: string | null
+  }
+  organization?: {
+    id: string
+    name: string
+  }
+}
+
+type TaskInput = {
+  id?: string
+  organization_id: string
+  title: string
+  description?: string | null
+  area_id?: string | null
+  status?: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  priority?: 'low' | 'medium' | 'high'
+  assigned_to?: string | null
+  due_date?: string | null
+  created_by?: string | null
+  created_at?: string
+  updated_at?: string
+  start_time?: string | null
+  end_time?: string | null
+  type?: string | null
+  frequency?: 'diario' | 'semanal' | 'quincenal' | 'mensual' | null
+  sala_id?: string | null
+  parent_task_id?: string | null
+  order?: number | null
+  estimated_hours?: number | null
+}
 
 type TaskModalProps = {
   isOpen: boolean
   onClose: () => void
-  onSave: (taskData: Database['public']['Tables']['tasks']['Insert']) => void
-  task?: Database['public']['Tables']['tasks']['Row'] | null
+  onSave: (taskData: TaskInput) => void
+  task?: Task | null
   organizationId: string
 }
 
@@ -40,8 +94,8 @@ export function TaskModal({ isOpen, onClose, onSave, task, organizationId }: Tas
 
   const [title, setTitle] = useState(task?.title || '')
   const [description, setDescription] = useState<string | undefined>(task?.description || undefined)
-  const [priority, setPriority] = useState<TaskPriority | undefined>(task?.priority || undefined)
-  const [status, setStatus] = useState<TaskStatus | undefined>(task?.status || undefined)
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | undefined>(task?.priority || undefined)
+  const [status, setStatus] = useState<'pending' | 'in_progress' | 'completed' | 'cancelled' | undefined>(task?.status || undefined)
   const [dueDate, setDueDate] = useState<string | undefined>(task?.due_date || undefined)
   const [selectedArea, setSelectedArea] = useState<string | undefined>(task?.area_id || undefined)
   const [assignedTo, setAssignedTo] = useState<string | undefined>(task?.assigned_to || undefined)
@@ -133,7 +187,7 @@ export function TaskModal({ isOpen, onClose, onSave, task, organizationId }: Tas
       return
     }
 
-    const taskData: Database['public']['Tables']['tasks']['Insert'] = {
+    const taskData: TaskInput = {
       title,
       description: description || null,
       priority: priority || 'medium',
@@ -191,7 +245,7 @@ export function TaskModal({ isOpen, onClose, onSave, task, organizationId }: Tas
           <div className="grid grid-cols-2 gap-4">
             <select 
               value={priority || ''} 
-              onChange={(e) => setPriority(e.target.value as TaskPriority)}
+              onChange={(e) => setPriority(e.target.value as 'low' | 'medium' | 'high')}
               className="w-full p-2 border rounded-lg"
             >
               <option value="">Prioridad</option>
@@ -202,7 +256,7 @@ export function TaskModal({ isOpen, onClose, onSave, task, organizationId }: Tas
 
             <select 
               value={status || ''} 
-              onChange={(e) => setStatus(e.target.value as TaskStatus)}
+              onChange={(e) => setStatus(e.target.value as 'pending' | 'in_progress' | 'completed' | 'cancelled')}
               className="w-full p-2 border rounded-lg"
             >
               <option value="">Estado</option>

@@ -1,56 +1,70 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { handleError, validateAndGetUserOrg } from '@/app/utils/errorHandler'
 
+// GET /api/notifications/preferences - Obtener preferencias de notificaciones
 export async function GET(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
 
     const { data, error } = await supabase
       .from('notification_preferences')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
+      .eq('organization_id', organizationId)
 
     if (error) throw error
 
     return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
+// POST /api/notifications/preferences - Crear preferencias de notificaciones
 export async function POST(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
     const body = await request.json()
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
 
     const { data, error } = await supabase
       .from('notification_preferences')
-      .upsert({
-        user_id: user.id,
-        notification_type: body.type,
-        channels: body.channels,
-        organization_id: body.organization_id
-      })
+      .insert([{
+        ...body,
+        user_id: userId,
+        organization_id: organizationId
+      }])
       .select()
-      .single()
 
     if (error) throw error
 
     return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
+  }
+}
+
+// PUT /api/notifications/preferences - Actualizar preferencias de notificaciones
+export async function PUT(request: Request) {
+  try {
+    const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
+    const body = await request.json()
+
+    const { data, error } = await supabase
+      .from('notification_preferences')
+      .update(body)
+      .eq('user_id', userId)
+      .eq('organization_id', organizationId)
+      .select()
+
+    if (error) throw error
+
+    return NextResponse.json(data)
+  } catch (error) {
+    return handleError(error)
   }
 } 

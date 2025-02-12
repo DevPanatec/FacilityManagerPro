@@ -2,7 +2,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { Database } from '@/lib/types/database'
 import { validateFile, getFileTypeConfig } from '@/app/shared/utils/fileValidation'
 
-export type FileType = 'image' | 'document' | 'spreadsheet' | 'other'
+export type FileType = 'image' | 'document' | 'all'
 
 interface UploadedFile {
   url: string
@@ -22,9 +22,8 @@ export class FileService {
 
   private getFileType(file: File): FileType {
     if (file.type.startsWith('image/')) return 'image'
-    if (file.type.includes('spreadsheet') || file.name.match(/\.(xlsx|xls|csv)$/i)) return 'spreadsheet'
     if (file.type.includes('document') || file.name.match(/\.(doc|docx|pdf)$/i)) return 'document'
-    return 'other'
+    return 'all'
   }
 
   private async uploadFile(
@@ -49,16 +48,12 @@ export class FileService {
     this.uploadControllers.set(file.name, controller)
 
     try {
-      // Subir el archivo con seguimiento de progreso
+      // Subir el archivo
       const { data, error: uploadError } = await this.supabase.storage
         .from(bucket)
         .upload(filePath, file, {
-          abortSignal: controller.signal,
-          onUploadProgress: (progress) => {
-            if (onProgress) {
-              onProgress((progress.loaded / progress.total) * 100)
-            }
-          }
+          cacheControl: '3600',
+          upsert: false
         })
 
       if (uploadError) throw uploadError

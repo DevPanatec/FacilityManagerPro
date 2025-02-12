@@ -1,56 +1,45 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { handleError, validateAndGetUserOrg } from '@/app/utils/errorHandler'
 import { EVALUATION_TYPE } from './types'
 
 // GET /api/evaluations - Obtener evaluaciones
 export async function GET(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { organizationId } = await validateAndGetUserOrg(supabase)
     const { searchParams } = new URL(request.url)
-    const employeeId = searchParams.get('employeeId')
-    const type = searchParams.get('type')
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
+    const userId = searchParams.get('userId')
 
     let query = supabase
       .from('evaluations')
       .select(`
         *,
-        employee:employee_records!evaluations_employee_id_fkey (
+        evaluator:evaluator_id(
           id,
           first_name,
-          last_name,
-          position,
-          department_id
+          last_name
         ),
-        evaluator:profiles!evaluations_evaluator_id_fkey (
+        evaluated:user_id(
+          id,
           first_name,
           last_name
         )
       `)
-      .order('evaluation_date', { ascending: false })
+      .eq('organization_id', organizationId)
 
-    // Aplicar filtros
-    if (employeeId) {
-      query = query.eq('employee_id', employeeId)
-    }
-    if (type && type in EVALUATION_TYPE) {
-      query = query.eq('evaluation_type', type)
+    if (userId) {
+      query = query.eq('user_id', userId)
     }
 
-    const { data: evaluations, error } = await query
+    const { data, error } = await query.order('created_at', { ascending: false })
 
     if (error) throw error
 
-    return NextResponse.json(evaluations)
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al obtener evaluaciones' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -58,61 +47,23 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { userId, organizationId } = await validateAndGetUserOrg(supabase)
     const body = await request.json()
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
 
-    // Validar tipo
-    if (!(body.evaluation_type in EVALUATION_TYPE)) {
-      throw new Error('Tipo de evaluación no válido')
-    }
-
-    // Crear evaluación
     const { data, error } = await supabase
       .from('evaluations')
-      .insert([
-        {
-          employee_id: body.employee_id,
-          evaluator_id: user.id,
-          evaluation_date: body.evaluation_date,
-          evaluation_type: body.evaluation_type,
-          scores: body.scores || {},
-          comments: body.comments
-        }
-      ])
-      .select(`
-        *,
-        employee:employee_records!evaluations_employee_id_fkey (
-          first_name,
-          last_name
-        ),
-        evaluator:profiles!evaluations_evaluator_id_fkey (
-          first_name,
-          last_name
-        )
-      `)
+      .insert([{
+        ...body,
+        evaluator_id: userId,
+        organization_id: organizationId
+      }])
+      .select()
 
     if (error) throw error
 
-    // Registrar en activity_logs
-    await supabase
-      .from('activity_logs')
-      .insert([
-        {
-          user_id: user.id,
-          action: 'create_evaluation',
-          description: `Evaluation created for employee: ${body.employee_id}`
-        }
-      ])
-
-    return NextResponse.json(data[0])
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al crear evaluación' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -120,58 +71,21 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { organizationId } = await validateAndGetUserOrg(supabase)
     const body = await request.json()
-
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
-
-    // Validar tipo
-    if (body.evaluation_type && !(body.evaluation_type in EVALUATION_TYPE)) {
-      throw new Error('Tipo de evaluación no válido')
-    }
-
-    // Verificar que es el evaluador
-    const { data: evaluation } = await supabase
-      .from('evaluations')
-      .select('evaluator_id')
-      .eq('id', body.id)
-      .single()
-
-    if (!evaluation || evaluation.evaluator_id !== user.id) {
-      throw new Error('No autorizado para actualizar esta evaluación')
-    }
 
     const { data, error } = await supabase
       .from('evaluations')
-      .update({
-        evaluation_type: body.evaluation_type,
-        evaluation_date: body.evaluation_date,
-        scores: body.scores,
-        comments: body.comments,
-        updated_at: new Date().toISOString()
-      })
+      .update(body)
       .eq('id', body.id)
-      .select(`
-        *,
-        employee:employee_records!evaluations_employee_id_fkey (
-          first_name,
-          last_name
-        ),
-        evaluator:profiles!evaluations_evaluator_id_fkey (
-          first_name,
-          last_name
-        )
-      `)
+      .eq('organization_id', organizationId)
+      .select()
 
     if (error) throw error
 
-    return NextResponse.json(data[0])
+    return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al actualizar evaluación' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 }
 
@@ -179,36 +93,22 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const { organizationId } = await validateAndGetUserOrg(supabase)
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    
-    // Obtener el usuario actual
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('No autorizado')
 
-    // Verificar que es el evaluador
-    const { data: evaluation } = await supabase
-      .from('evaluations')
-      .select('evaluator_id')
-      .eq('id', id)
-      .single()
-
-    if (!evaluation || evaluation.evaluator_id !== user.id) {
-      throw new Error('No autorizado para eliminar esta evaluación')
-    }
+    if (!id) throw new Error('ID no proporcionado')
 
     const { error } = await supabase
       .from('evaluations')
       .delete()
       .eq('id', id)
+      .eq('organization_id', organizationId)
 
     if (error) throw error
 
     return NextResponse.json({ message: 'Evaluación eliminada exitosamente' })
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al eliminar evaluación' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return handleError(error)
   }
 } 

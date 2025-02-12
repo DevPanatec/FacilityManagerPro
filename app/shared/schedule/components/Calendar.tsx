@@ -2,7 +2,27 @@
 import { useState, useMemo } from 'react'
 import { Database } from '@/lib/types/database'
 
-type Task = Database['public']['Tables']['tasks']['Row'] & {
+type Task = {
+  id: string
+  organization_id: string
+  title: string
+  description: string | null
+  area_id: string | null
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  priority: 'low' | 'medium' | 'high'
+  assigned_to: string | null
+  due_date: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  start_time: string | null
+  end_time: string | null
+  type: string | null
+  frequency: 'diario' | 'semanal' | 'quincenal' | 'mensual' | null
+  sala_id: string | null
+  parent_task_id: string | null
+  order: number | null
+  estimated_hours: number | null
   assignee?: {
     first_name: string | null
     last_name: string | null

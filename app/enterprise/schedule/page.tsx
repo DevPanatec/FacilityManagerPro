@@ -8,7 +8,27 @@ import { Database } from '@/lib/types/database'
 type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
 type TaskPriority = 'low' | 'medium' | 'high'
 
-type Task = Database['public']['Tables']['tasks']['Row'] & {
+type Task = {
+  id: string
+  organization_id: string
+  title: string
+  description: string | null
+  area_id: string | null
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  priority: 'low' | 'medium' | 'high'
+  assigned_to: string | null
+  due_date: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  start_time: string | null
+  end_time: string | null
+  type: string | null
+  frequency: 'diario' | 'semanal' | 'quincenal' | 'mensual' | null
+  sala_id: string | null
+  parent_task_id: string | null
+  order: number | null
+  estimated_hours: number | null
   assignee?: {
     first_name: string | null
     last_name: string | null
@@ -179,7 +199,17 @@ export default function EnterpriseSchedulePage() {
     organization: userProfile?.organization ? {
       id: userProfile.organization.id,
       name: userProfile.organization.name
-    } : undefined
+    } : undefined,
+    area_id: task.area_id || null,
+    due_date: task.due_date || null,
+    start_time: task.start_time || null,
+    end_time: task.end_time || null,
+    type: task.type || null,
+    frequency: task.frequency || null,
+    sala_id: task.sala_id || null,
+    parent_task_id: task.parent_task_id || null,
+    order: task.order || null,
+    estimated_hours: task.estimated_hours || null
   }))
 
   return (
