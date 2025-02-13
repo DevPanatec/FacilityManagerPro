@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   images: {
     remotePatterns: [
       {
@@ -48,13 +47,6 @@ const nextConfig = {
   },
   poweredByHeader: false,
   compress: true,
-  compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
-  },
-  experimental: {
-    optimizeCss: true,
-    scrollRestoration: true,
-  },
   async headers() {
     return [
       {
