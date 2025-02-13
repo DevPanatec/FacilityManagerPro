@@ -40,7 +40,7 @@ export default function SchedulePage() {
         .from('tasks')
         .select(`
           *,
-          assignee:profiles!tasks_assigned_to_fkey(
+          assignee:users!tasks_assigned_to_fkey(
             id,
             first_name,
             last_name

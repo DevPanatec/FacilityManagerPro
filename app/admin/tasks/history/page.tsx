@@ -28,11 +28,11 @@ interface Task {
     id: string;
     first_name: string;
     last_name: string;
-  };
+  } | null;
   areas: {
     id: number;
     name: string;
-  };
+  } | null;
 }
 
 export default function TaskHistoryPage() {
@@ -56,33 +56,54 @@ export default function TaskHistoryPage() {
       if (!user) throw new Error('No autorizado');
 
       const { data: userProfile } = await supabase
-        .from('profiles')
+        .from('users')
         .select('organization_id')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single();
 
       if (!userProfile) throw new Error('Perfil no encontrado');
 
       const { data: tasks, error } = await supabase
-        .from('assignments')
+        .from('tasks')
         .select(`
           *,
-          users:user_id (
+          assignee:users!tasks_assigned_to_fkey (
             id,
             first_name,
             last_name
           ),
-          areas:area_id (
+          area:areas!tasks_area_id_fkey (
             id,
             name
           )
         `)
         .eq('organization_id', userProfile.organization_id)
+        .eq('type', 'assignment')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      setTasks(tasks || []);
+      const formattedTasks = tasks?.map(task => ({
+        id: task.id,
+        description: task.description,
+        area: task.area?.name || 'Sin área',
+        status: task.status as Task['status'],
+        start_time: task.start_time,
+        completed_at: task.completed_at,
+        checklist: task.checklist || [],
+        photos: task.photos || { before: null, during: null, after: null },
+        users: task.assignee ? {
+          id: task.assignee.id,
+          first_name: task.assignee.first_name,
+          last_name: task.assignee.last_name
+        } : null,
+        areas: task.area ? {
+          id: task.area.id,
+          name: task.area.name
+        } : null
+      })) || [];
+
+      setTasks(formattedTasks);
     } catch (error) {
       console.error('Error loading tasks:', error);
       setError('Error al cargar las tareas');

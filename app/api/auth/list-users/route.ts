@@ -35,18 +35,18 @@ export async function GET() {
     }
 
     // 2. Obtener usuarios de la tabla users
-    const { data: tableUsers, error: tableError } = await supabaseAdmin
+    const { data: users, error: usersError } = await supabaseAdmin
       .from('users')
-      .select('*')
+      .select('id, first_name, last_name, email, role, status, organization_id')
 
-    if (tableError) {
-      console.error('Error al obtener usuarios de la tabla:', tableError)
+    if (usersError) {
+      console.error('Error al obtener usuarios de la tabla:', usersError)
       return NextResponse.json({ 
         success: false, 
-        error: tableError.message,
+        error: usersError.message,
         details: {
-          code: tableError.code,
-          hint: tableError.hint
+          code: usersError.code,
+          hint: usersError.hint
         }
       }, { status: 500 })
     }
@@ -79,7 +79,7 @@ export async function GET() {
           lastSignIn: user.last_sign_in_at,
           metadata: user.user_metadata
         })),
-        users: tableUsers,
+        users: users,
         profiles: profiles
       }
     })

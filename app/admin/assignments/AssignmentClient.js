@@ -70,12 +70,12 @@ export default function AssignmentClient() {
         .from('assignments')
         .select(`
           *,
-          users!user_id (
+          users!assignments_user_id_fkey (
             id,
             first_name,
             last_name
           ),
-          areas!area_id (
+          areas!assignments_area_id_fkey (
             id,
             name
           )

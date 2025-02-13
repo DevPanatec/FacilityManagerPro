@@ -129,23 +129,89 @@ export default function Dashboard() {
       let startDate = new Date();
       startDate.setDate(now.getDate() - 7); // Siempre mostramos los últimos 7 días
 
-      // Obtener todas las tareas de la última semana
-      const { data: taskData } = await supabase
+      // 5. Cargar tareas
+      const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
         .select(`
           id,
           title,
-          status_id,
+          description,
+          status,
+          priority,
           created_at,
+          due_date,
+          start_date,
+          end_time,
           start_time,
-          completed_at,
-          sala_id
+          assigned_to,
+          type,
+          sala_id,
+          area_id,
+          assignee:users!tasks_assigned_to_fkey (
+            id,
+            first_name,
+            last_name
+          ),
+          area:areas!tasks_area_id_fkey (
+            id,
+            name
+          )
         `)
         .eq('organization_id', userProfile.organization_id)
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', now.toISOString());
+        .eq('type', 'assignment')  // Solo tareas de tipo asignación
+        .is('parent_task_id', null)  // Solo tareas principales, no subtareas
+        .not('status', 'eq', 'cancelled')  // Excluir tareas canceladas
+        .order('created_at', { ascending: false }); // Ordenar por fecha de creación, más recientes primero
 
-      console.log('Tareas obtenidas:', taskData);
+      console.log('Tasks data:', tasksData);
+      console.log('Tasks error:', tasksError);
+
+      if (tasksError) {
+        console.error('Error al cargar tareas:', tasksError);
+        throw new Error(`Error al cargar tareas: ${tasksError.message}`);
+      }
+
+      if (!salasData || salasData.length === 0) {
+        console.warn('No se encontraron salas');
+        setAreas([]);
+        setAreasTasks([]);
+      } else {
+        // 6. Formatear y establecer datos de salas con sus áreas y tareas
+        const formattedSalas = salasData.map(sala => {
+          const salaAreas = areasData?.filter(area => area.sala_id === sala.id) || [];
+          const salaTasks = tasksData?.filter(task => 
+            task.sala_id === sala.id || salaAreas.some(area => area.id === task.area_id)
+          ).map(task => ({
+            id: task.id,
+            title: task.title,
+            description: task.description,
+            status: task.status,
+            priority: task.priority,
+            created_at: task.created_at,
+            due_date: task.due_date ? new Date(task.due_date).toLocaleDateString() : '',
+            assigned_to: task.assigned_to,
+            assignee: task.assignee ? {
+              first_name: task.assignee.first_name,
+              last_name: task.assignee.last_name
+            } : null,
+            area_id: task.area_id,
+            area_name: task.area?.name || 'Sin área'
+          })) || [];
+
+          return {
+            id: sala.id,
+            name: sala.nombre,
+            color: getSalaColor(sala.nombre),
+            staff_count: 0,
+            areas: salaAreas,
+            tasks: salaTasks
+          };
+        });
+
+        console.log('Formatted salas with tasks:', formattedSalas);
+        setAreas(formattedSalas);
+        setAreasTasks(formattedSalas);
+      }
 
       // Obtener personal activo
       const { data: activeUsers } = await supabase
@@ -198,8 +264,8 @@ export default function Dashboard() {
           return nombreDia === dia;
         }) || [];
 
-        const completadas = tareasDia.filter(t => t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c').length;
-        const pendientes = tareasDia.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length;
+        const completadas = tareasDia.filter(t => t.status === 'completed').length;
+        const pendientes = tareasDia.filter(t => t.status === 'pending').length;
 
         return {
           dia,
@@ -211,13 +277,13 @@ export default function Dashboard() {
       console.log('Estado de asignaciones por día:', estadoAsignaciones);
 
       // Calcular métricas
-      const pendientes = taskData?.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length || 0;
-      const completadas = taskData?.filter(t => t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c').length || 0;
+      const pendientes = taskData?.filter(t => t.status === 'pending').length || 0;
+      const completadas = taskData?.filter(t => t.status === 'completed').length || 0;
       const total = taskData?.length || 0;
 
       // Calcular tiempo promedio por tarea
       const completedWithTimes = taskData?.filter(t => 
-        t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c' && t.start_time && t.completed_at
+        t.status === 'completed' && t.start_time && t.completed_at
       ) || [];
 
       let tiempoPromedio = '0min';
@@ -272,9 +338,9 @@ export default function Dashboard() {
       console.log('Frecuencia de limpieza calculada:', frecuenciaLimpieza);
 
       // Contar tareas por estado
-      const tareasCompletadas = taskData?.filter(t => t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c').length || 0;
-      const tareasEnProgreso = taskData?.filter(t => t.status_id === '906c6c3b-80a2-46ca-ab1a-2efc95bf1852').length || 0;
-      const tareasPendientes = taskData?.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length || 0;
+      const tareasCompletadas = taskData?.filter(t => t.status === 'completed').length || 0;
+      const tareasEnProgreso = taskData?.filter(t => t.status === 'in_progress').length || 0;
+      const tareasPendientes = taskData?.filter(t => t.status === 'pending').length || 0;
 
       console.log('Conteo de tareas:', { tareasCompletadas, tareasEnProgreso, tareasPendientes });
 
@@ -291,7 +357,7 @@ export default function Dashboard() {
       setDashboardData({
         asignacionesPendientes: {
           cantidad: pendientes,
-          variacion: Math.round((pendientes - (taskData?.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length || 0)) / (taskData?.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length || 0) * 100)
+          variacion: Math.round((pendientes - (taskData?.filter(t => t.status === 'pending').length || 0)) / (taskData?.filter(t => t.status === 'pending').length || 0) * 100)
         },
         personalActivo: activeUsers?.length || 0,
         tiempoPromedio,

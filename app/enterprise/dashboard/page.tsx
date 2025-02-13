@@ -375,10 +375,11 @@ export default function EnterpriseOverviewPage() {
         .from('tasks')
         .select(`
           *,
-          assignee:assigned_to(id, first_name, last_name),
-          area:area_id(id, name)
+          assignee:users!tasks_assigned_to_fkey(id, first_name, last_name),
+          area:areas!tasks_area_id_fkey(id, name)
         `)
         .eq('organization_id', userProfile.organization_id)
+        .eq('type', 'assignment')  // Solo tareas de tipo asignación
         .is('parent_task_id', null)  // Solo tareas principales, no subtareas
         .not('area_id', 'is', null)  // Solo tareas que tienen un área asignada
         .order('created_at', { ascending: false }); // Ordenar por fecha de creación, más recientes primero

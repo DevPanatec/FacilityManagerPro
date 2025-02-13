@@ -15,9 +15,11 @@ export async function GET() {
     )
 
     // Intentar una consulta simple
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('count()', { count: 'exact', head: true })
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, email, first_name, last_name, role, status, organization_id')
+      .eq('id', session.user.id)
+      .single()
 
     return NextResponse.json({
       connection: {
@@ -26,9 +28,9 @@ export async function GET() {
         hasServiceKey
       },
       test: {
-        success: !error,
-        error: error?.message,
-        count: data
+        success: !userError,
+        error: userError?.message,
+        count: user
       }
     })
 

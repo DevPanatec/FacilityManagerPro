@@ -58,39 +58,21 @@ CREATE INDEX idx_empresas_nombre ON empresas(nombre);
 CREATE INDEX idx_empresas_estado ON empresas(estado);
 CREATE INDEX idx_estadisticas_tipo ON empresa_estadisticas(tipo);
 
--- Crear tabla de perfiles
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id),
-  user_id UUID REFERENCES auth.users(id),
-  email TEXT NOT NULL,
-  first_name TEXT,
-  last_name TEXT,
-  avatar_url TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+-- Create users table with proper auth integration
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT NOT NULL UNIQUE,
+    role TEXT NOT NULL CHECK (role IN ('superadmin', 'admin', 'enterprise', 'usuario')),
+    first_name TEXT,
+    last_name TEXT,
+    organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+    avatar_url TEXT,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'pending')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Crear políticas de seguridad para la tabla profiles
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Usuarios pueden ver sus propios perfiles"
-  ON public.profiles FOR SELECT
-  USING (auth.uid() = id);
-
-CREATE POLICY "Usuarios pueden actualizar sus propios perfiles"
-  ON public.profiles FOR UPDATE
-  USING (auth.uid() = id);
-
-CREATE POLICY "Los administradores pueden ver todos los perfiles"
-  ON public.profiles FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.users 
-      WHERE users.id = auth.uid() 
-      AND users.role = 'admin'
-    )
-  );
-
--- Crear índices para optimización
-CREATE INDEX IF NOT EXISTS profiles_user_id_idx ON public.profiles(user_id);
-CREATE INDEX IF NOT EXISTS profiles_email_idx ON public.profiles(email); 
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_users_organization ON users(organization_id);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email); 

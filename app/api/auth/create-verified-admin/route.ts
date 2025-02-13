@@ -105,13 +105,18 @@ export async function GET() {
 
     // 3. Insertar en la tabla users con rol admin
     console.log('Insertando en tabla users...')
-    const { error: userError } = await supabaseAdmin
+    const { data: user, error: userError } = await supabaseAdmin
       .from('users')
-      .insert({
-        id: authData.user.id,
-        role: 'admin',
-        email: adminEmail
-      })
+      .insert([
+        {
+          id: authData.user.id,
+          email: adminEmail,
+          role: 'admin',
+          status: 'active'
+        }
+      ])
+      .select()
+      .single()
 
     if (userError) {
       console.error('Error al crear perfil de usuario:', userError)

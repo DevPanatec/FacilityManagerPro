@@ -96,8 +96,8 @@ export default function TaskModal({ isOpen, onClose, onSubmit, selectedDate, org
       try {
         // Obtener usuarios
         const { data: usersData, error: usersError } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name, email, organization_id, status')
+          .from('users')
+          .select('id, first_name, last_name')
           .eq('organization_id', organizationId)
           .eq('status', 'active')
 

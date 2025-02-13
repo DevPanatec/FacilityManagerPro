@@ -39,12 +39,39 @@ interface Task {
   status: string;
   priority: string;
   created_at: string;
-  due_date: string;
-  assigned_to?: string;
+  due_date: string | null;
+  assigned_to: string | null;
+  type?: string;
+  sala_id?: string | null;
   assignee?: {
     first_name: string;
     last_name: string;
   };
+  area_id?: string | null;
+  area_name?: string;
+}
+
+interface TaskResponse {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  created_at: string;
+  due_date: string | null;
+  assigned_to: string | null;
+  type: string;
+  sala_id: string | null;
+  area_id: string | null;
+  assignee: {
+    id: string;
+    first_name: string;
+    last_name: string;
+  } | null;
+  area: {
+    id: string;
+    name: string;
+  } | null;
 }
 
 interface Area {
@@ -109,7 +136,7 @@ export default function AssignmentsPage() {
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [showTaskDetailsModal, setShowTaskDetailsModal] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskResponse | null>(null);
   const [showShiftDetailsModal, setShowShiftDetailsModal] = useState(false);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -236,61 +263,52 @@ export default function AssignmentsPage() {
               end_time,
               start_time,
               assigned_to,
-              users!tasks_assigned_to_fkey (
+              type,
+              sala_id,
+              area_id,
+              assignee:users!tasks_assigned_to_fkey (
                 id,
                 first_name,
                 last_name
+              ),
+              area:areas!tasks_area_id_fkey (
+                id,
+                name
               )
             `)
             .eq('sala_id', sala.id)
             .eq('type', 'assignment')
             .eq('organization_id', userProfile.organization_id)
             .not('status', 'eq', 'cancelled')
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false }) as { data: TaskResponse[] | null, error: any };
 
-          if (tasksError) {
-            console.error('Error loading tasks for sala:', tasksError);
-            return {
-              id: sala.id,
-              nombre: sala.nombre,
-              color: getSalaColor(sala.nombre),
-              tareas: [],
-              areas: (sala.areas || [])
-                .filter((area: Area) => area.status === 'active')
-                .map((area: Area) => ({
-                  id: area.id,
-                  name: area.name
-                }))
-            };
-          }
+          if (tasksError) throw tasksError;
 
-          // Formatear las tareas
-          const formattedTasks: Task[] = (tasksData || []).map(task => ({
+          const formattedTasks = tasksData?.map((task: TaskResponse): Task => ({
             id: task.id,
             title: task.title,
-            description: task.description || '',
-            status: task.status || 'pending',
-            priority: task.priority || 'medium',
-            created_at: new Date(task.created_at).toLocaleDateString(),
-            due_date: task.due_date ? new Date(task.due_date).toLocaleDateString() : '',
+            description: task.description,
+            status: task.status,
+            priority: task.priority,
+            created_at: task.created_at,
+            due_date: task.due_date,
             assigned_to: task.assigned_to,
-            assignee: task.users ? {
-              first_name: task.users[0]?.first_name,
-              last_name: task.users[0]?.last_name
-            } : undefined
-          }));
+            type: task.type,
+            sala_id: task.sala_id,
+            assignee: task.assignee ? {
+              first_name: task.assignee.first_name,
+              last_name: task.assignee.last_name
+            } : undefined,
+            area_id: task.area_id,
+            area_name: task.area?.name
+          })) || [];
 
           return {
             id: sala.id,
             nombre: sala.nombre,
             color: getSalaColor(sala.nombre),
             tareas: formattedTasks,
-            areas: (sala.areas || [])
-              .filter((area: Area) => area.status === 'active')
-              .map((area: Area) => ({
-                id: area.id,
-                name: area.name
-              }))
+            areas: sala.areas || []
           };
         }));
 
@@ -574,7 +592,7 @@ export default function AssignmentsPage() {
   };
 
   const handleTaskClick = (tarea: Task) => {
-    setSelectedTask(tarea);
+    setSelectedTask(tarea as unknown as TaskResponse);
     setShowTaskDetailsModal(true);
   };
 

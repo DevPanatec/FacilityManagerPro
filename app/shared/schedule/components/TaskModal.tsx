@@ -52,14 +52,15 @@ export default function TaskModal({ isOpen, onClose, onSave, task }: TaskModalPr
     if (!task) return
     try {
       // Obtener usuarios
-      const { data: usersData, error: usersError } = await supabase
-        .from('profiles')
+      const { data: users, error: usersError } = await supabase
+        .from('users')
         .select('id, first_name, last_name')
         .eq('organization_id', task.organization_id)
+        .eq('status', 'active')
 
       if (usersError) throw usersError
-      if (usersData) {
-        setUsers(usersData)
+      if (users) {
+        setUsers(users)
       }
 
     } catch (error) {

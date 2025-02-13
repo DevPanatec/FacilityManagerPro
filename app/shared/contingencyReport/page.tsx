@@ -268,8 +268,8 @@ export default function ReportsPage() {
         .from('contingencies')
         .select(`
           *,
-          creator:user_profiles!created_by(id, first_name, last_name),
-          assignee:user_profiles!assigned_to(id, first_name, last_name),
+          creator:users!created_by(id, first_name, last_name),
+          assignee:users!assigned_to(id, first_name, last_name),
           area:areas!inner(
             id, 
             name,

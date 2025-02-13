@@ -37,20 +37,20 @@ async function updateAdminEmails() {
         continue
       }
 
-      // 2. Actualizar el email en la tabla profiles
-      const { error: profileError } = await supabase
-        .from('profiles')
+      // 2. Actualizar el email en la tabla users
+      const { data: userData, error: userError } = await supabase
+        .from('users')
         .update({ email: update.newEmail })
-        .eq('email', update.oldEmail)
-        .eq('organization_id', organizationId)
-        .eq('role', 'admin')
+        .eq('id', authData.user.id)
+        .select()
+        .single()
 
-      if (profileError) {
-        console.error(`Error actualizando perfil para ${update.oldEmail}:`, profileError)
+      if (userError) {
+        console.error('Error actualizando usuario:', userError.message)
         continue
       }
 
-      console.log(`✅ Actualizado correctamente: ${update.oldEmail} -> ${update.newEmail}`)
+      console.log('Usuario actualizado:', userData)
     }
 
     console.log('Proceso completado')

@@ -61,7 +61,7 @@ export default function EnterpriseSchedulePage() {
 
         // 2. Obtener el perfil completo con la organización
         const { data: profile, error: profileError } = await supabase
-          .from('profiles')
+          .from('users')
           .select('*, organizations(*)')
           .eq('id', user.id)
           .single()
@@ -76,7 +76,7 @@ export default function EnterpriseSchedulePage() {
           .select(`
             *,
             area:areas(id, name),
-            assignee:profiles(id, first_name, last_name),
+            assignee:users(id, first_name, last_name),
             organization:organizations(id, name)
           `)
           .eq('organization_id', profile.organization_id)
