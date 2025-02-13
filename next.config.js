@@ -52,15 +52,16 @@ const nextConfig = {
           {
             key: 'Content-Security-Policy',
             value: [
-              "default-src 'self' https:",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https: *.vercel.app vercel.live accounts.google.com apis.google.com",
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'strict-dynamic' https: 'sha256-Q+8tPsjVtiDsjF/Cv8FMOpg2Yg91oKFKDAJat1PPb2g=' 'sha256-cSFrgH63iDmNEj+4jnkEbvmbfI92IV6ty347f6Nwxc0=' 'sha256-sfTqQGq7t0Lg5pN+ktO4QQsDHnpixjOJ8gmcFT0ZImM=' 'sha256-B7/iPQIEcYHYOH/saWxQvkgYR8pE7lfEVqQegjBl5LY=' 'sha256-0e555M679pj1SEhYgM9HcLs+fMjbSnkd6toVzNTlK/Q='",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https://* lh3.googleusercontent.com",
               "font-src 'self' data: https:",
               "connect-src 'self' wss://* https://* *.supabase.co *.googleapis.com vercel.live",
               "frame-src 'self' https: accounts.google.com",
               "object-src 'none'",
-              "base-uri 'self'"
+              "base-uri 'self'",
+              "require-trusted-types-for 'script'"
             ].join('; ')
           }
         ]
