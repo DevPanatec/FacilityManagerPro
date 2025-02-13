@@ -47,7 +47,7 @@ const nextConfig = {
   async headers() {
     return [
       {
-        source: '/(.*)',
+        source: '/:path*',
         headers: [
           {
             key: 'Content-Security-Policy',
@@ -56,9 +56,9 @@ const nextConfig = {
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https: *.vercel.app vercel.live accounts.google.com apis.google.com",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https://* lh3.googleusercontent.com",
-              "font-src 'self'",
+              "font-src 'self' data: https:",
               "connect-src 'self' wss://* https://* *.supabase.co *.googleapis.com vercel.live",
-              "frame-src 'self'",
+              "frame-src 'self' https: accounts.google.com",
               "object-src 'none'",
               "base-uri 'self'"
             ].join('; ')
