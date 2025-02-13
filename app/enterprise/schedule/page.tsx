@@ -3,21 +3,34 @@ import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import Calendar from '@/app/shared/schedule/components/Calendar'
 import TaskModal from './components/TaskModal'
+import { TaskStatus } from '@/app/shared/schedule/components/Calendar'
 
 interface Task {
   id: string
   title: string
   description?: string
-  status: string
-  priority: string
+  status: TaskStatus
+  priority: 'high' | 'medium' | 'low'
   assigned_to?: string
   created_by: string
   organization_id: string
   created_at?: string
   updated_at?: string
   area_id?: string
-  area?: string
   due_date?: string
+  area?: {
+    id: string
+    name: string
+  }
+  assignee?: {
+    id: string
+    first_name: string
+    last_name: string
+  }
+  organization?: {
+    id: string
+    name: string
+  }
 }
 
 interface CustomError {
@@ -62,8 +75,9 @@ export default function EnterpriseSchedulePage() {
           .from('tasks')
           .select(`
             *,
-            area:area_id(id, name),
-            assignee:assigned_to(id, first_name, last_name)
+            area:areas(id, name),
+            assignee:profiles(id, first_name, last_name),
+            organization:organizations(id, name)
           `)
           .eq('organization_id', profile.organization_id)
           .order('due_date')
@@ -189,7 +203,10 @@ export default function EnterpriseSchedulePage() {
       title: task.title,
       description: task.description,
       area_id: task.area_id,
-      area: task.area,
+      area: task.area ? {
+        id: task.area.id,
+        name: task.area.name
+      } : undefined,
       assigned_to: task.assigned_to,
       priority: priorityMap[taskPriority] || 'medium',
       status: task.status,
@@ -197,7 +214,16 @@ export default function EnterpriseSchedulePage() {
       created_by: userProfile?.id || '',
       organization_id: userProfile?.organization_id || '',
       created_at: task.created_at || new Date().toISOString(),
-      updated_at: task.updated_at || new Date().toISOString()
+      updated_at: task.updated_at || new Date().toISOString(),
+      assignee: task.assignee ? {
+        id: task.assignee.id,
+        first_name: task.assignee.first_name,
+        last_name: task.assignee.last_name
+      } : undefined,
+      organization: userProfile?.organization ? {
+        id: userProfile.organization.id,
+        name: userProfile.organization.name
+      } : undefined
     }
   })
 

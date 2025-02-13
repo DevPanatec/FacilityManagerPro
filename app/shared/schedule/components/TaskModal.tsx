@@ -1,9 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase/client'
-import { Task } from '@/lib/types/tasks'
-import SalaAreaSelector from '@/app/shared/components/componentes/SalaAreaSelector'
-import { Sala, Area } from '@/lib/types/database'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import SalaAreaSelector, { Sala, Area } from '@/app/shared/components/componentes/SalaAreaSelector'
+import type { Database } from '@/lib/types/database'
+import { Task, TaskStatus } from './Calendar'
 
 interface User {
   id: string
@@ -15,304 +15,216 @@ interface TaskModalProps {
   isOpen: boolean
   onClose: () => void
   onSave: (taskData: Partial<Task>) => Promise<void>
-  task?: Task | null
+  task?: Task
 }
 
-export function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
+export default function TaskModal({ isOpen, onClose, onSave, task }: TaskModalProps) {
   const [title, setTitle] = useState(task?.title || '')
   const [description, setDescription] = useState(task?.description || '')
-  const [priority, setPriority] = useState<Task['priority']>(task?.priority || 'medium')
-  const [status, setStatus] = useState<Task['status']>(task?.status || 'pending')
-  const [dueDate, setDueDate] = useState(task?.due_date || new Date().toISOString().split('T')[0])
-  const [selectedSala, setSelectedSala] = useState(task?.sala_id || '')
-  const [selectedArea, setSelectedArea] = useState(task?.area_id || '')
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>(
+    (task?.priority || 'medium') as 'low' | 'medium' | 'high'
+  )
+  const [status, setStatus] = useState<TaskStatus>(
+    (task?.status || 'pending') as TaskStatus
+  )
+  const [dueDate, setDueDate] = useState(task?.due_date || '')
   const [assignedTo, setAssignedTo] = useState(task?.assigned_to || '')
-  const [startTime, setStartTime] = useState(task?.start_time || '')
-  const [endTime, setEndTime] = useState(task?.end_time || '')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [salas, setSalas] = useState<Sala[]>([])
-  const [areas, setAreas] = useState<Area[]>([])
   const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState({
-    salas: false,
-    areas: false,
-    users: false
-  })
+  const [selectedSala, setSelectedSala] = useState<Sala | null>(null)
+  const [selectedArea, setSelectedArea] = useState<Area | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const supabase = createClientComponentClient<Database>()
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!task?.organization_id) {
-        return
-      }
-
-      setLoading(prev => ({ ...prev, salas: true, users: true }))
-
-      try {
-        // Obtener salas
-        const { data: salasData, error: salasError } = await supabase
-          .from('salas')
-          .select('id, nombre, estado, organization_id')
-          .eq('organization_id', task.organization_id)
-          .eq('estado', true)
-          .order('nombre')
-
-        if (salasError) {
-          console.error('Error fetching salas:', salasError)
-          setError('Error al cargar las salas')
-          return
-        }
-
-        setSalas(salasData || [])
-
-        // Obtener usuarios
-        const { data: usersData, error: usersError } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name')
-          .eq('organization_id', task.organization_id)
-          .eq('status', 'active')
-
-        if (usersError) {
-          console.error('Error fetching users:', usersError)
-          setError('Error al cargar los usuarios')
-          return
-        }
-
-        setUsers(usersData || [])
-      } catch (error) {
-        console.error('Error en fetchData:', error)
-      } finally {
-        setLoading(prev => ({ ...prev, salas: false, users: false }))
-      }
-    }
-
-    if (isOpen) {
+    if (task) {
+      setTitle(task.title)
+      setDescription(task.description || '')
+      setPriority((task.priority || 'medium') as 'low' | 'medium' | 'high')
+      setStatus((task.status || 'pending') as TaskStatus)
+      setDueDate(task.due_date || '')
+      setAssignedTo(task.assigned_to || '')
       fetchData()
     }
-  }, [isOpen, task])
+  }, [task])
 
-  // Efecto para cargar áreas cuando se selecciona una sala
-  useEffect(() => {
-    const fetchAreas = async () => {
-      if (!selectedSala) {
-        setAreas([])
-        return
+  const fetchData = async () => {
+    if (!task) return
+    try {
+      // Obtener usuarios
+      const { data: usersData, error: usersError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .eq('organization_id', task.organization_id)
+
+      if (usersError) throw usersError
+      if (usersData) {
+        setUsers(usersData)
       }
 
-      setLoading(prev => ({ ...prev, areas: true }))
-
-      try {
-        const { data: areasData, error: areasError } = await supabase
-          .from('areas')
-          .select('id, name, sala_id, status, organization_id')
-          .eq('organization_id', task?.organization_id)
-          .eq('sala_id', selectedSala)
-          .eq('status', 'active')
-          .order('name')
-
-        if (areasError) {
-          console.error('Error fetching areas:', areasError)
-          setError('Error al cargar las áreas')
-          return
-        }
-
-        setAreas(areasData || [])
-      } catch (error) {
-        console.error('Error en fetchAreas:', error)
-      } finally {
-        setLoading(prev => ({ ...prev, areas: false }))
-      }
+    } catch (error) {
+      console.error('Error fetching data:', error)
     }
-
-    fetchAreas()
-  }, [selectedSala, task])
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError(null)
-    setIsSubmitting(true)
-
+    setLoading(true)
     try {
-      // Validar campos requeridos
-      if (!title.trim()) {
-        throw new Error('El título es requerido')
-      }
-
-      if (!selectedArea) {
-        throw new Error('Debe seleccionar un área')
-      }
-
-      if (!dueDate) {
-        throw new Error('La fecha de vencimiento es requerida')
-      }
-
-      // Crear objeto de tarea
       const taskData: Partial<Task> = {
-        title: title.trim(),
-        description: description.trim(),
-        priority,
-        status,
+        title,
+        description,
+        priority: priority as 'low' | 'medium' | 'high',
+        status: status as TaskStatus,
         due_date: dueDate,
-        area_id: selectedArea,
-        sala_id: selectedSala || undefined,
-        assigned_to: assignedTo || undefined,
-        start_time: startTime || undefined,
-        end_time: endTime || undefined
+        assigned_to: assignedTo,
+        area_id: selectedArea?.id
       }
 
       await onSave(taskData)
       onClose()
-    } catch (err) {
-      console.error('Error al guardar la tarea:', err)
-      setError(err instanceof Error ? err.message : 'Error al guardar la tarea')
+    } catch (error) {
+      console.error('Error saving task:', error)
     } finally {
-      setIsSubmitting(false)
+      setLoading(false)
     }
   }
 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">{task ? 'Editar Tarea' : 'Nueva Tarea'}</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-            disabled={isSubmitting}
-          >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <h2 className="text-2xl font-bold mb-6">
+            {task ? 'Editar Tarea' : 'Nueva Tarea'}
+          </h2>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Título */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Título
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+
+            {/* Descripción */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Descripción
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                rows={3}
+              />
+            </div>
+
+            {/* Sala y Área */}
+            <SalaAreaSelector
+              onSalaChange={setSelectedSala}
+              onAreaChange={setSelectedArea}
+              defaultAreaId={task?.area_id}
+            />
+
+            {/* Prioridad y Estado */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Prioridad
+                </label>
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as 'low' | 'medium' | 'high')}
+                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="low">Baja</option>
+                  <option value="medium">Media</option>
+                  <option value="high">Alta</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Estado
+                </label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as TaskStatus)}
+                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="pending">Pendiente</option>
+                  <option value="in_progress">En Progreso</option>
+                  <option value="completed">Completada</option>
+                  <option value="cancelled">Cancelada</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Fecha de Vencimiento y Asignado a */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Fecha de Vencimiento
+                </label>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Asignado a
+                </label>
+                <select
+                  value={assignedTo}
+                  onChange={(e) => setAssignedTo(e.target.value)}
+                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Sin asignar</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.first_name} {user.last_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Botones */}
+            <div className="flex justify-end gap-4 mt-6">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className={`px-4 py-2 text-sm font-medium text-white rounded-lg ${
+                  loading
+                    ? 'bg-blue-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {loading ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </form>
         </div>
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-md">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Título</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Descripción</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              rows={3}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Fecha de vencimiento</label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Hora de inicio</label>
-              <input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Hora de fin</label>
-              <input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Prioridad</label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as Task['priority'])}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="low">Baja</option>
-                <option value="medium">Media</option>
-                <option value="high">Alta</option>
-                <option value="urgent">Urgente</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Estado</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as Task['status'])}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="pending">Pendiente</option>
-                <option value="in_progress">En Progreso</option>
-                <option value="completed">Completado</option>
-                <option value="cancelled">Cancelado</option>
-              </select>
-            </div>
-          </div>
-
-          <SalaAreaSelector
-            onSalaChange={(sala) => setSelectedSala(sala?.id || '')}
-            onAreaChange={(area) => setSelectedArea(area?.id || '')}
-            initialSalaId={selectedSala}
-            initialAreaId={selectedArea}
-          />
-
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md disabled:opacity-50"
-              disabled={isSubmitting}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 flex items-center space-x-2"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Guardando...</span>
-                </>
-              ) : (
-                <span>{task ? 'Actualizar' : 'Crear'}</span>
-              )}
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   )

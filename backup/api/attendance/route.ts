@@ -46,9 +46,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json(attendance)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener registros de asistencia'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al obtener registros de asistencia' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -111,9 +113,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data[0])
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al registrar asistencia'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al registrar asistencia' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -167,9 +171,11 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(data[0])
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar registro de asistencia'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar registro de asistencia' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 } 

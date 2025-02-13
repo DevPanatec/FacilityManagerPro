@@ -37,7 +37,7 @@ export default function ReportesPage() {
             <h2 className="text-lg font-semibold">{reporte.title}</h2>
             <p className="text-gray-600">{reporte.description}</p>
             <div className="mt-2 text-sm text-gray-500">
-              {new Date(reporte.created_at).toLocaleDateString()}
+              {reporte.created_at ? new Date(reporte.created_at).toLocaleDateString() : 'Fecha no disponible'}
             </div>
           </div>
         ))}

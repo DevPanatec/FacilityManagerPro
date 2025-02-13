@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import type { Database } from '@/lib/types/database'
 
 interface ConnectionState {
@@ -10,6 +10,14 @@ interface ConnectionState {
   isReconnecting: boolean
   lastError: Error | null
   retryCount: number
+}
+
+type EventHandler = {
+  event: 'postgres_changes'
+  schema?: string
+  table: string
+  filter?: string
+  handler: (payload: RealtimePostgresChangesPayload<any>) => void
 }
 
 export function useSupabaseConnection() {
@@ -62,12 +70,23 @@ export function useSupabaseConnection() {
     }
   }, [supabase, channels, connectionState.retryCount])
 
-  const subscribeToChannel = useCallback((channelName: string, handlers: any) => {
+  const subscribeToChannel = useCallback((channelName: string, handlers: EventHandler[]) => {
     const channel = supabase.channel(channelName)
     
     // Configurar handlers
-    Object.entries(handlers).forEach(([event, handler]) => {
-      channel.on(event as any, handler as any)
+    handlers.forEach((handler) => {
+      if (handler.event === 'postgres_changes') {
+        channel.on(
+          handler.event,
+          {
+            event: '*',
+            schema: handler.schema || 'public',
+            table: handler.table,
+            filter: handler.filter || undefined
+          },
+          handler.handler
+        )
+      }
     })
 
     // Suscribirse al canal
@@ -102,17 +121,14 @@ export function useSupabaseConnection() {
 
     // Monitorear cambios en la conexión
     const channel = supabase.channel('connection_monitor')
-      .on('presence', { event: 'sync' }, () => {
-        setConnectionState(prev => ({ ...prev, isConnected: true }))
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setConnectionState(prev => ({ ...prev, isConnected: true }))
+        } else if (status === 'CLOSED') {
+          setConnectionState(prev => ({ ...prev, isConnected: false }))
+          connect()
+        }
       })
-      .on('presence', { event: 'join' }, () => {
-        setConnectionState(prev => ({ ...prev, isConnected: true }))
-      })
-      .on('presence', { event: 'leave' }, () => {
-        setConnectionState(prev => ({ ...prev, isConnected: false }))
-        connect()
-      })
-      .subscribe()
 
     // Conectar inicialmente
     connect()

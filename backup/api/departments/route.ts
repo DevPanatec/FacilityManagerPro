@@ -38,9 +38,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json(departments)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener departamentos'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al obtener departamentos' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -102,9 +104,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data[0])
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear departamento'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al crear departamento' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -156,9 +160,11 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(data[0])
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar departamento'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar departamento' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -205,9 +211,11 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Departamento eliminado exitosamente' })
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar departamento'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar departamento' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 } 

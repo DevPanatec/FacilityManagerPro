@@ -1,6 +1,6 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { Database } from '@/lib/types/database'
-import { validateFile, getFileTypeConfig } from '@/app/shared/utils/fileValidation'
+import { validateFile, getFileTypeConfig, FileValidationConfig } from '@/app/shared/utils/fileValidation'
 
 export type FileType = 'image' | 'document' | 'spreadsheet' | 'other'
 
@@ -34,7 +34,8 @@ export class FileService {
     onProgress?: (progress: number) => void
   ): Promise<UploadedFile> {
     // Validar archivo
-    const error = validateFile(file, getFileTypeConfig(this.getFileType(file)));
+    const config = getFileTypeConfig('all');
+    const error = validateFile(file, config);
     if (error) {
       throw new Error(error.message);
     }
@@ -52,14 +53,7 @@ export class FileService {
       // Subir el archivo con seguimiento de progreso
       const { data, error: uploadError } = await this.supabase.storage
         .from(bucket)
-        .upload(filePath, file, {
-          abortSignal: controller.signal,
-          onUploadProgress: (progress) => {
-            if (onProgress) {
-              onProgress((progress.loaded / progress.total) * 100)
-            }
-          }
-        })
+        .upload(filePath, file)
 
       if (uploadError) throw uploadError
 
@@ -186,6 +180,15 @@ export class FileService {
     if (!data || data.length === 0) throw new Error('File not found')
 
     return data[0]
+  }
+
+  async deleteFile(fileUrl: string) {
+    const path = fileUrl.split('/').slice(-2).join('/')
+    const { error: storageError } = await this.supabase.storage
+      .from('chat-files')
+      .remove([path]);
+
+    if (storageError) throw storageError;
   }
 }
 

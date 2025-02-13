@@ -39,9 +39,15 @@ export async function GET(request: Request) {
 
     return NextResponse.json(positions)
   } catch (error) {
+    if (error instanceof Error) {
+      return NextResponse.json(
+        { error: error.message || 'Error al obtener posiciones' },
+        { status: error.message.includes('No autorizado') ? 403 : 500 }
+      )
+    }
     return NextResponse.json(
-      { error: error.message || 'Error al obtener posiciones' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al obtener posiciones' },
+      { status: 500 }
     )
   }
 }
@@ -99,9 +105,15 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data[0])
   } catch (error) {
+    if (error instanceof Error) {
+      return NextResponse.json(
+        { error: error.message || 'Error al crear posición' },
+        { status: error.message.includes('No autorizado') ? 403 : 500 }
+      )
+    }
     return NextResponse.json(
-      { error: error.message || 'Error al crear posición' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al crear posición' },
+      { status: 500 }
     )
   }
 }
@@ -156,9 +168,15 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(data[0])
   } catch (error) {
+    if (error instanceof Error) {
+      return NextResponse.json(
+        { error: error.message || 'Error al actualizar posición' },
+        { status: error.message.includes('No autorizado') ? 403 : 500 }
+      )
+    }
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar posición' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al actualizar posición' },
+      { status: 500 }
     )
   }
 }
@@ -203,9 +221,15 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Posición eliminada exitosamente' })
   } catch (error) {
+    if (error instanceof Error) {
+      return NextResponse.json(
+        { error: error.message || 'Error al eliminar posición' },
+        { status: error.message.includes('No autorizado') ? 403 : 500 }
+      )
+    }
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar posición' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: 'Error al eliminar posición' },
+      { status: 500 }
     )
   }
 } 

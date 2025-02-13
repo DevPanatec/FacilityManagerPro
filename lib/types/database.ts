@@ -29,6 +29,99 @@ export interface Database {
           updated_at?: string
         }
       }
+      areas: {
+        Row: {
+          id: string
+          name: string
+          status: string
+          sala_id: string
+          organization_id: string
+          created_at?: string
+          updated_at?: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          status: string
+          sala_id: string
+          organization_id: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          status?: string
+          sala_id?: string
+          organization_id?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      notifications: {
+        Row: {
+          id: string
+          title: string
+          message: string
+          type: string
+          user_id: string
+          organization_id: string
+          read: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          message: string
+          type: string
+          user_id: string
+          organization_id: string
+          read?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          message?: string
+          type?: string
+          user_id?: string
+          organization_id?: string
+          read?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      contingencies: {
+        Row: {
+          id: string
+          title: string
+          description: string
+          created_by: string
+          organization_id: string
+          created_at?: string
+          updated_at?: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          description: string
+          created_by: string
+          organization_id: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: string
+          created_by?: string
+          organization_id?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
       users: {
         Row: {
           id: string

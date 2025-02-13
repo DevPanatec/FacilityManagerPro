@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { Database } from '@/types/supabase'
 import { errorHandler } from '@/utils/errorHandler'
 
-const SUPABASE_URL = 'https://wldiefpqmfjxernvuywv.supabase.co'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 const getSupabaseClient = () => {
@@ -38,7 +38,7 @@ export const supabaseService = {
         if (error) throw error
         return { data: { user: data.user }, error: null }
       } catch (error) {
-        errorHandler.logError('auth.login', error)
+        console.error('Error en login:', error)
         return { data: null, error }
       }
     },
@@ -51,7 +51,7 @@ export const supabaseService = {
         localStorage.removeItem('supabase.auth.token')
         localStorage.removeItem('adminPrincipal')
       } catch (error) {
-        errorHandler.logError('auth.logout', error)
+        console.error('Error en logout:', error)
         throw error
       }
     },
@@ -63,7 +63,7 @@ export const supabaseService = {
         if (error) throw error
         return { data: { user: data.user }, error: null }
       } catch (error) {
-        errorHandler.logError('auth.getUser', error)
+        console.error('Error en getUser:', error)
         return { data: null, error }
       }
     }

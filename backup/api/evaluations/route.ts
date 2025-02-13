@@ -47,9 +47,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json(evaluations)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener evaluaciones'
+    const statusCode = errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al obtener evaluaciones' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -109,9 +111,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data[0])
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear evaluación'
+    const statusCode = errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al crear evaluación' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -168,9 +172,11 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(data[0])
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar evaluación'
+    const statusCode = errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar evaluación' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -206,9 +212,11 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Evaluación eliminada exitosamente' })
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar evaluación'
+    const statusCode = errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar evaluación' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

@@ -28,9 +28,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json(categories)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener categorías'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al obtener categorías' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -82,9 +84,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear categoría'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al crear categoría' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -124,9 +128,11 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar categoría'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar categoría' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -162,9 +168,11 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Categoría eliminada exitosamente' })
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar categoría'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar categoría' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 } 

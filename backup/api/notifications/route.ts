@@ -29,9 +29,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json(notifications)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener notificaciones'
+    const statusCode = errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al obtener notificaciones' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -58,9 +60,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear notificación'
+    const statusCode = errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al crear notificación' },
-      { status: 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -86,9 +90,11 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar notificación'
+    const statusCode = errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar notificación' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -114,9 +120,11 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Notificación eliminada exitosamente' })
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar notificación'
+    const statusCode = errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar notificación' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

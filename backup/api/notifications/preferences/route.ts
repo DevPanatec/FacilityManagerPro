@@ -18,9 +18,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener preferencias de notificaciones'
+    const statusCode = errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -48,9 +50,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar preferencias de notificaciones'
+    const statusCode = errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 

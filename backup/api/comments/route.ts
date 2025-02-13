@@ -30,8 +30,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json(comments)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener comentarios'
     return NextResponse.json(
-      { error: error.message || 'Error al obtener comentarios' },
+      { error: errorMessage },
       { status: 500 }
     )
   }
@@ -81,9 +82,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear comentario'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al crear comentario' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -119,9 +122,11 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar comentario'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar comentario' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -154,9 +159,11 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Comentario eliminado exitosamente' })
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar comentario'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar comentario' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 } 

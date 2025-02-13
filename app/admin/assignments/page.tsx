@@ -16,18 +16,20 @@ interface WorkShiftData {
   user_id: string | null;
 }
 
+interface Usuario {
+  id: string;
+  first_name: string;
+  last_name: string;
+  avatar_url?: string;
+}
+
 interface Turno {
   id: string;
   nombre: string;
   horario: string;
   personasAsignadas: number;
   enLinea: number;
-  usuarios: {
-    id: string;
-    first_name: string;
-    last_name: string;
-    avatar_url?: string;
-  }[];
+  usuarios: Usuario[];
 }
 
 interface Task {
@@ -45,15 +47,18 @@ interface Task {
   };
 }
 
+interface Area {
+  id: string;
+  name: string;
+  status: string;
+}
+
 interface Sala {
   id: string;
   nombre: string;
   color: string;
   tareas: Task[];
-  areas: {
-    id: string;
-    name: string;
-  }[];
+  areas: Area[];
 }
 
 interface WorkShiftWithUsers {
@@ -68,6 +73,23 @@ interface WorkShiftWithUsers {
   }[];
 }
 
+interface AreaData {
+  id: string;
+  name: string;
+  sala_id: string;
+  salas: {
+    id: string;
+    nombre: string;
+  }[];
+}
+
+interface WorkShiftDetails {
+  id: string;
+  nombre: string;
+  horario: string;
+  usuarios: Usuario[];
+}
+
 export default function AssignmentsPage() {
   const [loading, setLoading] = useState(true);
   const [turnos, setTurnos] = useState<Turno[]>([]);
@@ -80,7 +102,8 @@ export default function AssignmentsPage() {
   const [selectedEndDate, setSelectedEndDate] = useState('');
   const [frecuencia, setFrecuencia] = useState('diario');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [selectedTurno, setSelectedTurno] = useState('');
+  const [selectedTurnoId, setSelectedTurnoId] = useState('');
+  const [selectedTurnoDetails, setSelectedTurnoDetails] = useState<WorkShiftDetails | null>(null);
   const [selectedShiftUser, setSelectedShiftUser] = useState('');
   const [userMap, setUserMap] = useState<Record<string, string>>({});
   const [startTime, setStartTime] = useState('');
@@ -88,7 +111,6 @@ export default function AssignmentsPage() {
   const [showTaskDetailsModal, setShowTaskDetailsModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showShiftDetailsModal, setShowShiftDetailsModal] = useState(false);
-  const [selectedShiftDetails, setSelectedShiftDetails] = useState<WorkShiftWithUsers | null>(null);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -149,7 +171,17 @@ export default function AssignmentsPage() {
           enLinea: 0,
           usuarios: turno.users ? [turno.users] : []
         }));
-        setTurnos(turnosFormatted);
+        setTurnos(
+          turnosData.map((turno) => ({
+            ...turno,
+            usuarios: turno.users.map((usuario: any): Usuario => ({
+              id: usuario.id,
+              first_name: usuario.first_name,
+              last_name: usuario.last_name,
+              avatar_url: usuario.avatar_url
+            }))
+          }))
+        );
       }
 
       // Cargar usuarios
@@ -224,8 +256,8 @@ export default function AssignmentsPage() {
               color: getSalaColor(sala.nombre),
               tareas: [],
               areas: (sala.areas || [])
-                .filter(area => area.status === 'active')
-                .map(area => ({
+                .filter((area: Area) => area.status === 'active')
+                .map((area: Area) => ({
                   id: area.id,
                   name: area.name
                 }))
@@ -254,8 +286,8 @@ export default function AssignmentsPage() {
             color: getSalaColor(sala.nombre),
             tareas: formattedTasks,
             areas: (sala.areas || [])
-              .filter(area => area.status === 'active')
-              .map(area => ({
+              .filter((area: Area) => area.status === 'active')
+              .map((area: Area) => ({
                 id: area.id,
                 name: area.name
               }))
@@ -353,12 +385,12 @@ export default function AssignmentsPage() {
 
       const mainTaskData = {
         organization_id: userProfile.organization_id,
-        title: `${areaData.salas.nombre} - ${areaData.name}`,
-        description: `Asignación de tareas para ${areaData.name} en ${areaData.salas.nombre}`,
+        title: `${(areaData as unknown as AreaData).salas[0].nombre} - ${(areaData as unknown as AreaData).name}`,
+        description: `Asignación de tareas para ${(areaData as unknown as AreaData).name} en ${(areaData as unknown as AreaData).salas[0].nombre}`,
         status: 'pending',
         assigned_to: userMap[selectedUser],
         area_id: selectedArea,
-        sala_id: areaData.sala_id,
+        sala_id: (areaData as unknown as AreaData).sala_id,
         start_date: startDateTime.toISOString(),
         due_date: endDateTime.toISOString(),
         start_time: startTime,
@@ -417,7 +449,7 @@ export default function AssignmentsPage() {
         status: 'pending',
         assigned_to: userMap[selectedUser],
         area_id: selectedArea,
-        sala_id: areaData.sala_id,
+        sala_id: (areaData as AreaData).sala_id,
         parent_task_id: newMainTask.id,
         start_date: startDateTime.toISOString(),
         due_date: endDateTime.toISOString(),
@@ -473,43 +505,6 @@ export default function AssignmentsPage() {
     }
   };
 
-  const addUserToShift = async () => {
-    try {
-      if (!selectedShiftUser || !selectedTurno) {
-        toast.error('Selecciona un turno y un usuario');
-        return;
-      }
-
-      const userId = userMap[selectedShiftUser];
-      
-      if (!userId) {
-        toast.error('Usuario no encontrado');
-        return;
-      }
-
-      const { error: updateError } = await supabase
-        .from('work_shifts')
-        .update({ user_id: userId })
-        .eq('id', selectedTurno);
-
-      if (updateError) throw updateError;
-
-      toast.success('Usuario asignado al turno correctamente');
-      setSelectedTurno('');
-      setSelectedShiftUser('');
-      setShowAddUserModal(false);
-      loadData();
-    } catch (error) {
-      console.error('Error al asignar usuario al turno:', error);
-      toast.error('Error al asignar usuario al turno');
-    }
-  };
-
-  const handleTaskClick = (tarea: Task) => {
-    setSelectedTask(tarea);
-    setShowTaskDetailsModal(true);
-  };
-
   const handleTurnoClick = async (turno: Turno) => {
     try {
       const { data: shiftUsers } = await supabase
@@ -527,11 +522,16 @@ export default function AssignmentsPage() {
         .single();
 
       if (shiftUsers) {
-        setSelectedShiftDetails({
+        setSelectedTurnoDetails({
           id: turno.id,
           nombre: turno.nombre,
           horario: turno.horario,
-          usuarios: shiftUsers.users ? [shiftUsers.users] : []
+          usuarios: shiftUsers.users ? shiftUsers.users.map((user: any): Usuario => ({
+            id: user.id,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            avatar_url: user.avatar_url
+          })) : []
         });
         setShowShiftDetailsModal(true);
       }
@@ -539,6 +539,43 @@ export default function AssignmentsPage() {
       console.error('Error al cargar usuarios del turno:', error);
       toast.error('Error al cargar los usuarios del turno');
     }
+  };
+
+  const addUserToShift = async () => {
+    try {
+      if (!selectedShiftUser || !selectedTurnoId) {
+        toast.error('Selecciona un turno y un usuario');
+        return;
+      }
+
+      const userId = userMap[selectedShiftUser];
+      
+      if (!userId) {
+        toast.error('Usuario no encontrado');
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from('work_shifts')
+        .update({ user_id: userId })
+        .eq('id', selectedTurnoId);
+
+      if (updateError) throw updateError;
+
+      toast.success('Usuario asignado al turno correctamente');
+      setSelectedTurnoId('');
+      setSelectedShiftUser('');
+      setShowAddUserModal(false);
+      loadData();
+    } catch (error) {
+      console.error('Error al asignar usuario al turno:', error);
+      toast.error('Error al asignar usuario al turno');
+    }
+  };
+
+  const handleTaskClick = (tarea: Task) => {
+    setSelectedTask(tarea);
+    setShowTaskDetailsModal(true);
   };
 
   return (
@@ -915,8 +952,8 @@ export default function AssignmentsPage() {
                 </label>
                 <select
                   className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                  value={selectedTurno}
-                  onChange={(e) => setSelectedTurno(e.target.value)}
+                  value={selectedTurnoId}
+                  onChange={(e) => setSelectedTurnoId(e.target.value)}
                 >
                   <option value="">Seleccionar Turno</option>
                   {turnos.map((turno) => (
@@ -1033,28 +1070,28 @@ export default function AssignmentsPage() {
         
         <div className="fixed inset-0 flex items-center justify-center p-4">
           <Dialog.Panel className="mx-auto max-w-md w-full rounded-lg bg-white p-6 shadow-xl">
-            {selectedShiftDetails && (
+            {selectedTurnoDetails && (
               <>
                 <Dialog.Title className="text-xl font-semibold text-gray-900 mb-4">
                   <div className="flex justify-between items-center">
                     <div>
-                      <h3>{selectedShiftDetails.nombre}</h3>
-                      <p className="text-sm text-gray-500 mt-1">{selectedShiftDetails.horario}</p>
+                      <h3>{selectedTurnoDetails.nombre}</h3>
+                      <p className="text-sm text-gray-500 mt-1">{selectedTurnoDetails.horario}</p>
                     </div>
                     <div className={`px-3 py-1 rounded-full text-sm ${
-                      selectedShiftDetails.nombre === 'Turno A' ? 'bg-blue-100 text-blue-700' :
-                      selectedShiftDetails.nombre === 'Turno B' ? 'bg-green-100 text-green-700' :
+                      selectedTurnoDetails.nombre === 'Turno A' ? 'bg-blue-100 text-blue-700' :
+                      selectedTurnoDetails.nombre === 'Turno B' ? 'bg-green-100 text-green-700' :
                       'bg-purple-100 text-purple-700'
                     }`}>
-                      {selectedShiftDetails.usuarios.length} usuarios
+                      {selectedTurnoDetails.usuarios.length} usuarios
                     </div>
                   </div>
                 </Dialog.Title>
 
                 <div className="space-y-4">
-                  {selectedShiftDetails.usuarios.length > 0 ? (
+                  {selectedTurnoDetails.usuarios.length > 0 ? (
                     <div className="divide-y divide-gray-100">
-                      {selectedShiftDetails.usuarios.map((usuario) => (
+                      {selectedTurnoDetails.usuarios.map((usuario) => (
                         <div key={usuario.id} className="py-3 flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium">
                             {usuario.avatar_url ? (

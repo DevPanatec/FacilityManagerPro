@@ -9,49 +9,55 @@ type Area = Database['public']['Tables']['areas']['Row']
 
 // Esquemas de validación
 const userSchema = z.object({
+  id: z.string().uuid().optional(),
   email: z.string().email(),
-  role: z.enum(['superadmin', 'admin', 'enterprise', 'usuario']),
-  first_name: z.string().min(2).nullable(),
-  last_name: z.string().min(2).nullable(),
-  status: z.enum(['active', 'inactive', 'pending']).default('active'),
-  organization_id: z.string().uuid().nullable(),
-  avatar_url: z.string().url().nullable().optional()
+  name: z.string().min(2).nullable().optional(),
+  avatar_url: z.string().url().nullable().optional(),
+  organization_id: z.string().uuid().nullable().optional(),
+  created_at: z.string().datetime().nullable().optional(),
+  updated_at: z.string().datetime().nullable().optional()
 })
 
 const organizationSchema = z.object({
+  id: z.string().uuid().optional(),
   name: z.string().min(3),
-  description: z.string().nullable().optional(),
-  logo_url: z.string().url().nullable().optional(),
-  status: z.enum(['active', 'inactive']).default('active')
+  created_at: z.string().datetime().nullable().optional(),
+  updated_at: z.string().datetime().nullable().optional()
 })
 
 const taskSchema = z.object({
+  id: z.string().uuid().optional(),
   title: z.string().min(3),
   description: z.string().nullable().optional(),
-  area_id: z.string().uuid(),
+  status: z.string(),
+  priority: z.string(),
   assigned_to: z.string().uuid().nullable().optional(),
-  priority: z.enum(['low', 'medium', 'high']).default('medium'),
-  status: z.enum(['pending', 'in_progress', 'completed', 'cancelled']).default('pending'),
-  due_date: z.string().datetime().nullable().optional(),
-  created_by: z.string().uuid()
+  created_by: z.string().uuid(),
+  organization_id: z.string().uuid(),
+  created_at: z.string().datetime().nullable().optional(),
+  updated_at: z.string().datetime().nullable().optional()
 })
 
 const notificationSchema = z.object({
-  user_id: z.string().uuid(),
+  id: z.string().uuid().optional(),
   title: z.string().min(3),
   message: z.string(),
-  type: z.enum(['task', 'work_shift', 'inventory', 'system']),
-  priority: z.enum(['low', 'medium', 'high']).default('medium'),
+  type: z.string(),
+  user_id: z.string().uuid(),
+  organization_id: z.string().uuid(),
   read: z.boolean().default(false),
-  action_url: z.string().url().nullable().optional()
+  created_at: z.string().datetime().nullable().optional(),
+  updated_at: z.string().datetime().nullable().optional()
 })
 
 const areaSchema = z.object({
+  id: z.string().uuid().optional(),
   name: z.string().min(3),
-  description: z.string().nullable().optional(),
+  status: z.string(),
+  sala_id: z.string().uuid(),
   organization_id: z.string().uuid(),
-  parent_id: z.string().uuid().nullable().optional(),
-  status: z.enum(['active', 'inactive']).default('active')
+  created_at: z.string().datetime().nullable().optional(),
+  updated_at: z.string().datetime().nullable().optional()
 })
 
 // Validador centralizado

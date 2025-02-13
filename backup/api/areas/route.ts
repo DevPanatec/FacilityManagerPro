@@ -67,8 +67,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear área'
     return NextResponse.json(
-      { error: error.message || 'Error al crear área' },
+      { error: errorMessage },
       { status: 500 }
     )
   }
@@ -94,7 +95,8 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json({ error: 'Error al actualizar área' }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar área'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
 
@@ -114,6 +116,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Área eliminada exitosamente' })
   } catch (error) {
-    return NextResponse.json({ error: 'Error al eliminar área' }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar área'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 } 

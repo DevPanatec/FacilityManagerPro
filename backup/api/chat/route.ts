@@ -77,9 +77,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json(rooms)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener chat'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al obtener chat' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -177,9 +179,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json(room)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear chat'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al crear chat' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -219,9 +223,11 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(data[0])
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar sala'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar sala' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 }
@@ -248,9 +254,11 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Saliste de la sala exitosamente' })
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al salir de la sala'
+    const status = error instanceof Error && errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al salir de la sala' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
     )
   }
 } 

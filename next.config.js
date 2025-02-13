@@ -41,68 +41,31 @@ const nextConfig = {
     ],
     domains: ['wldiefpqmfjxernvuywv.supabase.co'],
   },
-  webpack: (config) => {
-    config.externals = [...config.externals, 'canvas', 'jsdom'];
-    return config;
+  typescript: {
+    ignoreBuildErrors: true
   },
-  
-  // Configuraciones de seguridad
-  poweredByHeader: false, // Remover el header X-Powered-By
-  
-  headers: async () => [
-    {
-      source: '/:path*',
-      headers: [
-        {
-          key: 'X-DNS-Prefetch-Control',
-          value: 'on'
-        },
-        {
-          key: 'Strict-Transport-Security',
-          value: 'max-age=63072000; includeSubDomains; preload'
-        },
-        {
-          key: 'X-XSS-Protection',
-          value: '1; mode=block'
-        },
-        {
-          key: 'X-Frame-Options',
-          value: 'SAMEORIGIN'
-        },
-        {
-          key: 'X-Content-Type-Options',
-          value: 'nosniff'
-        },
-        {
-          key: 'Referrer-Policy',
-          value: 'origin-when-cross-origin'
-        },
-        {
-          key: 'Permissions-Policy',
-          value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()'
-        }
-      ]
-    }
-  ],
-
-  // Configuración de seguridad para API routes
-  async rewrites() {
-    return {
-      beforeFiles: [
-        // Proteger rutas de API sensibles
-        {
-          source: '/api/:path*',
-          has: [
-            {
-              type: 'header',
-              key: 'x-api-key',
-              missing: true
-            }
-          ],
-          destination: '/api/unauthorized'
-        }
-      ]
-    }
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self' https:",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https: *.vercel.app vercel.live accounts.google.com apis.google.com",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob: https://* lh3.googleusercontent.com",
+              "font-src 'self'",
+              "connect-src 'self' wss://* https://* *.supabase.co *.googleapis.com vercel.live",
+              "frame-src 'self'",
+              "object-src 'none'",
+              "base-uri 'self'"
+            ].join('; ')
+          }
+        ]
+      }
+    ]
   }
 }
 

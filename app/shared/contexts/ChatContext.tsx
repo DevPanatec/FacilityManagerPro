@@ -337,85 +337,72 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const setReplyingTo = (message: Message | null) => {
+    dispatch({ type: 'SET_REPLYING_TO', payload: message })
+  }
+
+  const getMessageAttachments = async (messageId: string): Promise<MessageAttachment[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('chat_message_attachments')
+        .select('*')
+        .eq('message_id', messageId)
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error fetching message attachments:', error)
+      return []
+    }
+  }
+
   const setupRealtime = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
 
-    subscribeToChannel('chat_messages', {
-      'postgres_changes': {
-        event: '*',
-        schema: 'public',
-        table: 'chat_messages',
-        filter: `room_id=eq.${state.activeRoom?.id}`,
-        callback: async (payload: any) => {
-          try {
-            if (payload.eventType === 'INSERT') {
-              const newMessage = payload.new as Message
+    subscribeToChannel('chat_messages', [{
+      event: 'postgres_changes',
+      schema: 'public',
+      table: 'chat_messages',
+      filter: `room_id=eq.${state.activeRoom?.id}`,
+      handler: async (payload: any) => {
+        try {
+          if (payload.eventType === 'INSERT') {
+            const newMessage = payload.new as Message
+            dispatch({
+              type: 'ADD_MESSAGE',
+              payload: { roomId: state.activeRoom?.id, message: newMessage }
+            })
+            
+            const attachments = await getMessageAttachments(newMessage.id)
+            if (attachments.length > 0) {
               dispatch({
-                type: 'ADD_MESSAGE',
-                payload: { roomId: state.activeRoom?.id, message: newMessage }
-              })
-              
-              const attachments = await getMessageAttachments(newMessage.id)
-              if (attachments.length > 0) {
-                dispatch({
-                  type: 'SET_ATTACHMENTS',
-                  payload: { messageId: newMessage.id, attachments }
-                })
-              }
-            } else if (payload.eventType === 'UPDATE') {
-              dispatch({
-                type: 'UPDATE_MESSAGE',
-                payload: { roomId: state.activeRoom?.id, message: payload.new as Message }
-              })
-            } else if (payload.eventType === 'DELETE') {
-              dispatch({
-                type: 'DELETE_MESSAGE',
-                payload: { roomId: state.activeRoom?.id, messageId: payload.old.id }
+                type: 'SET_ATTACHMENTS',
+                payload: { messageId: newMessage.id, attachments }
               })
             }
-          } catch (error) {
-            console.error('Error processing message change:', error)
-            toast.error('Error al procesar cambios en mensajes')
+          } else if (payload.eventType === 'UPDATE') {
+            dispatch({
+              type: 'UPDATE_MESSAGE',
+              payload: { roomId: state.activeRoom?.id, message: payload.new as Message }
+            })
+          } else if (payload.eventType === 'DELETE') {
+            dispatch({
+              type: 'DELETE_MESSAGE',
+              payload: { roomId: state.activeRoom?.id, messageId: payload.old.id }
+            })
           }
+        } catch (error) {
+          console.error('Error processing message change:', error)
+          toast.error('Error al procesar cambios en mensajes')
         }
       }
-    })
+    }])
 
-    // Suscripción unificada para eventos de presence
-    subscribeToChannel('typing_users', {
-      presence: {
-        events: ['sync', 'join', 'leave'],
-        callback: (event: string, payload: any) => {
-          switch (event) {
-            case 'sync':
-              // Manejar sincronización inicial
-              break
-            case 'join':
-              if (payload.newPresences) {
-                payload.newPresences.forEach((presence: any) => {
-                  dispatch({
-                    type: 'SET_TYPING_USER',
-                    payload: { roomId: state.activeRoom?.id, userId: presence.user_id }
-                  })
-                })
-              }
-              break
-            case 'leave':
-              if (payload.leftPresences) {
-                payload.leftPresences.forEach((presence: any) => {
-                  dispatch({
-                    type: 'REMOVE_TYPING_USER',
-                    payload: { roomId: state.activeRoom?.id, userId: presence.user_id }
-                  })
-                })
-              }
-              break
-          }
-        }
-      }
-    })
-  }, [supabase, state.activeRoom?.id, subscribeToChannel])
+    return () => {
+      supabase.removeChannel(supabase.channel('chat_messages'))
+    }
+  }, [supabase, state.activeRoom?.id])
 
   const handleError = useCallback((error: Error, context: string) => {
     console.error(`Error in ${context}:`, error);
@@ -554,6 +541,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           const uploadedFiles = await fileService.uploadFiles(
             files,
             userData.organization_id,
+            'chat-files',
             onUploadProgress
           )
           
@@ -819,25 +807,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       })
     } else {
       await channel.untrack()
-    }
-  }
-
-  const setReplyingTo = (message: Message | null) => {
-    dispatch({ type: 'SET_REPLYING_TO', payload: message })
-  }
-
-  const getMessageAttachments = async (messageId: string): Promise<MessageAttachment[]> => {
-    try {
-      const { data, error } = await supabase
-        .from('chat_message_attachments')
-        .select('*')
-        .eq('message_id', messageId)
-
-      if (error) throw error
-      return data
-    } catch (error) {
-      console.error('Error fetching message attachments:', error)
-      return []
     }
   }
 

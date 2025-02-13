@@ -2,14 +2,33 @@
 import { useState, useMemo } from 'react'
 import { Database } from '@/lib/types/database'
 
-type Task = Database['public']['Tables']['tasks']['Row'] & {
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
+
+export type Task = {
+  id: string
+  title: string
+  description?: string
+  status: TaskStatus
+  priority: 'low' | 'medium' | 'high'
+  assigned_to?: string
+  created_by: string
+  organization_id: string
+  created_at?: string
+  updated_at?: string
+  area_id?: string
+  due_date?: string
   organization?: {
     id: string
     name: string
   }
   assignee?: {
+    id: string
     first_name: string
     last_name: string
+  }
+  area?: {
+    id: string
+    name: string
   }
 }
 
@@ -24,6 +43,13 @@ interface CalendarDay {
   date: Date
   isCurrentMonth: boolean
   isWeekend: boolean
+}
+
+const statusColors: Record<TaskStatus, string> = {
+  pending: 'bg-yellow-100 border-yellow-200',
+  in_progress: 'bg-blue-100 border-blue-200',
+  completed: 'bg-green-100 border-green-200',
+  cancelled: 'bg-red-100 border-red-200'
 }
 
 export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }: CalendarProps) {
@@ -125,16 +151,7 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
             className={`
               p-2 rounded-lg text-xs font-medium shadow-sm
               transition-all duration-200 hover:shadow-md
-              ${task.status === 'completed'
-                ? 'bg-green-50 text-green-700 hover:bg-green-100'
-                : task.status === 'cancelled'
-                ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                : task.priority === 'high'
-                ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                : task.priority === 'medium'
-                ? 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
-                : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-              }
+              ${statusColors[task.status] || 'bg-gray-100 border-gray-200'}
             `}
             onClick={() => onTaskClick(task)}
           >
@@ -156,13 +173,6 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
   }
 
   const renderTask = (task: Task) => {
-    const statusColors = {
-      pending: 'bg-yellow-100 border-yellow-200',
-      in_progress: 'bg-blue-100 border-blue-200',
-      completed: 'bg-green-100 border-green-200',
-      cancelled: 'bg-red-100 border-red-200'
-    }
-
     return (
       <div
         key={task.id}

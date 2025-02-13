@@ -93,9 +93,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json(document)
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al subir documento'
+    const statusCode = errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al subir documento' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
@@ -144,9 +146,11 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ message: 'Documento eliminado exitosamente' })
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar documento'
+    const statusCode = errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al eliminar documento' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 } 
