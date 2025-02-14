@@ -13,9 +13,24 @@ interface DashboardData {
   tiempoPromedio: string;
   eficienciaGlobal: number;
   productividadTurno: {
-    manana: number;
-    tarde: number;
-    noche: number;
+    manana: {
+      total: number;
+      completadas: number;
+      tiempoPromedio: number;
+      eficiencia: number;
+    };
+    tarde: {
+      total: number;
+      completadas: number;
+      tiempoPromedio: number;
+      eficiencia: number;
+    };
+    noche: {
+      total: number;
+      completadas: number;
+      tiempoPromedio: number;
+      eficiencia: number;
+    };
   };
   alertasInventario: {
     producto: string;
@@ -92,9 +107,24 @@ export default function Dashboard() {
     tiempoPromedio: '0min',
     eficienciaGlobal: 0,
     productividadTurno: {
-      manana: 0,
-      tarde: 0,
-      noche: 0
+      manana: {
+        total: 0,
+        completadas: 0,
+        tiempoPromedio: 0,
+        eficiencia: 0
+      },
+      tarde: {
+        total: 0,
+        completadas: 0,
+        tiempoPromedio: 0,
+        eficiencia: 0
+      },
+      noche: {
+        total: 0,
+        completadas: 0,
+        tiempoPromedio: 0,
+        eficiencia: 0
+      }
     },
     alertasInventario: [],
     estadoAsignaciones: [],
@@ -231,20 +261,97 @@ export default function Dashboard() {
       }
 
       // Calcular productividad por turno
-      const turnoManana = taskData?.filter(t => {
-        const hora = new Date(t.created_at).getHours();
-        return hora >= 6 && hora < 14;
-      }).length || 0;
+      const turnoManana = {
+        total: taskData?.filter(t => {
+          const hora = new Date(t.start_time).getHours();
+          return hora >= 6 && hora < 14;
+        }).length || 0,
+        completadas: taskData?.filter(t => {
+          const hora = new Date(t.start_time).getHours();
+          return hora >= 6 && hora < 14 && t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c';
+        }).length || 0,
+        tiempoPromedio: 0
+      };
 
-      const turnoTarde = taskData?.filter(t => {
-        const hora = new Date(t.created_at).getHours();
-        return hora >= 14 && hora < 22;
-      }).length || 0;
+      const turnoTarde = {
+        total: taskData?.filter(t => {
+          const hora = new Date(t.start_time).getHours();
+          return hora >= 14 && hora < 22;
+        }).length || 0,
+        completadas: taskData?.filter(t => {
+          const hora = new Date(t.start_time).getHours();
+          return hora >= 14 && hora < 22 && t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c';
+        }).length || 0,
+        tiempoPromedio: 0
+      };
 
-      const turnoNoche = taskData?.filter(t => {
-        const hora = new Date(t.created_at).getHours();
-        return hora >= 22 || hora < 6;
-      }).length || 0;
+      const turnoNoche = {
+        total: taskData?.filter(t => {
+          const hora = new Date(t.start_time).getHours();
+          return hora >= 22 || hora < 6;
+        }).length || 0,
+        completadas: taskData?.filter(t => {
+          const hora = new Date(t.start_time).getHours();
+          return (hora >= 22 || hora < 6) && t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c';
+        }).length || 0,
+        tiempoPromedio: 0
+      };
+
+      // Calcular tiempo promedio para cada turno
+      const calcularTiempoPromedio = (tareas: any[]) => {
+        const tareasCompletadas = tareas.filter(t => 
+          t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c' && t.start_time && t.completed_at
+        );
+        
+        if (tareasCompletadas.length === 0) return 0;
+        
+        const tiempoTotal = tareasCompletadas.reduce((acc, curr) => {
+          const inicio = new Date(curr.start_time).getTime();
+          const fin = new Date(curr.completed_at).getTime();
+          return acc + (fin - inicio);
+        }, 0);
+        
+        return Math.round(tiempoTotal / (tareasCompletadas.length * 60000)); // Convertir a minutos
+      };
+
+      turnoManana.tiempoPromedio = calcularTiempoPromedio(
+        taskData?.filter(t => {
+          const hora = new Date(t.start_time).getHours();
+          return hora >= 6 && hora < 14;
+        }) || []
+      );
+
+      turnoTarde.tiempoPromedio = calcularTiempoPromedio(
+        taskData?.filter(t => {
+          const hora = new Date(t.start_time).getHours();
+          return hora >= 14 && hora < 22;
+        }) || []
+      );
+
+      turnoNoche.tiempoPromedio = calcularTiempoPromedio(
+        taskData?.filter(t => {
+          const hora = new Date(t.start_time).getHours();
+          return hora >= 22 || hora < 6;
+        }) || []
+      );
+
+      setDashboardData(prev => ({
+        ...prev,
+        productividadTurno: {
+          manana: {
+            ...turnoManana,
+            eficiencia: turnoManana.total > 0 ? (turnoManana.completadas / turnoManana.total) * 100 : 0
+          },
+          tarde: {
+            ...turnoTarde,
+            eficiencia: turnoTarde.total > 0 ? (turnoTarde.completadas / turnoTarde.total) * 100 : 0
+          },
+          noche: {
+            ...turnoNoche,
+            eficiencia: turnoNoche.total > 0 ? (turnoNoche.completadas / turnoNoche.total) * 100 : 0
+          }
+        }
+      }));
 
       // Preparar datos de frecuencia de limpieza
       const { data: salas } = await supabase
@@ -297,9 +404,18 @@ export default function Dashboard() {
         tiempoPromedio,
         eficienciaGlobal: total > 0 ? Math.round((completadas / total) * 100) : 0,
         productividadTurno: {
-          manana: turnoManana,
-          tarde: turnoTarde,
-          noche: turnoNoche
+          manana: {
+            ...turnoManana,
+            eficiencia: turnoManana.total > 0 ? (turnoManana.completadas / turnoManana.total) * 100 : 0
+          },
+          tarde: {
+            ...turnoTarde,
+            eficiencia: turnoTarde.total > 0 ? (turnoTarde.completadas / turnoTarde.total) * 100 : 0
+          },
+          noche: {
+            ...turnoNoche,
+            eficiencia: turnoNoche.total > 0 ? (turnoNoche.completadas / turnoNoche.total) * 100 : 0
+          }
         },
         alertasInventario,
         estadoAsignaciones,
@@ -454,17 +570,28 @@ export default function Dashboard() {
                   <svg className="w-5 h-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                   </svg>
-                  <span className="text-sm font-medium text-gray-700">Mañana</span>
+                  <span className="text-sm font-medium text-gray-700">Mañana (6:00 - 14:00)</span>
                 </div>
-                <span className="text-sm font-semibold text-gray-600">{dashboardData.productividadTurno.manana} tareas</span>
               </div>
-              <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  style={{ 
-                    width: `${(dashboardData.productividadTurno.manana / 45) * 100}%`
-                  }}
-                  className="h-full rounded-full transition-all duration-300 bg-gray-400"
-                />
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Tareas Completadas</span>
+                  <span className="font-medium">{dashboardData.productividadTurno.manana.completadas}/{dashboardData.productividadTurno.manana.total}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Tiempo Promedio</span>
+                  <span className="font-medium">{dashboardData.productividadTurno.manana.tiempoPromedio} min</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Eficiencia</span>
+                  <span className="font-medium">{Math.round(dashboardData.productividadTurno.manana.eficiencia)}%</span>
+                </div>
+                <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-300 bg-yellow-500"
+                    style={{ width: `${dashboardData.productividadTurno.manana.eficiencia}%` }}
+                  />
+                </div>
               </div>
             </div>
 
@@ -475,17 +602,28 @@ export default function Dashboard() {
                   <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                   </svg>
-                  <span className="text-sm font-medium text-gray-700">Tarde</span>
+                  <span className="text-sm font-medium text-gray-700">Tarde (14:00 - 22:00)</span>
                 </div>
-                <span className="text-sm font-semibold text-gray-600">{dashboardData.productividadTurno.tarde} tareas</span>
               </div>
-              <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  style={{ 
-                    width: `${(dashboardData.productividadTurno.tarde / 45) * 100}%`
-                  }}
-                  className="h-full rounded-full transition-all duration-300 bg-gray-400"
-                />
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Tareas Completadas</span>
+                  <span className="font-medium">{dashboardData.productividadTurno.tarde.completadas}/{dashboardData.productividadTurno.tarde.total}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Tiempo Promedio</span>
+                  <span className="font-medium">{dashboardData.productividadTurno.tarde.tiempoPromedio} min</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Eficiencia</span>
+                  <span className="font-medium">{Math.round(dashboardData.productividadTurno.tarde.eficiencia)}%</span>
+                </div>
+                <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-300 bg-orange-500"
+                    style={{ width: `${dashboardData.productividadTurno.tarde.eficiencia}%` }}
+                  />
+                </div>
               </div>
             </div>
 
@@ -496,17 +634,28 @@ export default function Dashboard() {
                   <svg className="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                   </svg>
-                  <span className="text-sm font-medium text-gray-700">Noche</span>
+                  <span className="text-sm font-medium text-gray-700">Noche (22:00 - 6:00)</span>
                 </div>
-                <span className="text-sm font-semibold text-gray-600">{dashboardData.productividadTurno.noche} tareas</span>
               </div>
-              <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  style={{ 
-                    width: `${(dashboardData.productividadTurno.noche / 45) * 100}%`
-                  }}
-                  className="h-full rounded-full transition-all duration-300 bg-gray-400"
-                />
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Tareas Completadas</span>
+                  <span className="font-medium">{dashboardData.productividadTurno.noche.completadas}/{dashboardData.productividadTurno.noche.total}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Tiempo Promedio</span>
+                  <span className="font-medium">{dashboardData.productividadTurno.noche.tiempoPromedio} min</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Eficiencia</span>
+                  <span className="font-medium">{Math.round(dashboardData.productividadTurno.noche.eficiencia)}%</span>
+                </div>
+                <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-300 bg-indigo-500"
+                    style={{ width: `${dashboardData.productividadTurno.noche.eficiencia}%` }}
+                  />
+                </div>
               </div>
             </div>
           </div>
