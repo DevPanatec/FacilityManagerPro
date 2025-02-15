@@ -665,8 +665,8 @@ export default function RRHHPage() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-bold">Turnos Activos</h2>
-                <p className="text-4xl font-bold text-green-600">{stats.shiftsToday}</p>
+                <h2 className="text-xl font-bold">Turnos</h2>
+                <p className="text-4xl font-bold text-green-600">{TURNOS.length}</p>
               </div>
             </div>
             <button 

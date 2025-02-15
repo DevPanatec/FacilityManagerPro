@@ -1,73 +1,136 @@
 import { createClient } from '@supabase/supabase-js'
-import { Database } from '@/types/supabase'
-import { errorHandler } from '@/app/utils/errorHandler'
+import { Database } from '../lib/supabase/types'
+import { errorHandler } from '../utils/errorHandler'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-const getSupabaseClient = () => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('supabase.auth.token') : null
-  return createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      ...(token ? { 
-        storage: {
-          getItem: (key: string) => {
-            if (key === 'sb-access-token') return token
-            return null
-          },
-          setItem: () => {},
-          removeItem: () => {}
-        }
-      } : {})
-    }
-  })
-}
-
-export const supabaseService = {
+// Creamos una instancia del cliente de Supabase con las opciones de realtime
+export const supabaseService = createClient<Database>(supabaseUrl, supabaseKey, {
   auth: {
-    async login(email: string, password: string) {
-      try {
-        const supabase = getSupabaseClient()
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password
-        })
-        if (error) throw error
-        return { data: { user: data.user }, error: null }
-      } catch (error) {
-        console.error('[auth.login] Error:', error)
-        return { data: null, error }
-      }
-    },
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
+  }
+})
 
-    async logout() {
-      try {
-        const supabase = getSupabaseClient()
-        const { error } = await supabase.auth.signOut()
-        if (error) throw error
-        localStorage.removeItem('supabase.auth.token')
-        localStorage.removeItem('adminPrincipal')
-      } catch (error) {
-        console.error('[auth.logout] Error:', error)
-        throw error
-      }
-    },
-
-    async getUser() {
-      try {
-        const supabase = getSupabaseClient()
-        const { data, error } = await supabase.auth.getUser()
-        if (error) throw error
-        return { data: { user: data.user }, error: null }
-      } catch (error) {
-        console.error('[auth.getUser] Error:', error)
-        return { data: null, error }
-      }
+// Mantenemos los métodos de autenticación separados para mayor claridad
+export const authService = {
+  async login(email: string, password: string) {
+    try {
+      if (!supabaseService) throw new Error('Supabase client not initialized')
+      
+      const { data, error } = await supabaseService.auth.signInWithPassword({
+        email,
+        password
+      })
+      if (error) throw error
+      return { data: { user: data.user }, error: null }
+    } catch (error) {
+      errorHandler.logError('auth.login', error)
+      return { data: null, error }
     }
   },
 
-  db: getSupabaseClient()
+  async logout() {
+    try {
+      if (!supabaseService) throw new Error('Supabase client not initialized')
+      
+      const { error } = await supabaseService.auth.signOut()
+      if (error) throw error
+    } catch (error) {
+      errorHandler.logError('auth.logout', error)
+      throw error
+    }
+  },
+
+  async getUser() {
+    try {
+      if (!supabaseService) throw new Error('Supabase client not initialized')
+      
+      const { data, error } = await supabaseService.auth.getUser()
+      if (error) throw error
+      return { data, error: null }
+    } catch (error) {
+      errorHandler.logError('auth.getUser', error)
+      return { data: null, error }
+    }
+  },
+
+  async getSession() {
+    try {
+      if (!supabaseService) throw new Error('Supabase client not initialized')
+      
+      const { data, error } = await supabaseService.auth.getSession()
+      if (error) throw error
+      return { data, error: null }
+    } catch (error) {
+      errorHandler.logError('auth.getSession', error)
+      return { data: null, error }
+    }
+  }
+}
+
+export const usersService = {
+  async getProfile(userId: string) {
+    try {
+      if (!supabaseService) throw new Error('Supabase client not initialized')
+      
+      const { data, error } = await supabaseService
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single()
+      
+      if (error) throw error
+      return { data, error: null }
+    } catch (error) {
+      errorHandler.logError('users.getProfile', error)
+      return { data: null, error }
+    }
+  },
+
+  async updateProfile(userId: string, updates: any) {
+    try {
+      if (!supabaseService) throw new Error('Supabase client not initialized')
+      
+      const { data, error } = await supabaseService
+        .from('users')
+        .update(updates)
+        .eq('id', userId)
+        .select()
+        .single()
+      
+      if (error) throw error
+      return { data, error: null }
+    } catch (error) {
+      errorHandler.logError('users.updateProfile', error)
+      return { data: null, error }
+    }
+  }
+}
+
+export const organizationsService = {
+  async getOrganization(orgId: string) {
+    try {
+      if (!supabaseService) throw new Error('Supabase client not initialized')
+      
+      const { data, error } = await supabaseService
+        .from('organizations')
+        .select('*')
+        .eq('id', orgId)
+        .single()
+      
+      if (error) throw error
+      return { data, error: null }
+    } catch (error) {
+      errorHandler.logError('organizations.getOrganization', error)
+      return { data: null, error }
+    }
+  }
 } 

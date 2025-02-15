@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react'
 import { TwoFactorAuth } from '@/lib/auth/twoFactorAuth'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
+import Input from '@/components/ui/input'
 
 interface TwoFactorSetupProps {
   userId: string

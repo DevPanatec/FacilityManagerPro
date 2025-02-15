@@ -20,7 +20,6 @@ export default function AssignmentClient() {
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedArea, setSelectedArea] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedDuration, setSelectedDuration] = useState(1);
 
   const supabase = createClientComponentClient();
 
@@ -97,7 +96,7 @@ export default function AssignmentClient() {
 
   const handleCreateAssignment = async () => {
     try {
-      if (!selectedUser || !selectedArea || !selectedDate || !selectedDuration) {
+      if (!selectedUser || !selectedArea || !selectedDate) {
         toast.error('Por favor complete todos los campos');
         return;
       }
@@ -107,7 +106,6 @@ export default function AssignmentClient() {
         user_id: selectedUser,
         area_id: selectedArea,
         start_time: selectedDate.toISOString(),
-        duration_hours: selectedDuration,
         status: 'pending'
       };
 
@@ -123,7 +121,6 @@ export default function AssignmentClient() {
       setSelectedUser('');
       setSelectedArea('');
       setSelectedDate(new Date());
-      setSelectedDuration(1);
 
       // Recargar los datos
       await loadData();
@@ -187,33 +184,29 @@ export default function AssignmentClient() {
       {/* Formulario de nueva asignación */}
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h2 className="text-xl font-bold text-gray-900 mb-6">Nueva Asignación</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <UserSelect 
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <UserSelect 
             users={users}
             value={selectedUser}
             onChange={setSelectedUser}
           />
-            <AreaSelect 
+          <AreaSelect 
             areas={areas}
             value={selectedArea}
             onChange={setSelectedArea}
           />
-              <DateSelect 
+          <DateSelect 
             date={selectedDate}
             onChange={setSelectedDate}
-              />
-              <DurationButtons 
-            duration={selectedDuration}
-            onChange={setSelectedDuration}
-              />
-            </div>
+          />
+        </div>
         <div className="mt-6 flex justify-end">
-            <button
+          <button
             onClick={handleCreateAssignment}
             className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
           >
             Crear Asignación
-            </button>
+          </button>
         </div>
       </div>
 
@@ -263,8 +256,6 @@ export default function AssignmentClient() {
                     </div>
                     <div className="mt-2 text-sm text-gray-500">
                       <span>Inicio: {new Date(assignment.start_time).toLocaleString()}</span>
-                      <span className="mx-2">•</span>
-                      <span>Duración: {assignment.duration_hours}h</span>
                     </div>
                   </div>
                 <button

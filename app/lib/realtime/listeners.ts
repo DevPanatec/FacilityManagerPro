@@ -1,5 +1,5 @@
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
-import { supabaseService } from '@/services/supabaseService'
+import { supabaseService } from '@/app/services/supabaseService'
 
 interface DatabaseRecord {
   id: string

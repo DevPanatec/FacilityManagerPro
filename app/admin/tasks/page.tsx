@@ -202,29 +202,23 @@ export default function TasksPage() {
 
   const handleStartTask = async (task: Task) => {
     try {
-      // 1. Obtener el usuario y su perfil
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('No autorizado')
+      // Mostrar indicador de carga inmediatamente
+      toast.loading('Iniciando tarea...');
 
-      const { data: userProfile } = await supabase
-        .from('users')
-        .select('organization_id, role')
-        .eq('id', user.id)
-        .single()
+      // 1. Obtener usuario y actualizar tarea en paralelo
+      const [userResponse, checkTaskResponse] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase
+          .from('tasks')
+          .select('*')
+          .eq('id', task.id)
+          .single()
+      ]);
 
-      if (!userProfile) throw new Error('Perfil no encontrado')
+      if (!userResponse.data.user) throw new Error('No autorizado');
+      if (!checkTaskResponse.data) throw new Error('Tarea no encontrada');
 
-      // 2. Verificar la tarea actual
-      const { data: currentTask, error: checkError } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('id', task.id)
-        .single()
-
-      if (checkError) throw checkError
-      if (!currentTask) throw new Error('Tarea no encontrada')
-
-      // 3. Actualizar la tarea
+      // 2. Actualizar la tarea directamente
       const now = new Date();
       const timeString = now.toLocaleTimeString('en-US', { hour12: false });
       
@@ -234,12 +228,9 @@ export default function TasksPage() {
           status: 'in_progress',
           start_time: timeString,
           updated_at: now.toISOString(),
-          assigned_to: user.id
+          assigned_to: userResponse.data.user.id
         })
-        .match({
-          id: task.id,
-          organization_id: userProfile.organization_id
-        })
+        .eq('id', task.id)
         .select(`
           *,
           assignee:users!tasks_assigned_to_fkey (
@@ -250,16 +241,12 @@ export default function TasksPage() {
             name
           )
         `)
-        .single()
+        .single();
 
-      if (updateError) {
-        console.error('Error de actualización:', updateError)
-        throw updateError
-      }
+      if (updateError) throw updateError;
+      if (!updatedTask) throw new Error('No se pudo actualizar la tarea');
 
-      if (!updatedTask) throw new Error('No se pudo actualizar la tarea')
-
-      // 4. Actualizar el estado local
+      // 3. Actualizar estado local y redireccionar
       const formattedTask = {
         ...updatedTask,
         title: updatedTask.title || 'Sin título',
@@ -267,23 +254,21 @@ export default function TasksPage() {
         priority: updatedTask.priority || 'low',
         status: updatedTask.status || 'in_progress',
         area: updatedTask.area?.name || 'Sin área'
-      }
+      };
 
       setTasks(prevTasks =>
         prevTasks.map(t => t.id === task.id ? formattedTask : t)
-      )
+      );
 
-      // 5. Actualizar estadísticas
       setTaskStats(prev => ({
         ...prev,
         pending: Math.max(0, prev.pending - 1),
         inProgress: prev.inProgress + 1
-      }))
+      }));
 
-      toast.success('Tarea iniciada con éxito')
-      
-      // 6. Redirección
-      router.push('/admin/tasks/current')
+      toast.dismiss();
+      toast.success('Tarea iniciada con éxito');
+      router.push('/admin/tasks/current');
 
     } catch (error: any) {
       console.error('Error detallado:', {
@@ -291,8 +276,9 @@ export default function TasksPage() {
         code: error?.code,
         details: error?.details,
         hint: error?.hint
-      })
-      toast.error(error.message || 'Error al iniciar la tarea')
+      });
+      toast.dismiss();
+      toast.error(error.message || 'Error al iniciar la tarea');
     }
   };
 

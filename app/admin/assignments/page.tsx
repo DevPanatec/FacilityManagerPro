@@ -22,6 +22,7 @@ interface Turno {
   horario: string;
   personasAsignadas: number;
   enLinea: number;
+  shift_type: 'morning' | 'afternoon' | 'night';
   usuarios: {
     id: string;
     first_name: string;
@@ -112,14 +113,11 @@ export default function AssignmentsPage() {
   const [selectedArea, setSelectedArea] = useState('');
   const [selectedSala, setSelectedSala] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState('');
-  const [selectedEndDate, setSelectedEndDate] = useState('');
-  const [frecuencia, setFrecuencia] = useState('diario');
+  const [startTime, setStartTime] = useState('');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [selectedTurno, setSelectedTurno] = useState('');
   const [selectedShiftUser, setSelectedShiftUser] = useState('');
   const [userMap, setUserMap] = useState<Record<string, string>>({});
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
   const [showTaskDetailsModal, setShowTaskDetailsModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showShiftDetailsModal, setShowShiftDetailsModal] = useState(false);
@@ -166,24 +164,52 @@ export default function AssignmentsPage() {
           )
         `)
         .eq('organization_id', userProfile.organization_id)
-        .eq('status', 'scheduled')
-        .order('shift_type') as { data: any[] | null };
+        .eq('status', 'scheduled');
 
       if (turnosData) {
-        const turnoNombres = {
-          'morning': 'Turno A',
-          'afternoon': 'Turno B',
-          'night': 'Turno C'
-        };
+        // Crear un mapa para agrupar usuarios únicos por tipo de turno
+        const turnoUsuarios = turnosData.reduce((acc, turno) => {
+          if (!acc[turno.shift_type]) {
+            acc[turno.shift_type] = new Map();
+          }
+          if (turno.users && turno.users.id) {
+            acc[turno.shift_type].set(turno.users.id, turno.users);
+          }
+          return acc;
+        }, {});
 
-        const turnosFormatted: Turno[] = turnosData.map((turno) => ({
-          id: turno.id,
-          nombre: turnoNombres[turno.shift_type as keyof typeof turnoNombres] || 'Sin nombre',
-          horario: `${new Date(turno.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(turno.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-          personasAsignadas: turno.users ? 1 : 0,
-          enLinea: 0,
-          usuarios: turno.users ? [turno.users] : []
-        }));
+        // Formatear los turnos con usuarios únicos
+        const turnosFormatted = [
+          {
+            id: turnosData.find(t => t.shift_type === 'morning')?.id || '',
+            nombre: 'Turno A',
+            horario: '06:00 - 14:00',
+            shift_type: 'morning',
+            personasAsignadas: turnoUsuarios['morning'] ? turnoUsuarios['morning'].size : 0,
+            enLinea: 0,
+            usuarios: turnoUsuarios['morning'] ? Array.from(turnoUsuarios['morning'].values()) : []
+          },
+          {
+            id: turnosData.find(t => t.shift_type === 'afternoon')?.id || '',
+            nombre: 'Turno B',
+            horario: '14:00 - 22:00',
+            shift_type: 'afternoon',
+            personasAsignadas: turnoUsuarios['afternoon'] ? turnoUsuarios['afternoon'].size : 0,
+            enLinea: 0,
+            usuarios: turnoUsuarios['afternoon'] ? Array.from(turnoUsuarios['afternoon'].values()) : []
+          },
+          {
+            id: turnosData.find(t => t.shift_type === 'night')?.id || '',
+            nombre: 'Turno C',
+            horario: '22:00 - 06:00',
+            shift_type: 'night',
+            personasAsignadas: turnoUsuarios['night'] ? turnoUsuarios['night'].size : 0,
+            enLinea: 0,
+            usuarios: turnoUsuarios['night'] ? Array.from(turnoUsuarios['night'].values()) : []
+          }
+        ];
+
+        console.log('Turnos procesados:', turnosFormatted);
         setTurnos(turnosFormatted);
       }
 
@@ -335,176 +361,89 @@ export default function AssignmentsPage() {
 
   const handleCreateAssignment = async () => {
     try {
-      // Validación de campos requeridos
-      if (!selectedUser || !selectedArea || !selectedDate || !startTime || !endTime) {
+      if (!selectedUser || !selectedSala || !selectedArea || !selectedDate || !startTime) {
         toast.error('Por favor complete todos los campos');
         return;
       }
 
       setIsCreating(true);
 
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (!user) {
-        setIsCreating(false);
-        throw new Error('No autorizado');
-      }
+      // Debug logs
+      console.log('Datos seleccionados:', {
+        selectedUser,
+        selectedSala,
+        selectedArea,
+        selectedDate,
+        startTime,
+        userMap
+      });
 
-      const { data: userProfile } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
+
+      // Obtener el organization_id del usuario
+      const { data: userProfile, error: profileError } = await supabase
         .from('users')
         .select('organization_id')
         .eq('id', user.id)
         .single();
 
-      if (!userProfile) {
-        setIsCreating(false);
-        throw new Error('Perfil no encontrado');
+      if (profileError || !userProfile) {
+        throw new Error('Error al obtener el perfil del usuario');
       }
 
-      // 1. Obtener información del área con más detalles
-      const { data: areaData } = await supabase
-        .from('areas')
-        .select<string, AreaWithSala>(`
-          id,
-          name,
-          sala_id,
-          salas:salas (
-            id,
-            nombre,
-            areas
-          )
-        `)
-        .eq('id', selectedArea)
-        .single();
-
-      if (!areaData) throw new Error('Área no encontrada');
-
-      // 2. Crear la tarea principal (asignación del área)
+      // Combinar fecha y hora de inicio
       const startDateTime = new Date(selectedDate);
-      const [startHours, startMinutes] = startTime.split(':');
-      startDateTime.setHours(parseInt(startHours), parseInt(startMinutes));
+      const [hours, minutes] = startTime.split(':');
+      startDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
-      const endDateTime = new Date(selectedDate);
-      const [endHours, endMinutes] = endTime.split(':');
-      endDateTime.setHours(parseInt(endHours), parseInt(endMinutes));
+      // Formatear la fecha y hora en el formato correcto para PostgreSQL
+      const formattedDateTime = startDateTime.toISOString().split('T')[0] + ' ' + 
+                               startDateTime.toTimeString().split(' ')[0];
 
-      const mainTaskData = {
+      // Debug log para el objeto de la asignación
+      const newAssignment = {
+        title: `Asignación para ${selectedUser}`,
+        description: `Tarea asignada para ${selectedUser} en el área seleccionada`,
         organization_id: userProfile.organization_id,
-        title: `${areaData.salas.nombre} - ${areaData.name}`,
-        description: `Asignación de tareas para ${areaData.name} en ${areaData.salas.nombre}`,
-        status: 'pending',
         assigned_to: userMap[selectedUser],
+        sala_id: selectedSala,
         area_id: selectedArea,
-        sala_id: areaData.sala_id,
-        start_date: startDateTime.toISOString(),
-        due_date: endDateTime.toISOString(),
-        start_time: startTime,
-        end_time: endTime,
-        created_by: user.id,
-        type: 'assignment',
-        frequency: frecuencia
+        start_time: formattedDateTime,
+        status: 'pending',
+        type: 'assignment'
       };
 
-      const { data: newMainTask, error: mainTaskError } = await supabase
+      console.log('Nueva asignación a crear:', newAssignment);
+
+      const { data: insertData, error: insertError } = await supabase
         .from('tasks')
-        .insert([mainTaskData])
+        .insert([newAssignment])
         .select()
         .single();
 
-      if (mainTaskError) throw mainTaskError;
-
-      // 3. Obtener las tareas predefinidas del área
-      const { data: predefinedTasks, error: predefinedError } = await supabase
-        .from('tasks')
-        .select(`
-          id,
-          title,
-          description,
-          priority,
-          estimated_hours,
-          status,
-          order
-        `)
-        .eq('area_id', selectedArea)
-        .eq('type', 'template')
-        .eq('status', 'active')
-        .order('order', { ascending: true })
-        .order('created_at', { ascending: true });
-
-      if (predefinedError) throw predefinedError;
-
-      if (!predefinedTasks || predefinedTasks.length === 0) {
-        setIsCreating(false);
-        toast('No hay tareas definidas para esta área', {
-          icon: '⚠️',
-          style: {
-            background: '#FEF3C7',
-            color: '#92400E',
-            border: '1px solid #F59E0B'
-          }
-        });
-        return;
+      if (insertError) {
+        console.error('Error detallado:', insertError);
+        throw insertError;
       }
 
-      // 4. Crear las subtareas manteniendo exactamente las tareas del área
-      const subtasksData = predefinedTasks.map(template => ({
-        organization_id: userProfile.organization_id,
-        title: template.title, // Mantener el título exacto de la tarea del área
-        description: template.description, // Mantener la descripción exacta
-        status: 'pending',
-        assigned_to: userMap[selectedUser],
-        area_id: selectedArea,
-        sala_id: areaData.sala_id,
-        parent_task_id: newMainTask.id,
-        start_date: startDateTime.toISOString(),
-        due_date: endDateTime.toISOString(),
-        created_by: user.id,
-        type: 'subtask',
-        estimated_hours: template.estimated_hours,
-        priority: template.priority,
-        order: template.order // Mantener el orden original de las tareas
-      }));
+      console.log('Asignación creada:', insertData);
 
-      const { error: subtasksError } = await supabase
-        .from('tasks')
-        .insert(subtasksData);
+      setShowSuccessAnimation(true);
+      setTimeout(() => {
+        setShowSuccessAnimation(false);
+        setSelectedUser('');
+        setSelectedSala(null);
+        setSelectedArea('');
+        setSelectedDate('');
+        setStartTime('');
+        loadData();
+      }, 2000);
 
-      if (subtasksError) {
-        setIsCreating(false);
-        throw subtasksError;
-      }
-
-      // Primero mostrar el mensaje de éxito
-      toast.success('¡Asignación creada exitosamente!', {
-        duration: 5000,
-        position: 'top-center',
-        style: {
-          background: '#10B981',
-          color: '#FFFFFF',
-          padding: '16px',
-          borderRadius: '8px',
-          fontSize: '16px',
-          fontWeight: 'bold'
-        },
-        icon: '✅'
-      });
-
-      // Inmediatamente recargar los datos
-      await loadData();
-
-      // Después limpiar el formulario
-      setSelectedUser('');
-      setSelectedArea('');
-      setSelectedDate('');
-      setStartTime('');
-      setEndTime('');
-      setFrecuencia('diario');
-      setSelectedSala(null);
-
-      setIsCreating(false);
-
-    } catch (error: any) {
-      console.error('Error al crear la asignación:', error);
-      toast.error(error.message || 'Error al crear la asignación');
+    } catch (error) {
+      console.error('Error detallado al crear la asignación:', error);
+      toast.error('Error al crear la asignación');
+    } finally {
       setIsCreating(false);
     }
   };
@@ -523,18 +462,85 @@ export default function AssignmentsPage() {
         return;
       }
 
-      const { error: updateError } = await supabase
-        .from('work_shifts')
-        .update({ user_id: userId })
-        .eq('id', selectedTurno);
+      // Obtener el organization_id del usuario actual
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
 
-      if (updateError) throw updateError;
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!userProfile) throw new Error('Perfil no encontrado');
+
+      // Obtener el turno seleccionado
+      const selectedTurnoData = turnos.find(t => t.id === selectedTurno);
+      if (!selectedTurnoData) {
+        toast.error('Turno no encontrado');
+        return;
+      }
+
+      // Obtener la fecha actual
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Resetear la hora a medianoche
+
+      // Definir los horarios según el tipo de turno
+      let startDateTime = new Date(today);
+      let endDateTime = new Date(today);
+
+      switch (selectedTurnoData.shift_type) {
+        case 'morning':
+          startDateTime.setHours(6, 0, 0);
+          endDateTime.setHours(14, 0, 0);
+          break;
+        case 'afternoon':
+          startDateTime.setHours(14, 0, 0);
+          endDateTime.setHours(22, 0, 0);
+          break;
+        case 'night':
+          startDateTime.setHours(22, 0, 0);
+          endDateTime.setHours(6, 0, 0);
+          endDateTime.setDate(endDateTime.getDate() + 1); // Añadir un día para el turno nocturno
+          break;
+        default:
+          toast.error('Tipo de turno no válido');
+          return;
+      }
+
+      // Verificar si el usuario ya está asignado a este tipo de turno
+      const { data: existingAssignment } = await supabase
+        .from('work_shifts')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('shift_type', selectedTurnoData.shift_type)
+        .eq('status', 'scheduled')
+        .single();
+
+      if (existingAssignment) {
+        toast.error('Este usuario ya está asignado a este turno');
+        return;
+      }
+
+      // Crear una nueva asignación para el usuario
+      const { error: insertError } = await supabase
+        .from('work_shifts')
+        .insert([{
+          organization_id: userProfile.organization_id,
+          user_id: userId,
+          shift_type: selectedTurnoData.shift_type,
+          start_time: startDateTime.toISOString(),
+          end_time: endDateTime.toISOString(),
+          status: 'scheduled'
+        }]);
+
+      if (insertError) throw insertError;
 
       toast.success('Usuario asignado al turno correctamente');
       setSelectedTurno('');
       setSelectedShiftUser('');
       setShowAddUserModal(false);
-      loadData();
+      await loadData();
     } catch (error) {
       console.error('Error al asignar usuario al turno:', error);
       toast.error('Error al asignar usuario al turno');
@@ -548,33 +554,43 @@ export default function AssignmentsPage() {
 
   const handleTurnoClick = async (turno: Turno) => {
     try {
-      const { data: shiftUsers } = await supabase
+      // Primero obtener los IDs de usuarios del turno
+      const { data: shiftData, error: shiftError } = await supabase
         .from('work_shifts')
-        .select<string, ShiftWithUsers>(`
-          id,
-          users!work_shifts_user_id_fkey (
-            id,
-            first_name,
-            last_name,
-            avatar_url
-          )
-        `)
-        .eq('id', turno.id)
-        .single();
+        .select('user_id')
+        .eq('shift_type', turno.shift_type)
+        .eq('status', 'scheduled');
 
-      if (shiftUsers && shiftUsers.users) {
-        const usuario = {
-          id: shiftUsers.users.id,
-          first_name: shiftUsers.users.first_name,
-          last_name: shiftUsers.users.last_name,
-          avatar_url: shiftUsers.users.avatar_url
-        };
-        
+      if (shiftError) throw shiftError;
+
+      if (!shiftData || shiftData.length === 0) {
         setSelectedShiftDetails({
           id: turno.id,
           nombre: turno.nombre,
           horario: turno.horario,
-          usuarios: [usuario]
+          usuarios: []
+        });
+        setShowShiftDetailsModal(true);
+        return;
+      }
+
+      // Extraer los user_ids únicos
+      const userIds = [...new Set(shiftData.map(shift => shift.user_id))].filter(Boolean);
+
+      // Obtener los detalles de los usuarios
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, avatar_url')
+        .in('id', userIds);
+
+      if (usersError) throw usersError;
+
+      if (usersData) {
+        setSelectedShiftDetails({
+          id: turno.id,
+          nombre: turno.nombre,
+          horario: turno.horario,
+          usuarios: usersData
         });
         setShowShiftDetailsModal(true);
       }
@@ -717,7 +733,7 @@ export default function AssignmentsPage() {
                 <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                Fecha y Hora
+                Fecha y Hora de Inicio
               </label>
               <div className="flex gap-2 items-center">
                 <input
@@ -731,61 +747,9 @@ export default function AssignmentsPage() {
                   className="w-32 p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  placeholder="Inicio"
-                />
-                <span className="text-gray-500">a</span>
-                <input
-                  type="time"
-                  className="w-32 p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  placeholder="Fin"
+                  placeholder="Hora de inicio"
                 />
               </div>
-            </div>
-
-            {/* Frecuencia */}
-            <div className="grid grid-cols-4 gap-2">
-              <button
-                className={`py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-                  frecuencia === 'diario'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                }`}
-                onClick={() => setFrecuencia('diario')}
-              >
-                Diario
-              </button>
-              <button
-                className={`py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-                  frecuencia === 'semanal'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                }`}
-                onClick={() => setFrecuencia('semanal')}
-              >
-                Semanal
-              </button>
-              <button
-                className={`py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-                  frecuencia === 'quincenal'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                }`}
-                onClick={() => setFrecuencia('quincenal')}
-              >
-                Quincenal
-              </button>
-              <button
-                className={`py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-                  frecuencia === 'mensual'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                }`}
-                onClick={() => setFrecuencia('mensual')}
-              >
-                Mensual
-              </button>
             </div>
 
             {/* Botón de Crear Asignación */}
@@ -799,37 +763,9 @@ export default function AssignmentsPage() {
                       ? 'bg-green-500 hover:bg-green-600'
                       : 'bg-[#4263eb] hover:bg-[#364fc7]'
                 }`}
-                type="button"
-                disabled={isCreating || showSuccessAnimation}
+                disabled={isCreating}
               >
-                {isCreating ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>Creando...</span>
-                  </div>
-                ) : showSuccessAnimation ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <svg 
-                      className="w-6 h-6 text-white" 
-                      fill="none" 
-                      viewBox="0 0 24 24" 
-                      stroke="currentColor"
-                    >
-                      <path 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        strokeWidth={3} 
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span>¡Asignación Creada!</span>
-                  </div>
-                ) : (
-                  'Crear Asignación'
-                )}
+                {isCreating ? 'Creando...' : 'Crear Asignación'}
               </button>
             </div>
 

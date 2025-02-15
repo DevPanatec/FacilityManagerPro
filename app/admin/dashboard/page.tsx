@@ -27,6 +27,7 @@ interface DashboardData {
     dia: string;
     completadas: number;
     pendientes: number;
+    enProgreso: number;
   }[];
   frecuenciaLimpieza: {
     sala: string;
@@ -126,26 +127,118 @@ export default function Dashboard() {
 
       // Calcular fechas para el período seleccionado
       const now = new Date();
-      let startDate = new Date();
-      startDate.setDate(now.getDate() - 7); // Siempre mostramos los últimos 7 días
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0); // Inicio del día actual
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1); // Inicio del día siguiente
 
-      // Obtener todas las tareas de la última semana
+      // Obtener solo las tareas de hoy
       const { data: taskData } = await supabase
         .from('tasks')
         .select(`
           id,
           title,
-          status_id,
+          status,
           created_at,
           start_time,
           completed_at,
-          sala_id
+          sala_id,
+          type,
+          parent_task_id,
+          assigned_to
         `)
         .eq('organization_id', userProfile.organization_id)
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', now.toISOString());
+        .gte('created_at', today.toISOString())
+        .lt('created_at', tomorrow.toISOString())
+        .not('status', 'eq', 'cancelled')
+        .is('parent_task_id', null); // Solo tareas principales, no subtareas
 
-      console.log('Tareas obtenidas:', taskData);
+      console.log('Tareas sin procesar:', taskData?.map(task => ({
+        id: task.id,
+        titulo: task.title,
+        created_at: task.created_at,
+        hora_local: new Date(task.created_at).toLocaleTimeString()
+      })));
+
+      // Obtener los turnos y sus usuarios asignados
+      const { data: workShifts } = await supabase
+        .from('work_shifts')
+        .select(`
+          id,
+          shift_type,
+          user_id,
+          users!work_shifts_user_id_fkey (
+            id,
+            first_name,
+            last_name
+          )
+        `)
+        .eq('organization_id', userProfile.organization_id)
+        .eq('status', 'scheduled');
+
+      // Crear mapa de usuarios por turno
+      const usuariosPorTurno = {
+        morning: new Set(workShifts?.filter(ws => ws.shift_type === 'morning').map(ws => ws.user_id) || []),
+        afternoon: new Set(workShifts?.filter(ws => ws.shift_type === 'afternoon').map(ws => ws.user_id) || []),
+        night: new Set(workShifts?.filter(ws => ws.shift_type === 'night').map(ws => ws.user_id) || [])
+      };
+
+      console.log('Usuarios por turno:', {
+        morning: Array.from(usuariosPorTurno.morning),
+        afternoon: Array.from(usuariosPorTurno.afternoon),
+        night: Array.from(usuariosPorTurno.night)
+      });
+
+      // Distribuir las tareas según el turno del usuario asignado
+      const conteoTareasPorTurno = {
+        manana: 0,
+        tarde: 0,
+        noche: 0
+      };
+
+      taskData?.forEach(task => {
+        const userId = task.assigned_to;
+        console.log(`Analizando tarea ${task.id} - ${task.title}`);
+        console.log(`Usuario asignado: ${userId}`);
+        
+        if (userId) {
+          if (usuariosPorTurno.morning.has(userId)) {
+            conteoTareasPorTurno.manana++;
+            console.log('Asignada a turno mañana');
+          } else if (usuariosPorTurno.afternoon.has(userId)) {
+            conteoTareasPorTurno.tarde++;
+            console.log('Asignada a turno tarde');
+          } else if (usuariosPorTurno.night.has(userId)) {
+            conteoTareasPorTurno.noche++;
+            console.log('Asignada a turno noche');
+          } else {
+            console.log('Usuario no está asignado a ningún turno');
+          }
+        } else {
+          console.log('Tarea sin usuario asignado');
+        }
+      });
+
+      const tareasPorTurno = {
+        manana: conteoTareasPorTurno.manana,
+        tarde: conteoTareasPorTurno.tarde,
+        noche: conteoTareasPorTurno.noche
+      };
+
+      console.log('Resumen final de distribución por turno del usuario:', {
+        'Turno mañana': tareasPorTurno.manana,
+        'Turno tarde': tareasPorTurno.tarde,
+        'Turno noche': tareasPorTurno.noche
+      });
+
+      // Actualizar productividad por turno
+      const productividadTurno = {
+        manana: tareasPorTurno.manana,
+        tarde: tareasPorTurno.tarde,
+        noche: tareasPorTurno.noche
+      };
+
+      console.log('Productividad por turno actualizada:', productividadTurno);
 
       // Obtener personal activo
       const { data: activeUsers } = await supabase
@@ -198,26 +291,28 @@ export default function Dashboard() {
           return nombreDia === dia;
         }) || [];
 
-        const completadas = tareasDia.filter(t => t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c').length;
-        const pendientes = tareasDia.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length;
+        const completadas = tareasDia.filter(t => t.status === 'completed').length;
+        const pendientes = tareasDia.filter(t => t.status === 'pending').length;
+        const enProgreso = tareasDia.filter(t => t.status === 'in_progress').length;
 
         return {
           dia,
           completadas,
-          pendientes
+          pendientes,
+          enProgreso
         };
       });
 
       console.log('Estado de asignaciones por día:', estadoAsignaciones);
 
       // Calcular métricas
-      const pendientes = taskData?.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length || 0;
-      const completadas = taskData?.filter(t => t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c').length || 0;
+      const pendientes = taskData?.filter(t => t.status === 'pending').length || 0;
+      const completadas = taskData?.filter(t => t.status === 'completed').length || 0;
       const total = taskData?.length || 0;
 
       // Calcular tiempo promedio por tarea
       const completedWithTimes = taskData?.filter(t => 
-        t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c' && t.start_time && t.completed_at
+        t.status === 'completed' && t.start_time && t.completed_at
       ) || [];
 
       let tiempoPromedio = '0min';
@@ -229,22 +324,6 @@ export default function Dashboard() {
         }, 0);
         tiempoPromedio = `${Math.round(totalMinutes / completedWithTimes.length)}min`;
       }
-
-      // Calcular productividad por turno
-      const turnoManana = taskData?.filter(t => {
-        const hora = new Date(t.created_at).getHours();
-        return hora >= 6 && hora < 14;
-      }).length || 0;
-
-      const turnoTarde = taskData?.filter(t => {
-        const hora = new Date(t.created_at).getHours();
-        return hora >= 14 && hora < 22;
-      }).length || 0;
-
-      const turnoNoche = taskData?.filter(t => {
-        const hora = new Date(t.created_at).getHours();
-        return hora >= 22 || hora < 6;
-      }).length || 0;
 
       // Preparar datos de frecuencia de limpieza
       const { data: salas } = await supabase
@@ -271,43 +350,32 @@ export default function Dashboard() {
 
       console.log('Frecuencia de limpieza calculada:', frecuenciaLimpieza);
 
-      // Contar tareas por estado
-      const tareasCompletadas = taskData?.filter(t => t.status_id === '3c7b804b-cbac-47cb-b13c-450dea61277c').length || 0;
-      const tareasEnProgreso = taskData?.filter(t => t.status_id === '906c6c3b-80a2-46ca-ab1a-2efc95bf1852').length || 0;
-      const tareasPendientes = taskData?.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length || 0;
-
-      console.log('Conteo de tareas:', { tareasCompletadas, tareasEnProgreso, tareasPendientes });
-
       // Actualizar el estado con los conteos de tareas
       setDashboardData(prevData => ({
         ...prevData,
         estadoTareas: {
-          completadas: tareasCompletadas,
-          enProgreso: tareasEnProgreso,
-          pendientes: tareasPendientes
+          completadas: tareasPorTurno.manana + tareasPorTurno.tarde + tareasPorTurno.noche,
+          enProgreso: 0,
+          pendientes: 0
         }
       }));
 
       setDashboardData({
         asignacionesPendientes: {
           cantidad: pendientes,
-          variacion: Math.round((pendientes - (taskData?.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length || 0)) / (taskData?.filter(t => t.status_id === 'c483c26d-1a90-4443-8152-f98cfd1ca89e').length || 0) * 100)
+          variacion: Math.round((pendientes - (taskData?.filter(t => t.status === 'pending').length || 0)) / (taskData?.filter(t => t.status === 'pending').length || 0) * 100)
         },
         personalActivo: activeUsers?.length || 0,
         tiempoPromedio,
         eficienciaGlobal: total > 0 ? Math.round((completadas / total) * 100) : 0,
-        productividadTurno: {
-          manana: turnoManana,
-          tarde: turnoTarde,
-          noche: turnoNoche
-        },
+        productividadTurno: productividadTurno,
         alertasInventario,
         estadoAsignaciones,
         frecuenciaLimpieza,
         estadoTareas: {
-          completadas: tareasCompletadas,
-          enProgreso: tareasEnProgreso,
-          pendientes: tareasPendientes
+          completadas: tareasPorTurno.manana + tareasPorTurno.tarde + tareasPorTurno.noche,
+          enProgreso: 0,
+          pendientes: 0
         }
       });
 
@@ -346,22 +414,22 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       {/* Header */}
-      <div className="bg-[#4263eb] -mx-6 -mt-6 px-6 py-4">
-        <div className="flex justify-between items-center">
+      <div className="bg-[#4263eb] -mx-4 sm:-mx-6 mt-2 px-4 sm:px-6 py-4 rounded-lg">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
           <div>
             <h1 className="text-xl font-bold text-white">Panel de Control</h1>
             <p className="text-sm text-blue-100">Resumen general del sistema</p>
           </div>
-          <div className="flex gap-2">
-            <button className="px-4 py-1 text-sm font-medium rounded-full bg-white text-[#4263eb]">
+          <div className="flex gap-2 w-full sm:w-auto">
+            <button className="flex-1 sm:flex-none px-4 py-1 text-sm font-medium rounded-full bg-white text-[#4263eb]">
               Día
             </button>
-            <button className="px-4 py-1 text-sm font-medium rounded-full text-white">
+            <button className="flex-1 sm:flex-none px-4 py-1 text-sm font-medium rounded-full text-white hover:bg-blue-600">
               Semana
             </button>
-            <button className="px-4 py-1 text-sm font-medium rounded-full text-white">
+            <button className="flex-1 sm:flex-none px-4 py-1 text-sm font-medium rounded-full text-white hover:bg-blue-600">
               Mes
             </button>
           </div>
@@ -369,7 +437,7 @@ export default function Dashboard() {
       </div>
 
       {/* Tarjetas principales */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Asignaciones Pendientes */}
         <div className="bg-white p-4 rounded-lg shadow-sm">
           <div className="flex items-center gap-3">
@@ -435,7 +503,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Productividad por Turno */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="p-6 border-b border-gray-100">
@@ -463,7 +531,7 @@ export default function Dashboard() {
                   style={{ 
                     width: `${(dashboardData.productividadTurno.manana / 45) * 100}%`
                   }}
-                  className="h-full rounded-full transition-all duration-300 bg-gray-400"
+                  className="h-full rounded-full transition-all duration-300 bg-blue-500"
                 />
               </div>
             </div>
@@ -484,7 +552,7 @@ export default function Dashboard() {
                   style={{ 
                     width: `${(dashboardData.productividadTurno.tarde / 45) * 100}%`
                   }}
-                  className="h-full rounded-full transition-all duration-300 bg-gray-400"
+                  className="h-full rounded-full transition-all duration-300 bg-blue-500"
                 />
               </div>
             </div>
@@ -505,7 +573,7 @@ export default function Dashboard() {
                   style={{ 
                     width: `${(dashboardData.productividadTurno.noche / 45) * 100}%`
                   }}
-                  className="h-full rounded-full transition-all duration-300 bg-gray-400"
+                  className="h-full rounded-full transition-all duration-300 bg-blue-500"
                 />
               </div>
             </div>
@@ -572,7 +640,7 @@ export default function Dashboard() {
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="p-6 border-b border-gray-100">
             <div className="flex items-center gap-3">
-              <svg className="w-6 h-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6 text-purple-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
               <h3 className="text-xl font-bold text-gray-900">Estado de Asignaciones</h3>
@@ -586,12 +654,33 @@ export default function Dashboard() {
                     <div className="w-full flex flex-col gap-1">
                       <div 
                         className="bg-blue-500 rounded-t-lg transition-all duration-300" 
-                        style={{ height: `${Math.max(dia.completadas * 20, 0)}px` }} 
+                        style={{ 
+                          height: `${Math.min(
+                            Math.max((dia.completadas / (dia.completadas + dia.pendientes + dia.enProgreso || 1)) * 150, 4),
+                            150
+                          )}px` 
+                        }} 
                       />
                       <div 
                         className="bg-red-500 rounded-b-lg transition-all duration-300" 
-                        style={{ height: `${Math.max(dia.pendientes * 20, 0)}px` }} 
+                        style={{ 
+                          height: `${Math.min(
+                            Math.max((dia.pendientes / (dia.completadas + dia.pendientes + dia.enProgreso || 1)) * 150, 4),
+                            150
+                          )}px` 
+                        }} 
                       />
+                      {dia.enProgreso > 0 && (
+                        <div 
+                          className="bg-yellow-500 rounded-b-lg transition-all duration-300" 
+                          style={{ 
+                            height: `${Math.min(
+                              Math.max((dia.enProgreso / (dia.completadas + dia.pendientes + dia.enProgreso || 1)) * 150, 4),
+                              150
+                            )}px` 
+                          }} 
+                        />
+                      )}
                     </div>
                     <span className="text-sm font-medium text-gray-600">{dia.dia}</span>
                     
@@ -599,6 +688,9 @@ export default function Dashboard() {
                     <div className="absolute bottom-full mb-2 bg-white p-2 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
                       <p className="text-sm text-blue-600">Completadas: {dia.completadas}</p>
                       <p className="text-sm text-red-600">Pendientes: {dia.pendientes}</p>
+                      {dia.enProgreso > 0 && (
+                        <p className="text-sm text-yellow-600">En Progreso: {dia.enProgreso}</p>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -621,13 +713,13 @@ export default function Dashboard() {
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="p-6 border-b border-gray-100">
             <div className="flex items-center gap-3">
-              <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6 text-blue-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
               <h3 className="text-xl font-bold text-gray-900">Frecuencia de Limpieza por Sala</h3>
             </div>
           </div>
-          <div className="h-[300px] overflow-y-auto">
+          <div className="h-[300px] sm:h-[400px] overflow-y-auto">
             <div className="p-6">
               <div className="space-y-4">
                 {dashboardData.frecuenciaLimpieza.map((sala, index) => (
