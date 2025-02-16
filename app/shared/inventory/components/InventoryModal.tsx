@@ -17,6 +17,7 @@ interface InventoryModalProps {
 interface FormData {
   operationQuantity: number;
   date: string;
+  userName: string;
 }
 
 export default function InventoryModal({
@@ -28,7 +29,8 @@ export default function InventoryModal({
 }: InventoryModalProps) {
   const [formData, setFormData] = useState<FormData>({
     operationQuantity: 0,
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().split('T')[0],
+    userName: ''
   });
 
   const [editFormData, setEditFormData] = useState({
@@ -57,10 +59,7 @@ export default function InventoryModal({
         .select(`
           quantity,
           date,
-          users (
-            first_name,
-            last_name
-          )
+          user_name
         `)
         .eq('inventory_id', item.id)
         .order('date', { ascending: false })
@@ -92,7 +91,8 @@ export default function InventoryModal({
       // Resetear el formulario cuando se abre el modal
       setFormData({
         operationQuantity: 0,
-        date: new Date().toISOString().split('T')[0]
+        date: new Date().toISOString().split('T')[0],
+        userName: ''
       });
 
       if (mode === 'edit' && item) {
@@ -119,7 +119,8 @@ export default function InventoryModal({
         console.log('Validando datos del formulario:', {
           operationQuantity: formData.operationQuantity,
           date: formData.date,
-          itemStock: item?.quantity
+          itemStock: item?.quantity,
+          mode: mode
         })
 
         // Validaciones básicas
@@ -129,7 +130,8 @@ export default function InventoryModal({
           return
         }
         
-        if (mode === 'use' && item && formData.operationQuantity > item.quantity) {
+        // Solo validar el stock disponible si es una operación de uso
+        if (activeTab === 'use' && item && formData.operationQuantity > item.quantity) {
           console.log('Error: Cantidad excede el stock disponible')
           toast.error('La cantidad no puede ser mayor al stock disponible')
           return
@@ -142,10 +144,9 @@ export default function InventoryModal({
         }
 
         const dataToSubmit = {
-          ...formData,
-          type: activeTab,
-          quantity: formData.operationQuantity,
-          inventory_id: item?.id
+          operationQuantity: formData.operationQuantity,
+          date: formData.date,
+          userName: formData.userName || ''
         }
 
         console.log('Enviando datos al servidor:', dataToSubmit)
@@ -157,7 +158,8 @@ export default function InventoryModal({
           // Limpiar formulario y cerrar modal
           setFormData({
             operationQuantity: 0,
-            date: new Date().toISOString().split('T')[0]
+            date: new Date().toISOString().split('T')[0],
+            userName: ''
           })
           onClose()
         } catch (submitError) {
@@ -324,7 +326,7 @@ export default function InventoryModal({
                                   <div key={index} className="bg-gray-50 p-2 rounded-lg text-sm">
                                     <div className="flex justify-between items-center">
                                       <span className="font-medium">
-                                        {record.users?.first_name} {record.users?.last_name}
+                                        {record.user_name}
                                       </span>
                                       <span className="text-red-600">-{record.quantity} unidades</span>
                                     </div>
@@ -380,6 +382,20 @@ export default function InventoryModal({
                         }}
                         className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         min="1"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {activeTab === 'use' ? 'Nombre del Usuario' : 'Nombre del Proveedor'}
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.userName}
+                        onChange={(e) => setFormData(prev => ({ ...prev, userName: e.target.value }))}
+                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder={activeTab === 'use' ? 'Ej: Juan Pérez' : 'Ej: Proveedor ABC'}
                         required
                       />
                     </div>

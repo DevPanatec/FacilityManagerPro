@@ -133,9 +133,10 @@ const NAV_ITEMS: NavItems = {
 interface NavbarProps {
   role?: string;
   isEnterprise?: boolean;
+  organizationName?: string;
 }
 
-export default function Navbar({ role = '', isEnterprise = false }: NavbarProps) {
+export default function Navbar({ role = '', isEnterprise = false, organizationName }: NavbarProps) {
   const router = useRouter()
   const pathname = usePathname();
   const [userRole, setUserRole] = useState<UserRole>((role || 'enterprise') as UserRole);
@@ -164,31 +165,26 @@ export default function Navbar({ role = '', isEnterprise = false }: NavbarProps)
       <div className="max-w-7xl mx-auto flex items-center justify-between py-1 px-4">
         {/* Logo y nombre */}
         <div className="flex items-center space-x-3">
-          <div className="p-1 bg-white rounded-lg shadow-md">
-            {isEnterprise ? (
-              <Image
-                src={COMPANY_LOGO}
-                alt="Marpesca Logo"
-                width={32}
-                height={32}
-                className="object-contain"
-                priority
-              />
-            ) : (
-              <Image
-                src="/logo.jpg"
-                alt="Logo Marpes"
-                width={32}
-                height={32}
-                className="object-contain"
-                priority
-              />
-            )}
-          </div>
-          {!isEnterprise && (
+          {isEnterprise ? (
             <h1 className="text-lg font-bold tracking-tight whitespace-nowrap">
-              Hombres de Blanco
+              {organizationName || 'Mi Organización'}
             </h1>
+          ) : (
+            <>
+              <div className="p-1 bg-white rounded-lg shadow-md">
+                <Image
+                  src="/logo.jpg"
+                  alt="Logo Marpes"
+                  width={32}
+                  height={32}
+                  className="object-contain"
+                  priority
+                />
+              </div>
+              <h1 className="text-lg font-bold tracking-tight whitespace-nowrap">
+                Hombres de Blanco
+              </h1>
+            </>
           )}
         </div>
 

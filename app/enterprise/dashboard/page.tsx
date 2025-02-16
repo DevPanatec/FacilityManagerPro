@@ -8,6 +8,7 @@ import {
 } from 'recharts';
 import { FaClock, FaRegCalendarCheck } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
+import InventoryModal from '@/app/shared/inventory/components/InventoryModal';
 
 interface User {
   first_name: string
@@ -121,21 +122,18 @@ interface Employee {
 interface InventoryItem {
   id: string
   organization_id: string
-  area_id: string | null
   name: string
   description: string | null
-  category: string | null
   quantity: number
-  minimum_quantity: number
-  status: 'active' | 'inactive' | 'discontinued'
-  created_at: string | null
-  updated_at: string | null
-  supplier_info: any
-  cost_history: any[]
-  location_data: any
-  barcode: string | null
-  reorder_point: number | null
-  unit_of_measure: string | null
+  unit: string
+  min_stock: number
+  status: string
+  created_at: string
+  updated_at: string
+  organization?: {
+    id: string
+    name: string
+  }
 }
 
 interface FormattedEmployee extends Employee {
@@ -161,150 +159,28 @@ export default function EnterpriseOverviewPage() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState<InventoryItem | null>(null);
+  const [showInventoryModal, setShowInventoryModal] = useState(false);
+  const [inventoryModalMode, setInventoryModalMode] = useState<'edit' | 'use' | 'restock'>('use');
 
   const supabase = createClientComponentClient();
 
   const getSalaColor = (salaName: string): string => {
-    // Normalizar el nombre de la sala (quitar acentos y convertir a minúsculas)
-    const normalizedName = salaName.toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-
-    const colorMap: { [key: string]: string } = {
-      // Salas de recepción y espera
-      'area de recepcion': '#3b82f6',
-      'area recepcion': '#3b82f6',
-      'recepcion': '#3b82f6',
-      'sala de espera': '#0ea5e9',
-
-      // Salas médicas y procedimientos
-      'consultorio de oncologia': '#22c55e',
-      'consultorio oncologia': '#22c55e',
-      'oncologia': '#22c55e',
-      'sala de procedimientos': '#f43f5e',
-      'procedimientos': '#f43f5e',
-      'sala de reanimacion': '#ef4444',
-      'reanimacion': '#ef4444',
-      'triage': '#22c55e',
-
-      // Salas de servicio y almacenamiento
-      'bano publico medicina': '#ef4444',
-      'banos': '#ef4444',
-      'cto septico': '#f59e0b',
-      'cuarto septico': '#f59e0b',
-      'cuarto de aseo': '#8b5cf6',
-      'aseo': '#8b5cf6',
-      'cuarto de urgencias': '#10b981',
-      'urgencias': '#10b981',
-      'cuarto de descanso': '#0891b2',
-      'descanso': '#0891b2',
-      'cuarto de medicamento': '#6366f1',
-      'medicamento': '#6366f1',
-      'cuarto de ropa limpia': '#22c55e',
-      'ropa limpia': '#22c55e',
-      'cuarto de ropa sucia': '#f43f5e',
-      'ropa sucia': '#f43f5e',
-
-      // Depósitos y almacenes
-      'deposito': '#6366f1',
-      'deposito de medicamentos': '#6366f1',
-      'medicamentos': '#6366f1',
-      'deposito de residuos': '#f43f5e',
-      'residuos': '#f43f5e',
-
-      // Salas administrativas y de personal
-      'estar de enfermeria': '#0ea5e9',
-      'enfermeria': '#0ea5e9',
-      'estacion de enfermeria': '#0ea5e9',
-      'oficina de jefe de enfermeria': '#3b82f6',
-      'jefe enfermeria': '#3b82f6',
-      'oficina del jefe del servicio': '#8b5cf6',
-      'jefe servicio': '#8b5cf6',
-      'sala de reuniones': '#f97316',
-      'reuniones': '#f97316',
-
-      // Salas de circulación
-      'pasillo de acceso entrada': '#64748b',
-      'pasillo entrada': '#64748b',
-      'escalera de emergencia': '#ef4444',
-      'escalera emergencia': '#ef4444',
-
-      // Salas de hospitalización
-      'sala de hospitalizacion': '#14b8a6',
-      'sala de hospitalizacion 1': '#14b8a6',
-      'sala de hospitalizacion 2': '#a855f7',
-      'sala de hospitalizacion 4': '#06b6d4',
-      'sala de hospitalizacion 5': '#8b5cf6',
-      'sala de hospitalizacion 6': '#f97316',
-      'sala hospitalizacion 1, 2, 4, 5, 6': '#14b8a6',
-
-      // Habitaciones (1-20)
-      'habitacion 1': '#14b8a6',
-      'habitacion1': '#14b8a6',
-      'hab 1': '#14b8a6',
-      'habitacion 2': '#a855f7',
-      'habitacion2': '#a855f7',
-      'hab 2': '#a855f7',
-      'habitacion 3': '#ec4899',
-      'habitacion3': '#ec4899',
-      'hab 3': '#ec4899',
-      'habitacion 4': '#06b6d4',
-      'habitacion4': '#06b6d4',
-      'hab 4': '#06b6d4',
-      'habitacion 5': '#8b5cf6',
-      'habitacion5': '#8b5cf6',
-      'hab 5': '#8b5cf6',
-      'habitacion 6': '#f97316',
-      'habitacion6': '#f97316',
-      'hab 6': '#f97316',
-      'habitacion 7': '#84cc16',
-      'habitacion7': '#84cc16',
-      'hab 7': '#84cc16',
-      'habitacion 8': '#6366f1',
-      'habitacion8': '#6366f1',
-      'hab 8': '#6366f1',
-      'habitacion 9': '#14b8a6',
-      'habitacion9': '#14b8a6',
-      'hab 9': '#14b8a6',
-      'habitacion 10': '#0ea5e9',
-      'habitacion10': '#0ea5e9',
-      'hab 10': '#0ea5e9',
-      'habitacion 11': '#a855f7',
-      'habitacion11': '#a855f7',
-      'hab 11': '#a855f7',
-      'habitacion 12': '#f43f5e',
-      'habitacion12': '#f43f5e',
-      'hab 12': '#f43f5e',
-      'habitacion 13': '#22c55e',
-      'habitacion13': '#22c55e',
-      'hab 13': '#22c55e',
-      'habitacion 14': '#f97316',
-      'habitacion14': '#f97316',
-      'hab 14': '#f97316',
-      'habitacion 15': '#3b82f6',
-      'habitacion15': '#3b82f6',
-      'hab 15': '#3b82f6',
-      'habitacion 16': '#8b5cf6',
-      'habitacion16': '#8b5cf6',
-      'hab 16': '#8b5cf6',
-      'habitacion 17': '#ef4444',
-      'habitacion17': '#ef4444',
-      'hab 17': '#ef4444',
-      'habitacion 18': '#06b6d4',
-      'habitacion18': '#06b6d4',
-      'hab 18': '#06b6d4',
-      'habitacion 19': '#84cc16',
-      'habitacion19': '#84cc16',
-      'hab 19': '#84cc16',
-      'habitacion 20': '#6366f1',
-      'habitacion20': '#6366f1',
-      'hab 20': '#6366f1',
-
-      // Sala general
-      'general': '#64748b'
+    const colors: { [key: string]: string } = {
+      'Baños': '#4F46E5',         // Índigo intenso
+      'Cocina': '#059669',        // Verde esmeralda
+      'Oficinas': '#F59E0B',      // Ámbar brillante
+      'Recepción': '#EC4899',     // Rosa intenso
+      'Sala de Reuniones': '#8B5CF6', // Violeta vibrante
+      'Almacén': '#06B6D4',       // Cyan brillante
+      'Laboratorio': '#F97316',   // Naranja vibrante
+      'Aula': '#10B981',          // Verde esmeralda claro
+      'Sala de Espera': '#6366F1', // Índigo claro
+      'Cafetería': '#EF4444',     // Rojo brillante
+      'Biblioteca': '#8B5CF6',    // Púrpura vibrante
+      'Gimnasio': '#F43F5E'       // Rosa rojizo
     };
-
-    return colorMap[normalizedName] || '#64748b'; // Color por defecto gris si no se encuentra la sala
+    return colors[salaName] || '#4F46E5'; // Color por defecto
   };
 
   // Cargar datos del dashboard
@@ -317,27 +193,43 @@ export default function EnterpriseOverviewPage() {
       setLoading(true);
       setError(null);
 
-      // 1. Obtener el usuario y verificar sesión
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      console.log('Auth user:', user);
-      console.log('Auth error:', userError);
-      
-      if (userError || !user) {
-        console.error('Error de autenticación:', userError);
-        throw new Error('No autorizado');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
+
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!userProfile) throw new Error('Usuario no encontrado');
+      if (!userProfile.organization_id) throw new Error('Usuario no tiene organización asignada');
+
+      // Cargar datos del inventario
+      const { data: inventoryData, error: inventoryError } = await supabase
+        .from('inventory_items')
+        .select('*')
+        .eq('organization_id', userProfile.organization_id);
+
+      if (inventoryError) {
+        console.error('Error al cargar inventario:', inventoryError);
+        throw new Error('Error al cargar datos del inventario');
       }
 
+      setInventory(inventoryData || []);
+      console.log('Datos de inventario cargados:', inventoryData);
+
       // 2. Obtener perfil del usuario
-      const { data: userProfile, error: profileError } = await supabase
+      const { data: userProfileData, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', user.id)
         .single();
 
-      console.log('User profile:', userProfile);
+      console.log('User profile:', userProfileData);
       console.log('Profile error:', profileError);
 
-      if (profileError || !userProfile) {
+      if (profileError || !userProfileData) {
         console.error('Error al obtener perfil:', profileError);
         throw new Error('Perfil no encontrado');
       }
@@ -346,7 +238,7 @@ export default function EnterpriseOverviewPage() {
       const { data: salasData, error: salasError } = await supabase
         .from('salas')
         .select('*')
-        .eq('organization_id', userProfile.organization_id);
+        .eq('organization_id', userProfileData.organization_id);
 
       console.log('Salas data:', salasData);
       console.log('Salas error:', salasError);
@@ -360,7 +252,7 @@ export default function EnterpriseOverviewPage() {
       const { data: areasData, error: areasError } = await supabase
         .from('areas')
         .select('*')
-        .eq('organization_id', userProfile.organization_id)
+        .eq('organization_id', userProfileData.organization_id)
         .eq('status', 'active');
 
       if (areasError) {
@@ -375,7 +267,8 @@ export default function EnterpriseOverviewPage() {
           *,
           assignee:assigned_to(id, first_name, last_name)
         `)
-        .eq('organization_id', userProfile.organization_id);
+        .eq('organization_id', userProfileData.organization_id)
+        .not('assigned_to', 'is', null); // Solo tareas asignadas
 
       if (tasksError) {
         console.error('Error al cargar tareas:', tasksError);
@@ -412,28 +305,9 @@ export default function EnterpriseOverviewPage() {
         setAreasTasks(formattedSalas);
       }
 
-      // 7. Cargar inventario
-      const { data: inventoryData, error: inventoryError } = await supabase
-        .from('inventory_items')
-        .select('*')
-        .eq('organization_id', userProfile.organization_id)
-        .eq('status', 'active')
-        .order('quantity', { ascending: true })
-        .limit(3);
-
-      console.log('Inventory data:', inventoryData);
-      console.log('Inventory error:', inventoryError);
-
-      if (inventoryError) {
-        console.error('Error al cargar inventario:', inventoryError);
-      } else {
-        setInventory(inventoryData || []);
-      }
-
     } catch (error) {
-      console.error('Error loading dashboard:', error);
-      setError('Error al cargar el dashboard');
-      toast.error('Error al cargar el dashboard');
+      console.error('Error loading dashboard data:', error);
+      setError(error instanceof Error ? error.message : 'Error al cargar los datos');
     } finally {
       setLoading(false);
     }
@@ -447,6 +321,18 @@ export default function EnterpriseOverviewPage() {
 
     return { totalStaff, activeStaff, totalAreas };
   }, [staff, areas]);
+
+  const handleInventoryModalSubmit = async (formData: any) => {
+    try {
+      // Aquí irá la lógica para manejar el submit del modal
+      console.log('Form data submitted:', formData);
+      setShowInventoryModal(false);
+      await loadDashboardData(); // Recargar los datos después de la operación
+    } catch (error) {
+      console.error('Error al procesar la operación:', error);
+      toast.error('Error al procesar la operación');
+    }
+  };
 
   if (loading) {
     return (
@@ -671,59 +557,67 @@ export default function EnterpriseOverviewPage() {
                 </svg>
               </button>
             </div>
-            <div className="bg-white rounded-xl shadow-lg p-4" style={{ height: '628px' }}>
-              <div className="space-y-3">
-                {inventory.map(item => {
-                  const stockPercentage = (item.quantity / (item.minimum_quantity || 1)) * 100;
-                  const status = stockPercentage <= 25 ? 'critical' : 
-                               stockPercentage <= 50 ? 'low' : 
-                               stockPercentage <= 75 ? 'medium' : 'good';
-                  const statusColors = {
-                    critical: 'text-red-500 bg-red-50',
-                    low: 'text-orange-500 bg-orange-50',
-                    medium: 'text-yellow-500 bg-yellow-50',
-                    good: 'text-green-500 bg-green-50'
-                  };
-                  
-                  return (
-                    <div key={item.id} className="p-3 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-semibold text-gray-900">{item.name}</h4>
-                          <p className="text-sm text-gray-500">{item.category || 'Sin categoría'}</p>
-                        </div>
-                        <span className={`px-2 py-1 rounded-full text-sm font-medium ${statusColors[status]}`}>
-                          {item.quantity} {item.unit_of_measure || 'unidades'}
-                        </span>
-                      </div>
-                      <div className="relative pt-1">
-                        <div className="flex mb-1 items-center justify-between">
-                          <div>
-                            <span className="text-xs font-semibold inline-block text-gray-600">
-                              Stock mínimo: {item.minimum_quantity || 0}
+            <div className="bg-white rounded-xl shadow-lg p-4">
+              <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
+                {inventory.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center min-h-[400px] text-center p-6">
+                    <svg className="w-12 h-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No hay items en el inventario</h3>
+                    <p className="text-sm text-gray-500">Comienza agregando algunos items al inventario.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4 pr-2">
+                    {inventory.map(item => {
+                      const stockPercentage = (item.quantity / item.min_stock) * 100;
+                      return (
+                        <div 
+                          key={item.id}
+                          onClick={() => {
+                            setSelectedInventoryItem(item);
+                            setShowInventoryModal(true);
+                          }}
+                          className="p-4 border border-gray-100 rounded-lg hover:border-gray-200 cursor-pointer transition-all"
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <h4 className="font-medium text-gray-900">{item.name}</h4>
+                              <p className="text-sm text-gray-500">{item.description || 'Sin descripción'}</p>
+                            </div>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              stockPercentage > 100 
+                                ? 'bg-green-100 text-green-800'
+                                : stockPercentage > 50
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {item.quantity} {item.unit}
                             </span>
                           </div>
-                          <div>
-                            <span className="text-xs font-semibold inline-block text-gray-600">
-                              {stockPercentage.toFixed(0)}%
-                            </span>
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs text-gray-500">
+                              <span>Stock mínimo: {item.min_stock}</span>
+                              <span>{Math.round(stockPercentage)}%</span>
+                            </div>
+                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full transition-all ${
+                                  stockPercentage > 100 
+                                    ? 'bg-green-500'
+                                    : stockPercentage > 50
+                                    ? 'bg-yellow-500'
+                                    : 'bg-red-500'
+                                }`}
+                                style={{ width: `${Math.min(stockPercentage, 100)}%` }}
+                              />
+                            </div>
                           </div>
                         </div>
-                        <div className="flex h-2 overflow-hidden bg-gray-100 rounded">
-                          <div 
-                            className={`h-2 rounded transition-all ${
-                              status === 'critical' ? 'bg-red-500' : 
-                              status === 'low' ? 'bg-orange-500' : 
-                              status === 'medium' ? 'bg-yellow-500' : 
-                              'bg-green-500'
-                            }`}
-                            style={{ width: `${stockPercentage}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -819,6 +713,17 @@ export default function EnterpriseOverviewPage() {
           })}
         </div>
       </div>
+
+      {/* Modal de Inventario */}
+      {showInventoryModal && selectedInventoryItem && (
+        <InventoryModal
+          isOpen={showInventoryModal}
+          onClose={() => setShowInventoryModal(false)}
+          onSubmit={handleInventoryModalSubmit}
+          item={selectedInventoryItem}
+          mode={inventoryModalMode}
+        />
+      )}
     </div>
   );
 }

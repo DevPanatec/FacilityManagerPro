@@ -222,8 +222,8 @@ export default function InventoryPage() {
       console.log('Item encontrado:', item)
 
       const now = new Date().toISOString()
-      const isRestock = data.type === 'restock'
-      const quantity = parseInt(data.quantity)
+      const isRestock = modalMode === 'restock'
+      const quantity = parseInt(data.operationQuantity)
 
       if (isNaN(quantity) || quantity <= 0) {
         throw new Error('La cantidad debe ser mayor a 0')
@@ -245,18 +245,21 @@ export default function InventoryPage() {
         const restockData = {
           inventory_id: itemId,
           quantity: quantity,
-          supplier: data.user || 'Sistema',
+          supplier: data.userName || 'Sistema',
           date: data.date,
           created_at: now,
-          updated_at: now,
-          organization_id: item.organization_id
+          updated_at: now
         }
 
+        console.log('Datos de reposición a insertar:', restockData)
         const { error: restockError } = await supabase
           .from('inventory_restock')
           .insert([restockData])
 
-        if (restockError) throw restockError;
+        if (restockError) {
+          console.error('Error en reposición:', restockError)
+          throw restockError
+        }
       } else {
         const usageData = {
           inventory_id: itemId,
@@ -264,15 +267,18 @@ export default function InventoryPage() {
           user_id: user.id,
           date: data.date,
           created_at: now,
-          updated_at: now,
-          organization_id: item.organization_id
+          updated_at: now
         }
 
+        console.log('Datos de uso a insertar:', usageData)
         const { error: usageError } = await supabase
           .from('inventory_usage')
           .insert([usageData])
 
-        if (usageError) throw usageError;
+        if (usageError) {
+          console.error('Error en uso:', usageError)
+          throw usageError
+        }
       }
 
       const { error: updateError } = await supabase
@@ -280,7 +286,10 @@ export default function InventoryPage() {
         .update(updateData)
         .eq('id', itemId)
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Error en actualización:', updateError)
+        throw updateError
+      }
 
       console.log('Operación completada exitosamente')
       await loadInventoryItems()
