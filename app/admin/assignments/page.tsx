@@ -554,14 +554,35 @@ export default function AssignmentsPage() {
 
   const handleTurnoClick = async (turno: Turno) => {
     try {
-      // Primero obtener los IDs de usuarios del turno
+      // Primero obtener el usuario actual
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
+      if (!currentUser) {
+        throw new Error('No se encontró el usuario actual');
+      }
+
+      // Obtener los usuarios asignados al turno específico desde work_shifts
       const { data: shiftData, error: shiftError } = await supabase
         .from('work_shifts')
-        .select('user_id')
+        .select(`
+          id,
+          shift_type,
+          main_user:users!work_shifts_user_id_fkey (
+            id,
+            first_name,
+            last_name,
+            avatar_url
+          )
+        `)
         .eq('shift_type', turno.shift_type)
-        .eq('status', 'scheduled');
+        .eq('status', 'scheduled')
+        .not('main_user', 'is', null)
+        .neq('user_id', currentUser.id); // Excluir al usuario actual
 
-      if (shiftError) throw shiftError;
+      if (shiftError) {
+        console.error('Error detallado:', shiftError);
+        throw shiftError;
+      }
 
       if (!shiftData || shiftData.length === 0) {
         setSelectedShiftDetails({
@@ -574,26 +595,25 @@ export default function AssignmentsPage() {
         return;
       }
 
-      // Extraer los user_ids únicos
-      const userIds = [...new Set(shiftData.map(shift => shift.user_id))].filter(Boolean);
+      console.log('Datos de usuarios por turno (excluyendo usuario actual):', shiftData);
 
-      // Obtener los detalles de los usuarios
-      const { data: usersData, error: usersError } = await supabase
-        .from('users')
-        .select('id, first_name, last_name, avatar_url')
-        .in('id', userIds);
+      // Filtrar usuarios únicos y válidos
+      const usuariosUnicos = shiftData
+        .filter(shift => shift.main_user) // Solo incluir registros con usuarios válidos
+        .map(shift => shift.main_user)
+        .filter((user, index, self) => 
+          index === self.findIndex(u => u.id === user.id)
+        );
 
-      if (usersError) throw usersError;
+      console.log('Usuarios únicos filtrados:', usuariosUnicos);
 
-      if (usersData) {
-        setSelectedShiftDetails({
-          id: turno.id,
-          nombre: turno.nombre,
-          horario: turno.horario,
-          usuarios: usersData
-        });
-        setShowShiftDetailsModal(true);
-      }
+      setSelectedShiftDetails({
+        id: turno.id,
+        nombre: turno.nombre,
+        horario: turno.horario,
+        usuarios: usuariosUnicos
+      });
+      setShowShiftDetailsModal(true);
     } catch (error) {
       console.error('Error al cargar usuarios del turno:', error);
       toast.error('Error al cargar los usuarios del turno');

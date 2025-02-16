@@ -130,18 +130,44 @@ export default function Dashboard() {
       // Calcular fechas para el período seleccionado
       const now = new Date();
       const today = new Date(now);
-      today.setHours(0, 0, 0, 0); // Inicio del día actual
+      today.setHours(0, 0, 0, 0);
 
       // Calcular inicio de la semana (Lunes)
       const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Ajustar al lunes
+      startOfWeek.setDate(today.getDate() - today.getDay() + 1);
       
       // Calcular fin de la semana (Viernes)
       const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 5); // Hasta el viernes
+      endOfWeek.setDate(startOfWeek.getDate() + 5);
       endOfWeek.setHours(23, 59, 59, 999);
 
-      // Obtener las tareas de la semana
+      // Obtener los turnos activos y sus usuarios asignados
+      const { data: workShifts } = await supabase
+        .from('work_shifts')
+        .select(`
+          id,
+          shift_type,
+          user_id,
+          status,
+          users!work_shifts_user_id_fkey (
+            id,
+            first_name,
+            last_name
+          )
+        `)
+        .eq('organization_id', userProfile.organization_id)
+        .eq('status', 'scheduled')
+        .gte('start_time', startOfWeek.toISOString())
+        .lte('end_time', endOfWeek.toISOString());
+
+      // Crear mapa de usuarios por turno
+      const usuariosPorTurno = {
+        morning: new Set(workShifts?.filter(ws => ws.shift_type === 'morning').map(ws => ws.user_id) || []),
+        afternoon: new Set(workShifts?.filter(ws => ws.shift_type === 'afternoon').map(ws => ws.user_id) || []),
+        night: new Set(workShifts?.filter(ws => ws.shift_type === 'night').map(ws => ws.user_id) || [])
+      };
+
+      // Obtener las tareas del período actual
       const { data: taskData } = await supabase
         .from('tasks')
         .select(`
@@ -151,103 +177,50 @@ export default function Dashboard() {
           created_at,
           start_time,
           completed_at,
-          sala_id,
-          type,
-          parent_task_id,
-          assigned_to
+          assigned_to,
+          area_id
         `)
         .eq('organization_id', userProfile.organization_id)
         .gte('created_at', startOfWeek.toISOString())
         .lte('created_at', endOfWeek.toISOString())
-        .not('status', 'eq', 'cancelled')
-        .is('parent_task_id', null);
-
-      console.log('Tareas sin procesar:', taskData?.map(task => ({
-        id: task.id,
-        titulo: task.title,
-        created_at: task.created_at,
-        hora_local: new Date(task.created_at).toLocaleTimeString()
-      })));
-
-      // Obtener los turnos y sus usuarios asignados
-      const { data: workShifts } = await supabase
-        .from('work_shifts')
-        .select(`
-          id,
-          shift_type,
-          user_id,
-          users!work_shifts_user_id_fkey (
-            id,
-            first_name,
-            last_name
-          )
-        `)
-        .eq('organization_id', userProfile.organization_id)
-        .eq('status', 'scheduled');
-
-      // Crear mapa de usuarios por turno
-      const usuariosPorTurno = {
-        morning: new Set(workShifts?.filter(ws => ws.shift_type === 'morning').map(ws => ws.user_id) || []),
-        afternoon: new Set(workShifts?.filter(ws => ws.shift_type === 'afternoon').map(ws => ws.user_id) || []),
-        night: new Set(workShifts?.filter(ws => ws.shift_type === 'night').map(ws => ws.user_id) || [])
-      };
-
-      console.log('Usuarios por turno:', {
-        morning: Array.from(usuariosPorTurno.morning),
-        afternoon: Array.from(usuariosPorTurno.afternoon),
-        night: Array.from(usuariosPorTurno.night)
-      });
+        .not('status', 'eq', 'cancelled');
 
       // Distribuir las tareas según el turno del usuario asignado
-      const conteoTareasPorTurno = {
+      const tareasPorTurno = {
         manana: 0,
         tarde: 0,
         noche: 0
       };
 
       taskData?.forEach(task => {
-        const userId = task.assigned_to;
-        console.log(`Analizando tarea ${task.id} - ${task.title}`);
-        console.log(`Usuario asignado: ${userId}`);
-        
-        if (userId) {
-          if (usuariosPorTurno.morning.has(userId)) {
-            conteoTareasPorTurno.manana++;
-            console.log('Asignada a turno mañana');
-          } else if (usuariosPorTurno.afternoon.has(userId)) {
-            conteoTareasPorTurno.tarde++;
-            console.log('Asignada a turno tarde');
-          } else if (usuariosPorTurno.night.has(userId)) {
-            conteoTareasPorTurno.noche++;
-            console.log('Asignada a turno noche');
-          } else {
-            console.log('Usuario no está asignado a ningún turno');
+        if (task.assigned_to) {
+          if (usuariosPorTurno.morning.has(task.assigned_to)) {
+            tareasPorTurno.manana++;
+          } else if (usuariosPorTurno.afternoon.has(task.assigned_to)) {
+            tareasPorTurno.tarde++;
+          } else if (usuariosPorTurno.night.has(task.assigned_to)) {
+            tareasPorTurno.noche++;
           }
-        } else {
-          console.log('Tarea sin usuario asignado');
         }
       });
 
-      const tareasPorTurno = {
-        manana: conteoTareasPorTurno.manana,
-        tarde: conteoTareasPorTurno.tarde,
-        noche: conteoTareasPorTurno.noche
+      // Calcular estadísticas de tareas
+      const estadoTareas = {
+        completadas: taskData?.filter(t => t.status === 'completed').length || 0,
+        enProgreso: taskData?.filter(t => t.status === 'in_progress').length || 0,
+        pendientes: taskData?.filter(t => t.status === 'pending').length || 0
       };
 
-      console.log('Resumen final de distribución por turno del usuario:', {
-        'Turno mañana': tareasPorTurno.manana,
-        'Turno tarde': tareasPorTurno.tarde,
-        'Turno noche': tareasPorTurno.noche
-      });
-
-      // Actualizar productividad por turno
-      const productividadTurno = {
-        manana: tareasPorTurno.manana,
-        tarde: tareasPorTurno.tarde,
-        noche: tareasPorTurno.noche
-      };
-
-      console.log('Productividad por turno actualizada:', productividadTurno);
+      // Actualizar el estado con los datos procesados
+      setDashboardData(prevData => ({
+        ...prevData,
+        productividadTurno: {
+          manana: tareasPorTurno.manana,
+          tarde: tareasPorTurno.tarde,
+          noche: tareasPorTurno.noche
+        },
+        estadoTareas: estadoTareas
+      }));
 
       // Obtener personal activo
       const { data: activeUsers } = await supabase
@@ -353,7 +326,7 @@ export default function Dashboard() {
       const typedSalas = salas as Room[] | null;
 
       const frecuenciaLimpieza = typedSalas?.map(sala => {
-        const asignacionesSala = taskData?.filter(a => a.sala_id === sala.id) || [];
+        const asignacionesSala = taskData?.filter(a => a.area_id === sala.id) || [];
         console.log('Asignaciones para sala', sala.nombre, ':', asignacionesSala);
         
         const frecuencia = Math.round(asignacionesSala.length / (selectedPeriod === 'dia' ? 1 : selectedPeriod === 'semana' ? 7 : 30));
@@ -384,7 +357,11 @@ export default function Dashboard() {
         personalActivo: activeUsers?.length || 0,
         tiempoPromedio,
         eficienciaGlobal: total > 0 ? Math.round((completadas / total) * 100) : 0,
-        productividadTurno: productividadTurno,
+        productividadTurno: {
+          manana: tareasPorTurno.manana,
+          tarde: tareasPorTurno.tarde,
+          noche: tareasPorTurno.noche
+        },
         alertasInventario,
         estadoAsignaciones,
         frecuenciaLimpieza,
