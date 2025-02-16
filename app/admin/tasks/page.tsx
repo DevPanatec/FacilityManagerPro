@@ -202,10 +202,16 @@ export default function TasksPage() {
 
   const handleStartTask = async (task: Task) => {
     try {
-      // Mostrar indicador de carga inmediatamente
-      toast.loading('Iniciando tarea...');
+      // Deshabilitar el botón inmediatamente
+      const button = document.querySelector(`button[data-task-id="${task.id}"]`);
+      if (button) {
+        button.setAttribute('disabled', 'true');
+      }
 
-      // 1. Obtener usuario y actualizar tarea en paralelo
+      // Mostrar indicador de carga con ID
+      const toastId = toast.loading('Iniciando tarea...');
+
+      // 1. Obtener usuario y verificar tarea en paralelo
       const [userResponse, checkTaskResponse] = await Promise.all([
         supabase.auth.getUser(),
         supabase
@@ -218,7 +224,15 @@ export default function TasksPage() {
       if (!userResponse.data.user) throw new Error('No autorizado');
       if (!checkTaskResponse.data) throw new Error('Tarea no encontrada');
 
-      // 2. Actualizar la tarea directamente
+      // Verificar si la tarea ya está en progreso
+      if (checkTaskResponse.data.status === 'in_progress') {
+        toast.dismiss(toastId);
+        toast.error('Esta tarea ya está en progreso');
+        router.push('/admin/tasks/current');
+        return;
+      }
+
+      // 2. Actualizar la tarea
       const now = new Date();
       const timeString = now.toLocaleTimeString('en-US', { hour12: false });
       
@@ -246,16 +260,23 @@ export default function TasksPage() {
       if (updateError) throw updateError;
       if (!updatedTask) throw new Error('No se pudo actualizar la tarea');
 
-      // 3. Actualizar estado local y redireccionar
+      // 3. Actualizar estado local
       const formattedTask = {
         ...updatedTask,
         title: updatedTask.title || 'Sin título',
         description: updatedTask.description || 'Sin descripción',
         priority: updatedTask.priority || 'low',
-        status: updatedTask.status || 'in_progress',
-        area: updatedTask.area?.name || 'Sin área'
+        status: 'in_progress',
+        assignee: updatedTask.assignee?.[0] ? {
+          first_name: updatedTask.assignee[0].first_name,
+          last_name: updatedTask.assignee[0].last_name
+        } : undefined,
+        area: updatedTask.area?.[0] ? {
+          name: updatedTask.area[0].name
+        } : undefined
       };
 
+      // Actualizar el estado local
       setTasks(prevTasks =>
         prevTasks.map(t => t.id === task.id ? formattedTask : t)
       );
@@ -266,8 +287,14 @@ export default function TasksPage() {
         inProgress: prev.inProgress + 1
       }));
 
-      toast.dismiss();
+      // Limpiar toast y mostrar éxito
+      toast.dismiss(toastId);
       toast.success('Tarea iniciada con éxito');
+
+      // Esperar un momento para asegurar que la actualización se complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Redirigir a la página de tarea actual
       router.push('/admin/tasks/current');
 
     } catch (error: any) {
@@ -277,8 +304,13 @@ export default function TasksPage() {
         details: error?.details,
         hint: error?.hint
       });
-      toast.dismiss();
       toast.error(error.message || 'Error al iniciar la tarea');
+      
+      // Re-habilitar el botón en caso de error
+      const button = document.querySelector(`button[data-task-id="${task.id}"]`);
+      if (button) {
+        button.removeAttribute('disabled');
+      }
     }
   };
 
@@ -716,8 +748,9 @@ export default function TasksPage() {
                     </svg>
                   </button>
                   <button
+                    data-task-id={task.id}
                     onClick={() => handleStartTask(task)}
-                    className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-sm hover:shadow"
+                    className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />

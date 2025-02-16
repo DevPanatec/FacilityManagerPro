@@ -25,9 +25,11 @@ interface DashboardData {
   }[];
   estadoAsignaciones: {
     dia: string;
+    fecha: string;
     completadas: number;
     pendientes: number;
     enProgreso: number;
+    total: number;
   }[];
   frecuenciaLimpieza: {
     sala: string;
@@ -129,10 +131,17 @@ export default function Dashboard() {
       const now = new Date();
       const today = new Date(now);
       today.setHours(0, 0, 0, 0); // Inicio del día actual
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1); // Inicio del día siguiente
 
-      // Obtener solo las tareas de hoy
+      // Calcular inicio de la semana (Lunes)
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Ajustar al lunes
+      
+      // Calcular fin de la semana (Viernes)
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 5); // Hasta el viernes
+      endOfWeek.setHours(23, 59, 59, 999);
+
+      // Obtener las tareas de la semana
       const { data: taskData } = await supabase
         .from('tasks')
         .select(`
@@ -148,10 +157,10 @@ export default function Dashboard() {
           assigned_to
         `)
         .eq('organization_id', userProfile.organization_id)
-        .gte('created_at', today.toISOString())
-        .lt('created_at', tomorrow.toISOString())
+        .gte('created_at', startOfWeek.toISOString())
+        .lte('created_at', endOfWeek.toISOString())
         .not('status', 'eq', 'cancelled')
-        .is('parent_task_id', null); // Solo tareas principales, no subtareas
+        .is('parent_task_id', null);
 
       console.log('Tareas sin procesar:', taskData?.map(task => ({
         id: task.id,
@@ -284,22 +293,29 @@ export default function Dashboard() {
 
       // Preparar datos de estado de asignaciones por día
       const diasSemana = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie'];
-      const estadoAsignaciones = diasSemana.map(dia => {
+      const estadoAsignaciones = diasSemana.map((dia, index) => {
+        const fechaDia = new Date(startOfWeek);
+        fechaDia.setDate(startOfWeek.getDate() + index);
+        
         const tareasDia = taskData?.filter(task => {
-          const fecha = new Date(task.created_at);
-          const nombreDia = fecha.toLocaleDateString('es-ES', { weekday: 'short' }).substring(0, 3);
-          return nombreDia === dia;
+          const fechaTarea = new Date(task.created_at);
+          return fechaTarea.getDate() === fechaDia.getDate() &&
+                 fechaTarea.getMonth() === fechaDia.getMonth() &&
+                 fechaTarea.getFullYear() === fechaDia.getFullYear();
         }) || [];
 
         const completadas = tareasDia.filter(t => t.status === 'completed').length;
         const pendientes = tareasDia.filter(t => t.status === 'pending').length;
         const enProgreso = tareasDia.filter(t => t.status === 'in_progress').length;
+        const total = completadas + pendientes + enProgreso;
 
         return {
           dia,
+          fecha: fechaDia.toISOString(),
           completadas,
           pendientes,
-          enProgreso
+          enProgreso,
+          total
         };
       });
 
@@ -725,18 +741,18 @@ export default function Dashboard() {
                 {dashboardData.frecuenciaLimpieza.map((sala, index) => (
                   <div key={index} className="hover:bg-gray-50 p-3 rounded-lg transition-all duration-300">
                     <div className="flex justify-between items-center mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full`} style={{ backgroundColor: getRoomColor(sala.sala) }} />
-                        <span className="text-sm font-medium text-gray-700">{sala.sala}</span>
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0`} style={{ backgroundColor: getRoomColor(sala.sala) }} />
+                        <span className="text-sm font-medium text-gray-700 truncate">{sala.sala}</span>
                       </div>
-                      <span className="text-sm font-semibold text-gray-600">{sala.frecuencia}x</span>
+                      <span className="text-sm font-semibold text-gray-600 ml-2 flex-shrink-0">{sala.frecuencia}x</span>
                     </div>
-                    <div className="relative pt-1">
-                      <div className="h-2 bg-gray-100 rounded-full">
+                    <div className="relative pt-1 w-full">
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                         <div
                           className="h-2 rounded-full transition-all duration-300"
                           style={{ 
-                            width: `${sala.porcentaje}%`,
+                            width: `${Math.min(sala.porcentaje, 100)}%`,
                             backgroundColor: getRoomColor(sala.sala)
                           }}
                         />

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import toast from 'react-hot-toast';
 import SalaAreaSelector from '@/app/shared/components/componentes/SalaAreaSelector'
+import { Dialog } from '@headlessui/react';
 
 interface Employee {
   id: string;
@@ -36,6 +37,34 @@ interface WorkShift {
   start_time: string;
   end_time: string;
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+}
+
+// Agregar interfaces para los tipos de Supabase
+interface ShiftUser {
+  id: string;
+  first_name: string;
+  last_name: string;
+  avatar_url?: string | null;
+}
+
+interface ShiftData {
+  id: string;
+  user_id: string;
+  users: ShiftUser[];
+  start_time: string;
+  end_time: string;
+  status: string;
+  organization_id: string;
+}
+
+interface Turno {
+  id: string;
+  nombre: string;
+  horario: string;
+  personasAsignadas: number;
+  enLinea: number;
+  shift_type: 'morning' | 'afternoon' | 'night';
+  usuarios: ShiftUser[];
 }
 
 export default function RRHHPage() {
@@ -73,6 +102,18 @@ export default function RRHHPage() {
   const [shiftStartTime, setShiftStartTime] = useState('');
   const [shiftEndTime, setShiftEndTime] = useState('');
   const [selectedTurno, setSelectedTurno] = useState('');
+
+  // Agregar estados para la gestión de turnos
+  const [activeTab, setActiveTab] = useState('add'); // 'add' o 'move'
+  const [userToMove, setUserToMove] = useState('');
+  const [currentShift, setCurrentShift] = useState('');
+  const [targetShift, setTargetShift] = useState('');
+  const [currentShifts, setCurrentShifts] = useState<{
+    user_id: string;
+    user_name: string;
+    shift: string;
+    area: string;
+  }[]>([]);
 
   // Definir los turnos disponibles
   const TURNOS = [
@@ -491,43 +532,70 @@ export default function RRHHPage() {
     );
   };
 
-  // Agregar función handleCreateShift
+  // Estados para el modal de gestión de turnos
+  const [selectedDate, setSelectedDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+
   const handleCreateShift = async () => {
     try {
-      console.log('Datos del formulario:', {
-        selectedSala,
-        selectedArea,
-        selectedUser,
-        selectedTurno
-      });
-
-      if (!selectedSala || !selectedArea || !selectedUser || !selectedTurno) {
-        toast.error('Por favor complete todos los campos');
+      if (!selectedUser || !selectedDate || !startTime) {
+        toast.error('Por favor complete todos los campos requeridos');
         return;
       }
 
-      const turno = TURNOS.find(t => t.id === selectedTurno);
-      if (!turno) {
-        toast.error('Turno inválido');
-        return;
-      }
+      setIsCreating(true);
 
-      // Crear fecha de inicio y fin basado en el turno seleccionado
-      const today = new Date();
-      const startTime = new Date(today);
-      const [startHour, startMinute] = turno.inicio.split(':');
-      startTime.setHours(parseInt(startHour), parseInt(startMinute), 0);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
 
-      const endTime = new Date(today);
-      const [endHour, endMinute] = turno.fin.split(':');
-      endTime.setHours(parseInt(endHour), parseInt(endMinute), 0);
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
 
-      // Si el turno es nocturno y la hora de fin es menor que la de inicio,
-      // significa que termina al día siguiente
-      if (endTime <= startTime) {
-        endTime.setDate(endTime.getDate() + 1);
-      }
+      if (!userProfile) throw new Error('Perfil no encontrado');
 
+      // Combinar fecha y hora
+      const startDateTime = new Date(selectedDate);
+      const [hours, minutes] = startTime.split(':');
+      startDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+      const formattedDateTime = startDateTime.toISOString();
+
+      const newShift: Partial<ShiftData> = {
+        user_id: userMap[selectedUser],
+        organization_id: userProfile.organization_id,
+        start_time: formattedDateTime,
+        status: 'scheduled'
+      };
+
+      const { error: insertError } = await supabase
+        .from('work_shifts')
+        .insert([newShift]);
+
+      if (insertError) throw insertError;
+
+      toast.success('Turno creado exitosamente');
+      setShowAddUserModal(false);
+      setSelectedUser('');
+      setSelectedDate('');
+      setStartTime('');
+      await loadCurrentShifts();
+
+    } catch (error: any) {
+      console.error('Error al crear turno:', error);
+      toast.error(error.message || 'Error al crear el turno');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  // Función para cargar los turnos actuales
+  const loadCurrentShifts = async () => {
+    try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No autorizado');
 
@@ -539,36 +607,106 @@ export default function RRHHPage() {
 
       if (!userData?.organization_id) throw new Error('Usuario no tiene organización asignada');
 
-      const shiftData = {
-        organization_id: userData.organization_id,
-        sala_id: selectedSala,
-        area_id: selectedArea,
-        user_id: selectedUser,
-        start_time: startTime.toISOString(),
-        end_time: endTime.toISOString(),
-        status: 'scheduled'
-      };
-
-      console.log('Datos del turno a crear:', shiftData);
-
-      const { error: insertError } = await supabase
+      const { data: shiftsData, error } = await supabase
         .from('work_shifts')
-        .insert([shiftData]);
+        .select(`
+          id,
+          user_id,
+          users (
+            first_name,
+            last_name
+          ),
+          areas (
+            name
+          ),
+          start_time,
+          end_time
+        `)
+        .eq('organization_id', userData.organization_id)
+        .eq('status', 'scheduled') as { data: ShiftData[] | null, error: any };
 
-      if (insertError) throw insertError;
+      if (error) throw error;
 
-      toast.success('Turno creado exitosamente');
-      setShowShiftModal(false);
-      
-      // Resetear los estados
-      setSelectedUser('');
-      setSelectedSala(null);
-      setSelectedArea('');
-      setSelectedTurno('');
-      
+      const formattedShifts = (shiftsData || []).map(shift => ({
+        user_id: shift.user_id,
+        user_name: `${shift.users[0]?.first_name} ${shift.users[0]?.last_name}`,
+        shift: determineShift(shift.start_time, shift.end_time),
+        area: shift.areas[0]?.name || 'Sin área'
+      }));
+
+      setCurrentShifts(formattedShifts);
     } catch (error) {
-      console.error('Error al crear turno:', error);
-      toast.error('Error al crear el turno');
+      console.error('Error al cargar turnos:', error);
+      toast.error('Error al cargar los turnos actuales');
+    }
+  };
+
+  // Función para determinar el turno basado en las horas
+  const determineShift = (startTime: string, endTime: string) => {
+    const start = new Date(startTime).getHours();
+    if (start >= 6 && start < 14) return 'mañana';
+    if (start >= 14 && start < 22) return 'tarde';
+    return 'noche';
+  };
+
+  // Función para mover usuario de turno
+  const handleMoveUser = async () => {
+    try {
+      if (!userToMove || !currentShift || !targetShift) {
+        toast.error('Por favor complete todos los campos');
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
+
+      // Obtener el turno actual del usuario
+      const { data: currentShiftData, error: currentShiftError } = await supabase
+        .from('work_shifts')
+        .select('*')
+        .eq('user_id', userToMove)
+        .eq('status', 'scheduled')
+        .single();
+
+      if (currentShiftError) throw currentShiftError;
+
+      // Obtener los horarios del nuevo turno
+      const newTurno = TURNOS.find(t => t.id === targetShift);
+      if (!newTurno) throw new Error('Turno inválido');
+
+      const today = new Date();
+      const startTime = new Date(today);
+      const [startHour, startMinute] = newTurno.inicio.split(':');
+      startTime.setHours(parseInt(startHour), parseInt(startMinute), 0);
+
+      const endTime = new Date(today);
+      const [endHour, endMinute] = newTurno.fin.split(':');
+      endTime.setHours(parseInt(endHour), parseInt(endMinute), 0);
+
+      if (endTime <= startTime) {
+        endTime.setDate(endTime.getDate() + 1);
+      }
+
+      // Actualizar el turno
+      const { error: updateError } = await supabase
+        .from('work_shifts')
+        .update({
+          start_time: startTime.toISOString(),
+          end_time: endTime.toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', currentShiftData.id);
+
+      if (updateError) throw updateError;
+
+      toast.success('Usuario movido de turno exitosamente');
+      loadCurrentShifts();
+      setUserToMove('');
+      setCurrentShift('');
+      setTargetShift('');
+    } catch (error) {
+      console.error('Error al mover usuario:', error);
+      toast.error('Error al mover el usuario de turno');
     }
   };
 
@@ -895,75 +1033,87 @@ export default function RRHHPage() {
 
       {/* Modal de Gestión de Turnos */}
       {showShiftModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[9999]">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Crear Nuevo Turno</h2>
-            
-            <div className="space-y-4">
-              {/* Usuario */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Usuario</label>
-                <select
-                  value={selectedUser}
-                  onChange={(e) => setSelectedUser(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                >
-                  <option value="">Seleccione un usuario</option>
-                  {employees.map((employee) => (
-                    <option key={employee.id} value={employee.id}>
-                      {`${employee.first_name} ${employee.last_name}`}
-                    </option>
-                  ))}
-                </select>
+        <Dialog 
+          open={showShiftModal} 
+          onClose={() => setShowShiftModal(false)}
+          className="relative z-50"
+        >
+          <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+          
+          <div className="fixed inset-0 flex items-center justify-center p-4">
+            <Dialog.Panel className="mx-auto max-w-sm rounded-lg bg-gradient-to-r from-blue-50 to-white p-6 shadow-xl">
+              <Dialog.Title className="text-lg font-medium text-blue-900 mb-4">
+                Gestionar Turnos
+              </Dialog.Title>
+
+              <div className="space-y-4">
+                {/* Selector de Usuario */}
+                <div>
+                  <label className="block text-sm font-medium text-blue-700 mb-1">
+                    Usuario
+                  </label>
+                  <select
+                    className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    value={selectedUser}
+                    onChange={(e) => setSelectedUser(e.target.value)}
+                  >
+                    <option value="">Seleccionar Usuario</option>
+                    {employees.map((usuario, index) => (
+                      <option key={index} value={usuario.id}>{`${usuario.first_name} ${usuario.last_name}`}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Selector de Turno */}
+                <div>
+                  <label className="block text-sm font-medium text-blue-700 mb-1">
+                    Turno
+                  </label>
+                  <select
+                    className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    value={selectedTurno}
+                    onChange={(e) => setSelectedTurno(e.target.value)}
+                  >
+                    <option value="">Seleccionar Turno</option>
+                    <option value="morning">Turno A (06:00 - 14:00)</option>
+                    <option value="afternoon">Turno B (14:00 - 22:00)</option>
+                    <option value="night">Turno C (22:00 - 06:00)</option>
+                  </select>
+                </div>
+
+                {/* Fecha de Inicio */}
+                <div>
+                  <label className="block text-sm font-medium text-blue-700 mb-1">
+                    Fecha de Inicio
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                  />
+                </div>
+
+                {/* Botones */}
+                <div className="flex justify-end gap-2 mt-6">
+                  <button
+                    onClick={() => setShowShiftModal(false)}
+                    className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleCreateShift}
+                    className="px-4 py-2 text-sm font-medium text-white bg-[#4263eb] rounded-lg hover:bg-[#364fc7]"
+                    disabled={isCreating}
+                  >
+                    {isCreating ? 'Creando...' : 'Crear Turno'}
+                  </button>
+                </div>
               </div>
-
-              {/* Sala y Área */}
-              <SalaAreaSelector
-                onSalaChange={(sala) => setSelectedSala(sala?.id || null)}
-                onAreaChange={(area) => setSelectedArea(area?.id || '')}
-                className="space-y-4"
-              />
-
-              {/* Turno */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Turno</label>
-                <select
-                  value={selectedTurno}
-                  onChange={(e) => setSelectedTurno(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                >
-                  <option value="">Seleccione un turno</option>
-                  {TURNOS.map((turno) => (
-                    <option key={turno.id} value={turno.id}>
-                      {`${turno.nombre} (${turno.inicio} - ${turno.fin})`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-end space-x-3">
-              <button
-                onClick={() => {
-                  setShowShiftModal(false);
-                  setSelectedUser('');
-                  setSelectedSala(null);
-                  setSelectedArea('');
-                  setSelectedTurno('');
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleCreateShift}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-              >
-                Crear Turno
-              </button>
-            </div>
+            </Dialog.Panel>
           </div>
-        </div>
+        </Dialog>
       )}
 
       <style jsx>{`

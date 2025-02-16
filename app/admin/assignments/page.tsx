@@ -602,10 +602,9 @@ export default function AssignmentsPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="bg-[#4263eb] -mx-6 -mt-6 px-6 py-4">
-        <h1 className="text-xl font-bold text-white">Gestión de Asignaciones</h1>
-        <p className="text-sm text-blue-100">Administra las asignaciones del personal</p>
+      <div className="px-6 -mx-6 py-6">
+        <h1 className="text-2xl font-bold text-gray-800">Gestión de Asignaciones</h1>
+        <p className="text-sm text-gray-600 mt-1">Administra las asignaciones del personal</p>
       </div>
 
       <div className="grid grid-cols-2 gap-8">
