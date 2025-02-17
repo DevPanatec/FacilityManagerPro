@@ -162,26 +162,26 @@ export default function Navbar({ role = '', isEnterprise = false, organizationNa
 
   return (
     <header className="bg-gradient-to-r from-blue-700 to-blue-500 text-white shadow-lg">
-      <div className="max-w-7xl mx-auto flex items-center justify-between py-1 px-4">
+      <div className="max-w-7xl mx-auto flex items-center justify-between py-4 px-4">
         {/* Logo y nombre */}
         <div className="flex items-center space-x-3">
-          {isEnterprise ? (
-            <h1 className="text-lg font-bold tracking-tight whitespace-nowrap">
-              {organizationName || 'Mi Organización'}
+          {effectiveRole === 'enterprise' ? (
+            <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">
+              San Miguel Arcángel
             </h1>
           ) : (
             <>
-              <div className="p-1 bg-white rounded-lg shadow-md">
+              <div className="p-4 bg-white rounded-xl shadow-lg">
                 <Image
                   src="/logo.jpg"
                   alt="Logo Marpes"
-                  width={32}
-                  height={32}
+                  width={256}
+                  height={256}
                   className="object-contain"
                   priority
                 />
               </div>
-              <h1 className="text-lg font-bold tracking-tight whitespace-nowrap">
+              <h1 className="text-3xl font-bold tracking-tight whitespace-nowrap ml-6">
                 Hombres de Blanco
               </h1>
             </>
@@ -190,14 +190,14 @@ export default function Navbar({ role = '', isEnterprise = false, organizationNa
 
         {/* Navegación principal */}
         <nav className="hidden lg:flex flex-1 justify-center px-10">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-4">
             {navItems && navItems.length > 0 ? (
               navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={`
-                    flex items-center space-x-2 px-3 py-1.5 rounded-lg text-sm font-medium
+                    flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium
                     transition-all duration-200 group
                     ${pathname === item.href 
                       ? 'bg-blue-800 text-white' 
@@ -206,7 +206,7 @@ export default function Navbar({ role = '', isEnterprise = false, organizationNa
                   `}
                 >
                   <svg 
-                    className={`w-4 h-4 ${pathname === item.href ? 'text-white' : 'text-blue-200 group-hover:text-white'}`}
+                    className={`w-5 h-5 ${pathname === item.href ? 'text-white' : 'text-blue-200 group-hover:text-white'}`}
                     fill="none" 
                     stroke="currentColor" 
                     viewBox="0 0 24 24"
@@ -231,12 +231,12 @@ export default function Navbar({ role = '', isEnterprise = false, organizationNa
         <div className="flex items-center">
           <button 
             onClick={handleLogout}
-            className="flex items-center space-x-2 px-3 py-1.5 rounded-lg 
+            className="flex items-center space-x-2 px-4 py-2 rounded-lg 
                       text-blue-100 hover:bg-blue-800/50 hover:text-white
                       transition-all duration-200"
             title="Cerrar Sesión"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path 
                 strokeLinecap="round" 
                 strokeLinejoin="round" 

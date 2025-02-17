@@ -484,15 +484,27 @@ export default function EnterpriseOverviewPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Gráfico de Dona */}
-              <div className="h-64">
+              <div className="h-64 bg-gray-50 rounded-lg p-4">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={areas.map(area => ({
-                        name: area.name,
-                        value: staff.filter(s => s.area_name === area.name).length || 1,
-                        color: getSalaColor(area.name)
-                      }))}
+                      data={[
+                        {
+                          name: 'Turno Mañana',
+                          value: shifts.filter(s => s.shift_type === 'morning' && s.status === 'in_progress').length || 1,
+                          color: '#EAB308' // yellow-500
+                        },
+                        {
+                          name: 'Turno Tarde',
+                          value: shifts.filter(s => s.shift_type === 'afternoon' && s.status === 'in_progress').length || 1,
+                          color: '#F97316' // orange-500
+                        },
+                        {
+                          name: 'Turno Noche',
+                          value: shifts.filter(s => s.shift_type === 'night' && s.status === 'in_progress').length || 1,
+                          color: '#6366F1' // indigo-500
+                        }
+                      ]}
                       cx="50%"
                       cy="50%"
                       innerRadius={60}
@@ -500,11 +512,36 @@ export default function EnterpriseOverviewPage() {
                       paddingAngle={5}
                       dataKey="value"
                     >
-                      {areas.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={getSalaColor(entry.name)} />
+                      {[
+                        '#EAB308', // yellow-500 para mañana
+                        '#F97316', // orange-500 para tarde
+                        '#6366F1'  // indigo-500 para noche
+                      ].map((color, index) => (
+                        <Cell key={`cell-${index}`} fill={color} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                      }}
+                      itemStyle={{ color: '#374151' }}
+                    />
+                    <Legend 
+                      verticalAlign="middle" 
+                      align="right"
+                      layout="vertical"
+                      formatter={(value, entry: any) => (
+                        <span style={{ 
+                          color: entry.color,
+                          fontWeight: 500
+                        }}>
+                          {value}
+                        </span>
+                      )}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>

@@ -16,6 +16,7 @@ export default function EnterpriseLayout({
   const router = useRouter()
   const pathname = usePathname()
   const [isLoading, setIsLoading] = useState(true)
+  const [organizationName, setOrganizationName] = useState('San Miguel Arcángel')
   const supabase = createClientComponentClient()
 
   useEffect(() => {
@@ -83,7 +84,11 @@ export default function EnterpriseLayout({
   return (
     <ChatProvider>
       <div className="min-h-screen bg-gray-100">
-        <Navbar />
+        <Navbar 
+          role="enterprise"
+          isEnterprise={true}
+          organizationName={organizationName}
+        />
         <main className="container mx-auto px-4 py-8">
           {children}
         </main>
