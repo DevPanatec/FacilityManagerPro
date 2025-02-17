@@ -201,27 +201,33 @@ export default function CurrentTaskPage() {
       setStartTime(mainTask.start_time || '');
 
       // Obtener las tareas del área
-      if (mainTask.area_id && mainTask.sala_id) {
+      if (mainTask.area_id) {  // Solo necesitamos el area_id
         const { data: areaTasks, error: tasksError } = await supabase
           .from('tasks')
           .select(`
-            *,
+            id,
+            title,
+            description,
+            status,
+            priority,
+            assigned_to,
+            created_at,
+            due_date,
+            area_id,
             assignee:users!tasks_assigned_to_fkey (
               id,
               first_name,
               last_name
             )
           `)
-          .eq('organization_id', userProfile.organization_id)
-          .eq('area_id', mainTask.area_id)
-          .eq('sala_id', mainTask.sala_id)
-          .eq('status', 'pending')
-          .is('parent_task_id', null)
+          .eq('area_id', mainTask.area_id)  // Solo filtramos por área
+          .order('status', { ascending: true })
           .order('created_at', { ascending: true });
 
         if (tasksError) {
           console.error('Error al obtener tareas del área:', tasksError);
         } else if (areaTasks) {
+          console.log('Tareas encontradas para el área:', areaTasks.length);
           setAreaTasks(areaTasks.map(task => ({
             id: task.id,
             title: task.title || 'Sin título',
@@ -232,8 +238,6 @@ export default function CurrentTaskPage() {
             created_at: task.created_at,
             due_date: task.due_date,
             area_id: task.area_id,
-            organization_id: task.organization_id,
-            estimated_hours: task.estimated_hours || 0.5,
             assignee: task.assignee ? {
               first_name: task.assignee.first_name,
               last_name: task.assignee.last_name
@@ -655,48 +659,64 @@ export default function CurrentTaskPage() {
                   areaTasks.map((task, index) => (
                     <div 
                       key={task.id} 
-                      style={{ backgroundColor: task.status === 'completed' ? '#f0fdf4' : '#ffffff', borderColor: '#e5e7eb' }} 
-                      className="flex items-start space-x-2 p-4 rounded-lg border shadow-sm hover:shadow-md transition-all duration-200"
+                      className={`flex items-start space-x-2 p-4 rounded-lg border shadow-sm hover:shadow-md transition-all duration-200 ${
+                        task.status === 'completed' ? 'bg-green-50 border-green-100' :
+                        task.status === 'in_progress' ? 'bg-blue-50 border-blue-100' :
+                        'bg-white border-gray-100'
+                      }`}
                     >
                       <div 
-                        style={{ 
-                          backgroundColor: task.status === 'completed' ? '#dcfce7' : '#dbeafe', 
-                          color: task.status === 'completed' ? '#16a34a' : '#2563eb' 
-                        }} 
-                        className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm"
+                        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${
+                          task.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}
                       >
                         {index + 1}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-1">
-                            <h3 
-                              style={{ 
-                                color: task.status === 'completed' ? '#16a34a' : '#111827'
-                              }} 
-                              className="font-medium text-base"
-                            >
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h3 className={`font-medium text-base ${
+                              task.status === 'completed' ? 'text-green-700' :
+                              task.status === 'in_progress' ? 'text-blue-700' :
+                              'text-gray-700'
+                            }`}>
                               {task.title}
                             </h3>
-                            <p 
-                              style={{ 
-                                color: task.status === 'completed' ? '#4ade80' : '#4b5563'
-                              }} 
-                              className="text-sm mt-1"
-                            >
+                            <p className={`text-sm mt-1 ${
+                              task.status === 'completed' ? 'text-green-600' :
+                              task.status === 'in_progress' ? 'text-blue-600' :
+                              'text-gray-600'
+                            }`}>
                               {task.description}
                             </p>
                           </div>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            task.status === 'completed' ? 'bg-green-100 text-green-700' :
+                            task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {task.status === 'completed' ? 'Completada' :
+                             task.status === 'in_progress' ? 'En Progreso' :
+                             'Pendiente'}
+                          </span>
                         </div>
+                        {task.assignee && (
+                          <div className="mt-2 flex items-center text-sm text-gray-500">
+                            <FaUserCircle className="w-4 h-4 mr-1" />
+                            {task.assignee.first_name} {task.assignee.last_name}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))
                 ) : (
                   <div className="text-center py-6">
-                    <div style={{ backgroundColor: '#f3f4f6' }} className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-3">
-                      <FaListUl style={{ color: '#9ca3af' }} className="w-6 h-6" />
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-3 bg-gray-100">
+                      <FaListUl className="w-6 h-6 text-gray-400" />
                     </div>
-                    <p style={{ color: '#6b7280' }} className="text-sm">No hay tareas disponibles para esta área</p>
+                    <p className="text-sm text-gray-500">No hay tareas disponibles para esta área</p>
                   </div>
                 )}
               </div>
