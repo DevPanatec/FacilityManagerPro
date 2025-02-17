@@ -60,6 +60,7 @@ export default function CurrentTaskPage() {
   });
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [taskChecklist, setTaskChecklist] = useState<{ [key: string]: boolean }>({});
 
   useEffect(() => {
     setMounted(true);
@@ -95,6 +96,14 @@ export default function CurrentTaskPage() {
 
     return () => clearInterval(timer);
   }, [startTime, mounted]);
+
+  useEffect(() => {
+    if (areaTasks.length > 0) {
+      const checkedCount = Object.values(taskChecklist).filter(Boolean).length;
+      const newProgress = Math.round((checkedCount / areaTasks.length) * 100);
+      setProgress(newProgress);
+    }
+  }, [taskChecklist, areaTasks]);
 
   const fetchCurrentTask = async () => {
     try {
@@ -214,6 +223,7 @@ export default function CurrentTaskPage() {
             created_at,
             due_date,
             area_id,
+            organization_id,
             assignee:users!tasks_assigned_to_fkey (
               id,
               first_name,
@@ -238,9 +248,10 @@ export default function CurrentTaskPage() {
             created_at: task.created_at,
             due_date: task.due_date,
             area_id: task.area_id,
-            assignee: task.assignee ? {
-              first_name: task.assignee.first_name,
-              last_name: task.assignee.last_name
+            organization_id: task.organization_id,
+            assignee: task.assignee && Array.isArray(task.assignee) && task.assignee[0] ? {
+              first_name: task.assignee[0].first_name,
+              last_name: task.assignee[0].last_name
             } : undefined
           })));
         }
@@ -574,6 +585,16 @@ export default function CurrentTaskPage() {
     }
   };
 
+  const handleToggleTask = (taskId: string) => {
+    setTaskChecklist(prev => {
+      const newChecklist = {
+        ...prev,
+        [taskId]: !prev[taskId]
+      };
+      return newChecklist;
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -665,6 +686,12 @@ export default function CurrentTaskPage() {
                         'bg-white border-gray-100'
                       }`}
                     >
+                      <input
+                        type="checkbox"
+                        checked={taskChecklist[task.id] || false}
+                        onChange={() => handleToggleTask(task.id)}
+                        className="mt-1 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
                       <div 
                         className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${
                           task.status === 'completed' ? 'bg-green-100 text-green-700' :
