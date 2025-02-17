@@ -126,9 +126,9 @@ export default function RRHHPage() {
 
   // Definir los turnos disponibles
   const TURNOS = [
-    { id: 'mañana', nombre: 'Mañana', inicio: '06:00', fin: '14:00' },
-    { id: 'tarde', nombre: 'Tarde', inicio: '14:00', fin: '22:00' },
-    { id: 'noche', nombre: 'Noche', inicio: '22:00', fin: '06:00' }
+    { id: 'morning', nombre: 'Mañana', inicio: '06:00', fin: '14:00' },
+    { id: 'afternoon', nombre: 'Tarde', inicio: '14:00', fin: '22:00' },
+    { id: 'night', nombre: 'Noche', inicio: '22:00', fin: '06:00' }
   ];
 
   const supabase = createClientComponentClient();
@@ -544,8 +544,8 @@ export default function RRHHPage() {
   // Estados para el modal de gestión de turnos
   const [selectedDate, setSelectedDate] = useState('');
   const [startTime, setStartTime] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   // Efecto para cargar los turnos cuando se abre el modal
   useEffect(() => {
@@ -556,7 +556,7 @@ export default function RRHHPage() {
 
   const handleCreateShift = async () => {
     try {
-      if (!selectedUser || !selectedDate || !startTime) {
+      if (!selectedUser || !selectedDate || !selectedTurno) {
         toast.error('Por favor complete todos los campos requeridos');
         return;
       }
@@ -574,18 +574,47 @@ export default function RRHHPage() {
 
       if (!userProfile) throw new Error('Perfil no encontrado');
 
-      // Combinar fecha y hora
+      // Obtener las horas de inicio y fin según el turno seleccionado
+      let startHour, endHour;
+      switch (selectedTurno) {
+        case 'morning':
+          startHour = '06:00';
+          endHour = '14:00';
+          break;
+        case 'afternoon':
+          startHour = '14:00';
+          endHour = '22:00';
+          break;
+        case 'night':
+          startHour = '22:00';
+          endHour = '06:00';
+          break;
+        default:
+          throw new Error('Turno no válido');
+      }
+
+      // Combinar fecha con hora de inicio
       const startDateTime = new Date(selectedDate);
-      const [hours, minutes] = startTime.split(':');
-      startDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      const [startH, startM] = startHour.split(':');
+      startDateTime.setHours(parseInt(startH), parseInt(startM), 0, 0);
 
-      const formattedDateTime = startDateTime.toISOString();
+      // Combinar fecha con hora de fin
+      const endDateTime = new Date(selectedDate);
+      const [endH, endM] = endHour.split(':');
+      endDateTime.setHours(parseInt(endH), parseInt(endM), 0, 0);
 
-      const newShift: Partial<ShiftData> = {
-        user_id: selectedUser, // Usar selectedUser directamente
+      // Si es turno noche, la fecha de fin debe ser el día siguiente
+      if (selectedTurno === 'night') {
+        endDateTime.setDate(endDateTime.getDate() + 1);
+      }
+
+      const newShift = {
+        user_id: selectedUser,
         organization_id: userProfile.organization_id,
-        start_time: formattedDateTime,
-        status: 'scheduled'
+        start_time: startDateTime.toISOString(),
+        end_time: endDateTime.toISOString(),
+        status: 'scheduled',
+        shift_type: selectedTurno
       };
 
       const { error: insertError } = await supabase
@@ -595,10 +624,10 @@ export default function RRHHPage() {
       if (insertError) throw insertError;
 
       toast.success('Turno creado exitosamente');
-      setShowAddUserModal(false);
+      setShowShiftModal(false);
       setSelectedUser('');
       setSelectedDate('');
-      setStartTime('');
+      setSelectedTurno('');
       await loadCurrentShifts();
 
     } catch (error: any) {
@@ -715,15 +744,15 @@ export default function RRHHPage() {
       let endDateTime = new Date(today);
 
       switch (targetShift) {
-        case 'mañana':
+        case 'morning':
           startDateTime.setHours(6, 0, 0);
           endDateTime.setHours(14, 0, 0);
           break;
-        case 'tarde':
+        case 'afternoon':
           startDateTime.setHours(14, 0, 0);
           endDateTime.setHours(22, 0, 0);
           break;
-        case 'noche':
+        case 'night':
           startDateTime.setHours(22, 0, 0);
           endDateTime.setHours(6, 0, 0);
           endDateTime.setDate(endDateTime.getDate() + 1); // Añadir un día para el turno nocturno
@@ -738,7 +767,7 @@ export default function RRHHPage() {
         const { error: updateError } = await supabase
           .from('work_shifts')
           .update({
-            shift_type: targetShift === 'mañana' ? 'morning' : targetShift === 'tarde' ? 'afternoon' : 'night',
+            shift_type: targetShift,
             start_time: startDateTime.toISOString(),
             end_time: endDateTime.toISOString(),
             updated_at: new Date().toISOString()
@@ -753,7 +782,7 @@ export default function RRHHPage() {
           .insert([{
             organization_id: userProfile.organization_id,
             user_id: userToMove,
-            shift_type: targetShift === 'mañana' ? 'morning' : targetShift === 'tarde' ? 'afternoon' : 'night',
+            shift_type: targetShift,
             start_time: startDateTime.toISOString(),
             end_time: endDateTime.toISOString(),
             status: 'scheduled'
@@ -766,6 +795,7 @@ export default function RRHHPage() {
       await loadCurrentShifts();
       setUserToMove('');
       setTargetShift('');
+      setShowShiftModal(false);
     } catch (error) {
       console.error('Error al mover usuario:', error);
       toast.error('Error al mover el usuario de turno');
@@ -1255,6 +1285,7 @@ export default function RRHHPage() {
                       className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
                     />
                   </div>
 
@@ -1269,7 +1300,7 @@ export default function RRHHPage() {
                     <button
                       onClick={handleCreateShift}
                       className="px-4 py-2 text-sm font-medium text-white bg-[#4263eb] rounded-lg hover:bg-[#364fc7]"
-                      disabled={isCreating}
+                      disabled={isCreating || !selectedUser || !selectedDate || !selectedTurno}
                     >
                       {isCreating ? 'Creando...' : 'Crear Turno'}
                     </button>
@@ -1331,6 +1362,7 @@ export default function RRHHPage() {
                     <button
                       onClick={handleMoveUser}
                       className="px-4 py-2 text-sm font-medium text-white bg-[#4263eb] rounded-lg hover:bg-[#364fc7]"
+                      disabled={!userToMove || !targetShift}
                     >
                       Cambiar Turno
                     </button>
