@@ -30,20 +30,35 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
   try {
     // Función para cargar una imagen y convertirla a base64
     const loadImage = async (url: string): Promise<string> => {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL('image/png'));
-        };
-        img.onerror = () => reject(new Error('Error loading image'));
-        img.src = url;
-      });
+      if (!url) return '';
+      
+      try {
+        // Si la URL ya es base64, retornarla directamente
+        if (url.startsWith('data:image')) {
+          return url;
+        }
+
+        // Si es una URL de Supabase o una URL pública
+        const response = await fetch(url);
+        const blob = await response.blob();
+        
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64data = reader.result as string;
+            console.log('Imagen cargada exitosamente:', url.substring(0, 50));
+            resolve(base64data);
+          };
+          reader.onerror = () => {
+            console.error('Error al leer la imagen:', url.substring(0, 50));
+            reject(new Error('Error al leer la imagen'));
+          };
+          reader.readAsDataURL(blob);
+        });
+      } catch (error) {
+        console.error('Error al cargar la imagen:', url.substring(0, 50), error);
+        return '';
+      }
     };
 
     // Cargar logos
@@ -75,10 +90,47 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
         .join(' ');
     };
 
-    // Parsear la descripción si es un string JSON
     let parsedDescription = '';
     let tasks: any[] = [];
     let images: string[] = [];
+    let imagenesReporte = {
+      inicial: '',
+      durante: '',
+      final: ''
+    };
+
+    // Cargar las imágenes del reporte primero
+    try {
+      console.log('Cargando imágenes del reporte...');
+      console.log('URLs de imágenes:', {
+        inicial: reportData.imagenes.inicial,
+        durante: reportData.imagenes.durante,
+        final: reportData.imagenes.final
+      });
+      
+      // Cargar las imágenes del reporte de forma paralela
+      const [inicial, durante, final] = await Promise.all([
+        reportData.imagenes.inicial ? loadImage(reportData.imagenes.inicial) : Promise.resolve(''),
+        reportData.imagenes.durante ? loadImage(reportData.imagenes.durante) : Promise.resolve(''),
+        reportData.imagenes.final ? loadImage(reportData.imagenes.final) : Promise.resolve('')
+      ]);
+
+      imagenesReporte = {
+        inicial,
+        durante,
+        final
+      };
+
+      console.log('Estado de carga de imágenes:', {
+        inicial: inicial ? 'Cargada' : 'No disponible',
+        durante: durante ? 'Cargada' : 'No disponible',
+        final: final ? 'Cargada' : 'No disponible'
+      });
+    } catch (error) {
+      console.error('Error al cargar las imágenes del reporte:', error);
+    }
+
+    // Parsear la descripción si es un string JSON
     try {
       if (reportData.description) {
         const descData = JSON.parse(reportData.description);
@@ -101,9 +153,23 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
           parsedDescription = details.join('\n');
         }
 
-        // Guardar las imágenes del JSON
+        // Guardar las imágenes del JSON y cargarlas
         if (descData.images && Array.isArray(descData.images)) {
-          images = descData.images;
+          // Cargar las imágenes del JSON
+          const loadedImages = await Promise.all(
+            descData.images.map(async (imageUrl: string) => {
+              try {
+                const base64Image = await loadImage(imageUrl);
+                return base64Image;
+              } catch (error) {
+                console.error('Error al cargar imagen:', error);
+                return '';
+              }
+            })
+          );
+          // Filtrar las imágenes que se cargaron correctamente
+          images = loadedImages.filter(img => img !== '');
+          console.log(`Se cargaron ${images.length} imágenes del JSON`);
         }
       }
     } catch (e) {
@@ -312,34 +378,33 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
             <div class="page-break"></div>
             <div class="section-title">Imágenes Adjuntas</div>
             <div class="images-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10mm;">
-              ${images.map((imageUrl, index) => `
+              ${images.map((imageBase64, index) => `
                 <div class="image-container">
-                  <img src="${imageUrl}" alt="Imagen ${index + 1}" class="report-image" style="width: 100%; height: 60mm; object-fit: cover;" />
+                  <img src="${imageBase64}" alt="Imagen ${index + 1}" class="report-image" style="width: 100%; height: 60mm; object-fit: cover;" />
                   <div class="image-caption">Imagen ${index + 1}</div>
                 </div>
               `).join('')}
             </div>
             ` : ''}
 
-            ${(reportData.imagenes.inicial || reportData.imagenes.durante || reportData.imagenes.final) ? `
-            <div class="page-break"></div>
+            ${(imagenesReporte.inicial || imagenesReporte.durante || imagenesReporte.final) ? `
             <div class="section-title">Evidencia Fotográfica</div>
             <div class="images-grid">
-              ${reportData.imagenes.inicial ? `
+              ${imagenesReporte.inicial ? `
               <div class="image-container">
-                <img src="${reportData.imagenes.inicial}" alt="Imagen inicial" class="report-image" style="width: 100%; height: 60mm; object-fit: cover;" />
+                <img src="${imagenesReporte.inicial}" alt="Imagen inicial" class="report-image" style="width: 100%; height: 60mm; object-fit: cover;" />
                 <div class="image-caption">Antes</div>
               </div>
               ` : ''}
-              ${reportData.imagenes.durante ? `
+              ${imagenesReporte.durante ? `
               <div class="image-container">
-                <img src="${reportData.imagenes.durante}" alt="Imagen durante" class="report-image" style="width: 100%; height: 60mm; object-fit: cover;" />
+                <img src="${imagenesReporte.durante}" alt="Imagen durante" class="report-image" style="width: 100%; height: 60mm; object-fit: cover;" />
                 <div class="image-caption">Durante</div>
               </div>
               ` : ''}
-              ${reportData.imagenes.final ? `
+              ${imagenesReporte.final ? `
               <div class="image-container">
-                <img src="${reportData.imagenes.final}" alt="Imagen final" class="report-image" style="width: 100%; height: 60mm; object-fit: cover;" />
+                <img src="${imagenesReporte.final}" alt="Imagen final" class="report-image" style="width: 100%; height: 60mm; object-fit: cover;" />
                 <div class="image-caption">Después</div>
               </div>
               ` : ''}
@@ -372,31 +437,6 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
       format: 'a4',
       compress: true
     });
-
-    // Cargar y procesar las imágenes primero
-    if (reportData.imagenes.inicial || reportData.imagenes.durante || reportData.imagenes.final) {
-      try {
-        // Cargar todas las imágenes primero
-        const imagePromises = [];
-        if (reportData.imagenes.inicial) {
-          imagePromises.push(loadImage(reportData.imagenes.inicial));
-        }
-        if (reportData.imagenes.durante) {
-          imagePromises.push(loadImage(reportData.imagenes.durante));
-        }
-        if (reportData.imagenes.final) {
-          imagePromises.push(loadImage(reportData.imagenes.final));
-        }
-
-        // Esperar a que todas las imágenes se carguen
-        await Promise.all(imagePromises);
-
-        // Esperar un momento adicional para asegurar que las imágenes se rendericen
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } catch (error) {
-        console.error('Error al cargar las imágenes:', error);
-      }
-    }
 
     // Procesar cada página
     for (let i = 0; i < pages.length; i++) {

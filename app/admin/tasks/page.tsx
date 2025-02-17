@@ -127,8 +127,6 @@ export default function TasksPage() {
           )
         `)
         .eq('organization_id', userProfile.organization_id)
-        .eq('created_by', user.id)
-        .eq('type', 'assignment')
         .order('created_at', { ascending: false })
 
       if (tasksError) {
@@ -252,7 +250,11 @@ export default function TasksPage() {
             last_name
           ),
           area:areas!tasks_area_id_fkey (
-            name
+            name,
+            sala:salas (
+              id,
+              name
+            )
           )
         `)
         .single();
@@ -272,7 +274,11 @@ export default function TasksPage() {
           last_name: updatedTask.assignee[0].last_name
         } : undefined,
         area: updatedTask.area?.[0] ? {
-          name: updatedTask.area[0].name
+          name: updatedTask.area[0].name,
+          sala: updatedTask.area[0].sala?.[0] ? {
+            id: updatedTask.area[0].sala[0].id,
+            name: updatedTask.area[0].sala[0].name
+          } : undefined
         } : undefined
       };
 
@@ -291,10 +297,7 @@ export default function TasksPage() {
       toast.dismiss(toastId);
       toast.success('Tarea iniciada con éxito');
 
-      // Esperar un momento para asegurar que la actualización se complete
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Redirigir a la página de tarea actual
+      // Redirigir inmediatamente a la página de tarea actual
       router.push('/admin/tasks/current');
 
     } catch (error: any) {
@@ -436,38 +439,6 @@ export default function TasksPage() {
     } catch (error) {
       console.error('Error al eliminar la tarea:', error);
       toast.error('Error al eliminar la tarea');
-    }
-  };
-
-  const handleDeleteAllTasks = async () => {
-    try {
-      if (!confirm('¿Estás seguro de que deseas eliminar todas las tareas pendientes? Esta acción no se puede deshacer.')) {
-        return;
-      }
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No autorizado');
-
-      const { error } = await supabase
-        .from('tasks')
-        .delete()
-        .eq('status', 'pending');
-
-      if (error) throw error;
-
-      // Actualizar el estado local
-      setTasks(prevTasks => prevTasks.filter(task => task.status !== 'pending'));
-      
-      // Actualizar estadísticas
-      setTaskStats(prev => ({
-        ...prev,
-        pending: 0
-      }));
-
-      toast.success('Todas las tareas pendientes han sido eliminadas');
-    } catch (error) {
-      console.error('Error al eliminar las tareas:', error);
-      toast.error('Error al eliminar las tareas');
     }
   };
 
@@ -626,15 +597,6 @@ export default function TasksPage() {
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-4">
           <h1 className="text-xl font-semibold text-gray-800">Mis Asignaciones</h1>
-          <button
-            onClick={handleDeleteAllTasks}
-            className="px-4 py-2 text-sm font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors duration-200 flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-            Eliminar todas
-          </button>
         </div>
         <button className="p-2 hover:bg-gray-100 rounded-full">
           <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

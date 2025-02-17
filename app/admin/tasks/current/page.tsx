@@ -121,32 +121,21 @@ export default function CurrentTaskPage() {
       const { data: mainTask, error: mainTaskError } = await supabase
         .from('tasks')
         .select(`
-          id,
-          title,
-          description,
-          status,
-          priority,
-          assigned_to,
-          due_date,
-          created_at,
-          start_time,
-          end_time,
-          area_id,
-          sala_id,
-          type,
-          organization_id,
-          assignee:users!tasks_assigned_to_fkey(
+          *,
+          assignee:users!tasks_assigned_to_fkey (
+            id,
             first_name,
             last_name
           ),
-          area:areas!inner(
+          area:areas!tasks_area_id_fkey (
             id,
             name,
-            status
-          ),
-          sala:salas!inner(
-            id,
-            nombre
+            description,
+            status,
+            sala:salas!areas_sala_id_fkey (
+              id,
+              nombre
+            )
           )
         `)
         .eq('assigned_to', user.id)
@@ -177,105 +166,81 @@ export default function CurrentTaskPage() {
         return;
       }
 
+      console.log('Tarea principal encontrada:', mainTask);
+
       // Formatear la tarea principal
       const formattedMainTask: Task = {
         ...mainTask,
-        assignee: mainTask.assignee?.[0] || undefined,
-        area: mainTask.area?.[0],
-        sala: mainTask.sala?.[0],
-        subtasks: []
+        title: mainTask.title || 'Sin título',
+        description: mainTask.description || 'Sin descripción',
+        priority: mainTask.priority || 'medium',
+        status: mainTask.status,
+        assigned_to: mainTask.assigned_to,
+        created_at: mainTask.created_at,
+        due_date: mainTask.due_date,
+        area_id: mainTask.area_id,
+        organization_id: mainTask.organization_id,
+        start_time: mainTask.start_time,
+        end_time: mainTask.end_time,
+        sala_id: mainTask.sala_id,
+        assignee: mainTask.assignee ? {
+          first_name: mainTask.assignee.first_name,
+          last_name: mainTask.assignee.last_name
+        } : undefined,
+        area: mainTask.area ? {
+          name: mainTask.area.name
+        } : undefined,
+        sala: mainTask.area?.sala ? {
+          nombre: mainTask.area.sala.nombre
+        } : undefined,
+        subtasks: [],
+        progress: 0
       };
 
-      console.log('Tarea principal encontrada:', {
-        id: formattedMainTask.id,
-        title: formattedMainTask.title,
-        status: formattedMainTask.status,
-        area_id: formattedMainTask.area_id,
-        area: formattedMainTask.area?.name
-      });
+      setCurrentTask(formattedMainTask);
+      setStartTime(mainTask.start_time || '');
 
       // Obtener las tareas del área
-      const { data: areaTasks, error: tasksError } = await supabase
-        .from('tasks')
-        .select(`
-          id,
-          title,
-          description,
-          status,
-          priority,
-          estimated_hours,
-          created_at,
-          organization_id,
-          type,
-          area_id,
-          sala_id,
-          assigned_to,
-          users!tasks_assigned_to_fkey (
-            first_name,
-            last_name
-          )
-        `)
-        .eq('organization_id', userProfile.organization_id)
-        .eq('area_id', mainTask.area_id)
-        .eq('sala_id', mainTask.sala_id)
-        .eq('status', 'pending')
-        .eq('type', 'template')
-        .is('parent_task_id', null)
-        .order('created_at', { ascending: true });
+      if (mainTask.area_id && mainTask.sala_id) {
+        const { data: areaTasks, error: tasksError } = await supabase
+          .from('tasks')
+          .select(`
+            *,
+            assignee:users!tasks_assigned_to_fkey (
+              id,
+              first_name,
+              last_name
+            )
+          `)
+          .eq('organization_id', userProfile.organization_id)
+          .eq('area_id', mainTask.area_id)
+          .eq('sala_id', mainTask.sala_id)
+          .eq('status', 'pending')
+          .is('parent_task_id', null)
+          .order('created_at', { ascending: true });
 
-      console.log('Debug - Tareas del área:', {
-        area_id: mainTask.area_id,
-        sala_id: mainTask.sala_id,
-        organization_id: userProfile.organization_id,
-        totalTasks: areaTasks?.length,
-        tasks: areaTasks?.map(t => ({
-          id: t.id,
-          title: t.title,
-          description: t.description,
-          status: t.status,
-          type: t.type,
-          assigned_to: t.assigned_to,
-          assignee: t.users
-        }))
-      });
-
-      if (tasksError) {
-        console.error('Error al obtener tareas del área:', tasksError);
-        throw new Error('Error al obtener las tareas del área');
+        if (tasksError) {
+          console.error('Error al obtener tareas del área:', tasksError);
+        } else if (areaTasks) {
+          setAreaTasks(areaTasks.map(task => ({
+            id: task.id,
+            title: task.title || 'Sin título',
+            description: task.description || 'Sin descripción',
+            status: task.status,
+            priority: task.priority || 'medium',
+            assigned_to: task.assigned_to || '',
+            created_at: task.created_at,
+            due_date: task.due_date,
+            area_id: task.area_id,
+            organization_id: task.organization_id,
+            estimated_hours: task.estimated_hours || 0.5,
+            assignee: task.assignee ? {
+              first_name: task.assignee.first_name,
+              last_name: task.assignee.last_name
+            } : undefined
+          })));
+        }
       }
-
-      if (!areaTasks || areaTasks.length === 0) {
-        console.log('No se encontraron tareas en el área');
-        setCurrentTask(formattedMainTask);
-        setLoading(false);
-        return;
-      }
-
-      // Formatear las tareas del área
-      const formattedTasks: Task[] = areaTasks.map(task => ({
-        id: task.id,
-        title: task.title,
-        description: task.description || '',
-        status: task.status as Task['status'],
-        priority: task.priority as Task['priority'] || 'medium',
-        assigned_to: task.assigned_to || '',
-        created_at: task.created_at,
-        due_date: mainTask.due_date,
-        area_id: task.area_id,
-        organization_id: task.organization_id,
-        estimated_hours: task.estimated_hours || 0.5,
-        assignee: task.users?.[0] ? {
-          first_name: task.users[0].first_name,
-          last_name: task.users[0].last_name
-        } : undefined
-      }));
-
-      setAreaTasks(formattedTasks);
-      
-      // Actualizar la tarea principal
-      setCurrentTask(formattedMainTask);
-      setProgress(0);
-      setStartTime(mainTask.start_time || '');
 
     } catch (error: any) {
       console.error('Error al cargar la tarea:', error);
