@@ -173,12 +173,13 @@ export default function Dashboard() {
       endOfWeek.setDate(startOfWeek.getDate() + 5);
       endOfWeek.setHours(23, 59, 59, 999);
 
-      // Obtener las tareas con la información de usuarios y sus turnos actuales
+      // Primero obtener solo las tareas básicas sin relaciones
       const { data: taskData, error: taskError } = await supabase
         .from('tasks')
         .select(`
           id,
           title,
+          description,
           status,
           assigned_to,
           created_at,
@@ -186,25 +187,45 @@ export default function Dashboard() {
           completed_at,
           area_id,
           sala_id,
-          users:assigned_to (
-            id,
-            first_name,
-            last_name,
-            work_shifts (
-              id,
-              start_time,
-              end_time,
-              status
-            )
-          )
+          organization_id
         `)
-        .eq('organization_id', userProfile.organization_id)
-        .not('assigned_to', 'is', null);
+        .eq('organization_id', userProfile.organization_id);
 
       if (taskError) {
         console.error('Error en consulta de tareas:', taskError);
-        return;
+        throw new Error('Error al obtener las tareas: ' + taskError.message);
       }
+
+      console.log('Datos básicos de tareas:', taskData);
+
+      // Si la consulta básica funciona, obtener los usuarios asignados
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select(`
+          id,
+          first_name,
+          last_name
+        `)
+        .in('id', (taskData || []).map(task => task.assigned_to).filter(Boolean));
+
+      if (usersError) {
+        console.error('Error al obtener usuarios:', usersError);
+        throw new Error('Error al obtener usuarios: ' + usersError.message);
+      }
+
+      // Crear un mapa de usuarios para fácil acceso
+      const usersMap = (usersData || []).reduce((acc, user) => {
+        acc[user.id] = user;
+        return acc;
+      }, {});
+
+      // Combinar los datos de tareas con los usuarios
+      const tasksWithUsers = (taskData || []).map(task => ({
+        ...task,
+        user: task.assigned_to ? usersMap[task.assigned_to] : null
+      }));
+
+      console.log('Tareas con usuarios:', tasksWithUsers);
 
       // Obtener salas
       const { data: salas, error: salasError } = await supabase
@@ -215,29 +236,19 @@ export default function Dashboard() {
 
       if (salasError) {
         console.error('Error en consulta de salas:', salasError);
-        return;
+        throw new Error('Error al obtener las salas: ' + salasError.message);
       }
 
-      console.log('Datos de tareas:', taskData);
-      console.log('Datos de salas:', salas);
-
-      if (!taskData || !salas) {
-        console.log('No hay datos de tareas o salas');
-        return;
-      }
+      // Inicializar arrays vacíos si no hay datos
+      const taskDataArray = tasksWithUsers || [];
+      const salasArray = salas || [];
 
       // Calcular frecuencia de limpieza
-      const frecuenciaLimpieza = salas.map(sala => {
-        const asignacionesSala = taskData.filter(task => 
+      const frecuenciaLimpieza = salasArray.map(sala => {
+        const asignacionesSala = taskDataArray.filter(task => 
           task.sala_id === sala.id || 
           task.area_id === sala.id
         );
-        
-        console.log(`Sala ${sala.nombre}:`, {
-          id: sala.id,
-          totalTareas: asignacionesSala.length,
-          tareas: asignacionesSala
-        });
         
         const diasEnPeriodo = selectedPeriod === 'dia' ? 1 : selectedPeriod === 'semana' ? 7 : 30;
         const frecuencia = asignacionesSala.length;
@@ -252,34 +263,16 @@ export default function Dashboard() {
         };
       });
 
-      console.log('Frecuencia de limpieza calculada:', frecuenciaLimpieza);
-
-      // Calcular distribución por turno
-      const tareasPorTurno = {
-        manana: taskData.filter(task => {
-          const shift = task.users.work_shifts?.[0];
-          return shift?.start_time && new Date(shift.start_time).getHours() >= 6 && new Date(shift.start_time).getHours() < 14;
-        }).length,
-        tarde: taskData.filter(task => {
-          const shift = task.users.work_shifts?.[0];
-          return shift?.start_time && new Date(shift.start_time).getHours() >= 14 && new Date(shift.start_time).getHours() < 22;
-        }).length,
-        noche: taskData.filter(task => {
-          const shift = task.users.work_shifts?.[0];
-          return shift?.start_time && (new Date(shift.start_time).getHours() >= 22 || new Date(shift.start_time).getHours() < 6);
-        }).length
-      };
-
       // Calcular estadísticas generales
-      const completadas = taskData.filter(t => t.status === 'completed').length;
-      const pendientes = taskData.filter(t => t.status === 'pending').length;
-      const enProgreso = taskData.filter(t => t.status === 'in_progress').length;
-      const total = taskData.length;
+      const completadas = taskDataArray.filter(t => t.status === 'completed').length;
+      const pendientes = taskDataArray.filter(t => t.status === 'pending').length;
+      const enProgreso = taskDataArray.filter(t => t.status === 'in_progress').length;
+      const total = taskDataArray.length;
 
       // Calcular tiempo promedio por tarea
-      const completedWithTimes = taskData?.filter(t => 
+      const completedWithTimes = taskDataArray.filter(t => 
         t.status === 'completed' && t.start_time && t.completed_at
-      ) || [];
+      );
 
       let tiempoPromedio = '0min';
 
@@ -293,47 +286,16 @@ export default function Dashboard() {
         tiempoPromedio = `${Math.round(totalMinutes / completedWithTimes.length)}min`;
       }
 
-      // Obtener personal activo
-      const { data: activeUsers } = await supabase
+      // Obtener personal activo (sin filtrar por status)
+      const { data: activeUsers, error: usersActiveError } = await supabase
         .from('users')
         .select('*')
-        .eq('organization_id', userProfile.organization_id)
-        .eq('status', 'active');
-
-      // Obtener inventario
-      const { data: inventory, error: inventoryError } = await supabase
-        .from('inventory_items')
-        .select('*')
         .eq('organization_id', userProfile.organization_id);
 
-      console.log('Inventory data:', inventory); // Debug log
-
-      // Filtrar items con bajo stock
-      const lowStockItems = inventory?.filter(item => 
-        item.quantity <= item.minimum_quantity
-      ) || [];
-
-      console.log('Low stock items:', lowStockItems); // Debug log
-
-      // Preparar datos de inventario
-      const alertasInventario = lowStockItems.map(item => ({
-        producto: item.name,
-        stockActual: item.quantity,
-        stockMinimo: item.minimum_quantity,
-        itemsNecesarios: item.minimum_quantity - item.quantity
-      }));
-
-      console.log('Alertas inventario:', alertasInventario); // Debug log
-
-      if (inventoryError) {
-        console.error('Error fetching inventory:', inventoryError);
+      if (usersActiveError) {
+        console.error('Error al obtener usuarios activos:', usersActiveError);
+        throw new Error('Error al obtener usuarios activos: ' + usersActiveError.message);
       }
-
-      // Obtener áreas
-      const { data: areas } = await supabase
-        .from('areas')
-        .select('*')
-        .eq('organization_id', userProfile.organization_id);
 
       // Preparar datos de estado de asignaciones por día
       const diasSemana = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie'];
@@ -341,12 +303,12 @@ export default function Dashboard() {
         const fechaDia = new Date(startOfWeek);
         fechaDia.setDate(startOfWeek.getDate() + index);
         
-        const tareasDia = taskData?.filter(task => {
+        const tareasDia = taskDataArray.filter(task => {
           const fechaTarea = new Date(task.created_at);
           return fechaTarea.getDate() === fechaDia.getDate() &&
                  fechaTarea.getMonth() === fechaDia.getMonth() &&
                  fechaTarea.getFullYear() === fechaDia.getFullYear();
-        }) || [];
+        });
 
         const completadas = tareasDia.filter(t => t.status === 'completed').length;
         const pendientes = tareasDia.filter(t => t.status === 'pending').length;
@@ -363,20 +325,49 @@ export default function Dashboard() {
         };
       });
 
-      console.log('Estado de asignaciones por día:', estadoAsignaciones);
-
       // Actualizar el estado
       setDashboardData({
         ...dashboardData,
         asignacionesPendientes: {
           cantidad: pendientes,
-          variacion: Math.round((pendientes - (taskData?.filter(t => t.status === 'pending').length || 0)) / (taskData?.filter(t => t.status === 'pending').length || 1) * 100)
+          variacion: Math.round((pendientes - (taskDataArray.filter(t => t.status === 'pending').length || 0)) / (taskDataArray.filter(t => t.status === 'pending').length || 1) * 100)
         },
         personalActivo: activeUsers?.length || 0,
         tiempoPromedio,
         eficienciaGlobal: total > 0 ? Math.round((completadas / total) * 100) : 0,
-        productividadTurno: tareasPorTurno,
-        alertasInventario,
+        productividadTurno: {
+          manana: taskDataArray.filter(t => {
+            // Verificar si la tarea está asignada y tiene estado pendiente o en progreso
+            if (!t.assigned_to || !['pending', 'in_progress'].includes(t.status)) {
+              return false;
+            }
+            
+            // Verificar si es turno mañana (6:00 - 13:59)
+            const taskTime = t.start_time ? new Date(`2000-01-01T${t.start_time}`) : null;
+            return taskTime ? (taskTime.getHours() >= 6 && taskTime.getHours() < 14) : true;
+          }).length,
+          tarde: taskDataArray.filter(t => {
+            // Verificar si la tarea está asignada y tiene estado pendiente o en progreso
+            if (!t.assigned_to || !['pending', 'in_progress'].includes(t.status)) {
+              return false;
+            }
+
+            // Verificar si es turno tarde (14:00 - 21:59)
+            const taskTime = t.start_time ? new Date(`2000-01-01T${t.start_time}`) : null;
+            return taskTime ? (taskTime.getHours() >= 14 && taskTime.getHours() < 22) : true;
+          }).length,
+          noche: taskDataArray.filter(t => {
+            // Verificar si la tarea está asignada y tiene estado pendiente o en progreso
+            if (!t.assigned_to || !['pending', 'in_progress'].includes(t.status)) {
+              return false;
+            }
+
+            // Verificar si es turno noche (22:00 - 5:59)
+            const taskTime = t.start_time ? new Date(`2000-01-01T${t.start_time}`) : null;
+            return taskTime ? (taskTime.getHours() >= 22 || taskTime.getHours() < 6) : true;
+          }).length
+        },
+        alertasInventario: [],
         estadoAsignaciones,
         frecuenciaLimpieza,
         estadoTareas: {
@@ -384,6 +375,14 @@ export default function Dashboard() {
           pendientes,
           enProgreso
         }
+      });
+
+      // Agregar logs para depuración
+      console.log('Estadísticas de tareas:', {
+        total: taskDataArray.length,
+        asignadas: taskDataArray.filter(t => t.assigned_to).length,
+        conUsuarioYTurno: taskDataArray.filter(t => t.assigned_to && t.user?.work_shifts).length,
+        activas: taskDataArray.filter(t => ['pending', 'in_progress'].includes(t.status)).length
       });
 
     } catch (error) {
