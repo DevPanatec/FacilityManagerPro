@@ -52,6 +52,32 @@ interface Room {
   organization_id: string;
 }
 
+interface WorkShift {
+  id: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+}
+
+interface User {
+  id: string;
+  first_name: string;
+  last_name: string;
+  work_shifts: WorkShift[];
+}
+
+interface Task {
+  id: string;
+  title: string;
+  status: string;
+  assigned_to: string;
+  created_at: string;
+  start_time?: string;
+  completed_at?: string;
+  area_id?: string;
+  users: User;
+}
+
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -141,68 +167,61 @@ export default function Dashboard() {
       endOfWeek.setDate(startOfWeek.getDate() + 5);
       endOfWeek.setHours(23, 59, 59, 999);
 
-      // Obtener los turnos activos y sus usuarios asignados
-      const { data: workShifts } = await supabase
-        .from('work_shifts')
-        .select(`
-          id,
-          shift_type,
-          user_id,
-          status,
-          users!work_shifts_user_id_fkey (
-            id,
-            first_name,
-            last_name
-          )
-        `)
-        .eq('organization_id', userProfile.organization_id)
-        .eq('status', 'scheduled')
-        .gte('start_time', startOfWeek.toISOString())
-        .lte('end_time', endOfWeek.toISOString());
-
-      // Crear mapa de usuarios por turno
-      const usuariosPorTurno = {
-        morning: new Set(workShifts?.filter(ws => ws.shift_type === 'morning').map(ws => ws.user_id) || []),
-        afternoon: new Set(workShifts?.filter(ws => ws.shift_type === 'afternoon').map(ws => ws.user_id) || []),
-        night: new Set(workShifts?.filter(ws => ws.shift_type === 'night').map(ws => ws.user_id) || [])
-      };
-
-      // Obtener las tareas del período actual
+      // Obtener las tareas con la información de usuarios y sus turnos actuales
       const { data: taskData } = await supabase
         .from('tasks')
         .select(`
           id,
           title,
           status,
+          assigned_to,
           created_at,
           start_time,
           completed_at,
-          assigned_to,
-          area_id
+          area_id,
+          users!tasks_assigned_to_fkey (
+            id,
+            first_name,
+            last_name,
+            work_shifts!work_shifts_user_id_fkey (
+              id,
+              start_time,
+              end_time,
+              status
+            )
+          )
         `)
         .eq('organization_id', userProfile.organization_id)
-        .gte('created_at', startOfWeek.toISOString())
-        .lte('created_at', endOfWeek.toISOString())
-        .not('status', 'eq', 'cancelled');
+        .not('assigned_to', 'is', null)
+        .eq('users.work_shifts.status', 'scheduled') as { data: Task[] | null };
 
-      // Distribuir las tareas según el turno del usuario asignado
-      const tareasPorTurno = {
-        manana: 0,
-        tarde: 0,
-        noche: 0
+      console.log('Tareas con usuarios y turnos:', taskData); // Debug log
+
+      // Función para determinar el turno basado en la hora de inicio
+      const getTurno = (startTime: string) => {
+        const hour = new Date(startTime).getHours();
+        if (hour >= 6 && hour < 14) return 'morning';
+        if (hour >= 14 && hour < 22) return 'afternoon';
+        return 'night';
       };
 
-      taskData?.forEach(task => {
-        if (task.assigned_to) {
-          if (usuariosPorTurno.morning.has(task.assigned_to)) {
-            tareasPorTurno.manana++;
-          } else if (usuariosPorTurno.afternoon.has(task.assigned_to)) {
-            tareasPorTurno.tarde++;
-          } else if (usuariosPorTurno.night.has(task.assigned_to)) {
-            tareasPorTurno.noche++;
-          }
-        }
-      });
+      // Distribuir las tareas según el turno
+      const tareasPorTurno: { manana: number; tarde: number; noche: number } = {
+        manana: taskData?.filter(task => {
+          const shift = task.users?.work_shifts?.[0];
+          return shift?.start_time && getTurno(shift.start_time) === 'morning';
+        }).length || 0,
+        tarde: taskData?.filter(task => {
+          const shift = task.users?.work_shifts?.[0];
+          return shift?.start_time && getTurno(shift.start_time) === 'afternoon';
+        }).length || 0,
+        noche: taskData?.filter(task => {
+          const shift = task.users?.work_shifts?.[0];
+          return shift?.start_time && getTurno(shift.start_time) === 'night';
+        }).length || 0
+      };
+
+      console.log('Distribución de tareas por turno:', tareasPorTurno); // Debug log
 
       // Calcular estadísticas de tareas
       const estadoTareas = {
@@ -305,8 +324,10 @@ export default function Dashboard() {
       ) || [];
 
       let tiempoPromedio = '0min';
+
       if (completedWithTimes.length > 0) {
         const totalMinutes = completedWithTimes.reduce((acc, curr) => {
+          if (!curr.start_time || !curr.completed_at) return acc;
           const start = new Date(curr.start_time);
           const end = new Date(curr.completed_at);
           return acc + (end.getTime() - start.getTime()) / (1000 * 60);
