@@ -75,7 +75,13 @@ interface Task {
   start_time?: string;
   completed_at?: string;
   area_id?: string;
-  users: User;
+  sala_id?: string;
+  users: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    work_shifts: WorkShift[];
+  };
 }
 
 export default function Dashboard() {
@@ -168,7 +174,7 @@ export default function Dashboard() {
       endOfWeek.setHours(23, 59, 59, 999);
 
       // Obtener las tareas con la información de usuarios y sus turnos actuales
-      const { data: taskData } = await supabase
+      const { data: taskData, error: taskError } = await supabase
         .from('tasks')
         .select(`
           id,
@@ -179,11 +185,12 @@ export default function Dashboard() {
           start_time,
           completed_at,
           area_id,
-          users!tasks_assigned_to_fkey (
+          sala_id,
+          users:assigned_to (
             id,
             first_name,
             last_name,
-            work_shifts!work_shifts_user_id_fkey (
+            work_shifts (
               id,
               start_time,
               end_time,
@@ -192,54 +199,99 @@ export default function Dashboard() {
           )
         `)
         .eq('organization_id', userProfile.organization_id)
-        .not('assigned_to', 'is', null)
-        .eq('users.work_shifts.status', 'scheduled') as { data: Task[] | null };
+        .not('assigned_to', 'is', null);
 
-      console.log('Tareas con usuarios y turnos:', taskData); // Debug log
+      if (taskError) {
+        console.error('Error en consulta de tareas:', taskError);
+        return;
+      }
 
-      // Función para determinar el turno basado en la hora de inicio
-      const getTurno = (startTime: string) => {
-        const hour = new Date(startTime).getHours();
-        if (hour >= 6 && hour < 14) return 'morning';
-        if (hour >= 14 && hour < 22) return 'afternoon';
-        return 'night';
+      // Obtener salas
+      const { data: salas, error: salasError } = await supabase
+        .from('salas')
+        .select('*')
+        .eq('organization_id', userProfile.organization_id)
+        .eq('estado', true);
+
+      if (salasError) {
+        console.error('Error en consulta de salas:', salasError);
+        return;
+      }
+
+      console.log('Datos de tareas:', taskData);
+      console.log('Datos de salas:', salas);
+
+      if (!taskData || !salas) {
+        console.log('No hay datos de tareas o salas');
+        return;
+      }
+
+      // Calcular frecuencia de limpieza
+      const frecuenciaLimpieza = salas.map(sala => {
+        const asignacionesSala = taskData.filter(task => 
+          task.sala_id === sala.id || 
+          task.area_id === sala.id
+        );
+        
+        console.log(`Sala ${sala.nombre}:`, {
+          id: sala.id,
+          totalTareas: asignacionesSala.length,
+          tareas: asignacionesSala
+        });
+        
+        const diasEnPeriodo = selectedPeriod === 'dia' ? 1 : selectedPeriod === 'semana' ? 7 : 30;
+        const frecuencia = asignacionesSala.length;
+        const frecuenciaPromedio = frecuencia / diasEnPeriodo;
+        const objetivoDiario = 2;
+        const porcentaje = Math.round((frecuenciaPromedio / objetivoDiario) * 100);
+
+        return {
+          sala: sala.nombre,
+          frecuencia,
+          porcentaje: Math.min(porcentaje, 100)
+        };
+      });
+
+      console.log('Frecuencia de limpieza calculada:', frecuenciaLimpieza);
+
+      // Calcular distribución por turno
+      const tareasPorTurno = {
+        manana: taskData.filter(task => {
+          const shift = task.users.work_shifts?.[0];
+          return shift?.start_time && new Date(shift.start_time).getHours() >= 6 && new Date(shift.start_time).getHours() < 14;
+        }).length,
+        tarde: taskData.filter(task => {
+          const shift = task.users.work_shifts?.[0];
+          return shift?.start_time && new Date(shift.start_time).getHours() >= 14 && new Date(shift.start_time).getHours() < 22;
+        }).length,
+        noche: taskData.filter(task => {
+          const shift = task.users.work_shifts?.[0];
+          return shift?.start_time && (new Date(shift.start_time).getHours() >= 22 || new Date(shift.start_time).getHours() < 6);
+        }).length
       };
 
-      // Distribuir las tareas según el turno
-      const tareasPorTurno: { manana: number; tarde: number; noche: number } = {
-        manana: taskData?.filter(task => {
-          const shift = task.users?.work_shifts?.[0];
-          return shift?.start_time && getTurno(shift.start_time) === 'morning';
-        }).length || 0,
-        tarde: taskData?.filter(task => {
-          const shift = task.users?.work_shifts?.[0];
-          return shift?.start_time && getTurno(shift.start_time) === 'afternoon';
-        }).length || 0,
-        noche: taskData?.filter(task => {
-          const shift = task.users?.work_shifts?.[0];
-          return shift?.start_time && getTurno(shift.start_time) === 'night';
-        }).length || 0
-      };
+      // Calcular estadísticas generales
+      const completadas = taskData.filter(t => t.status === 'completed').length;
+      const pendientes = taskData.filter(t => t.status === 'pending').length;
+      const enProgreso = taskData.filter(t => t.status === 'in_progress').length;
+      const total = taskData.length;
 
-      console.log('Distribución de tareas por turno:', tareasPorTurno); // Debug log
+      // Calcular tiempo promedio por tarea
+      const completedWithTimes = taskData?.filter(t => 
+        t.status === 'completed' && t.start_time && t.completed_at
+      ) || [];
 
-      // Calcular estadísticas de tareas
-      const estadoTareas = {
-        completadas: taskData?.filter(t => t.status === 'completed').length || 0,
-        enProgreso: taskData?.filter(t => t.status === 'in_progress').length || 0,
-        pendientes: taskData?.filter(t => t.status === 'pending').length || 0
-      };
+      let tiempoPromedio = '0min';
 
-      // Actualizar el estado con los datos procesados
-      setDashboardData(prevData => ({
-        ...prevData,
-        productividadTurno: {
-          manana: tareasPorTurno.manana,
-          tarde: tareasPorTurno.tarde,
-          noche: tareasPorTurno.noche
-        },
-        estadoTareas: estadoTareas
-      }));
+      if (completedWithTimes.length > 0) {
+        const totalMinutes = completedWithTimes.reduce((acc, curr) => {
+          if (!curr.start_time || !curr.completed_at) return acc;
+          const start = new Date(curr.start_time);
+          const end = new Date(curr.completed_at);
+          return acc + (end.getTime() - start.getTime()) / (1000 * 60);
+        }, 0);
+        tiempoPromedio = `${Math.round(totalMinutes / completedWithTimes.length)}min`;
+      }
 
       // Obtener personal activo
       const { data: activeUsers } = await supabase
@@ -313,83 +365,24 @@ export default function Dashboard() {
 
       console.log('Estado de asignaciones por día:', estadoAsignaciones);
 
-      // Calcular métricas
-      const pendientes = taskData?.filter(t => t.status === 'pending').length || 0;
-      const completadas = taskData?.filter(t => t.status === 'completed').length || 0;
-      const total = taskData?.length || 0;
-
-      // Calcular tiempo promedio por tarea
-      const completedWithTimes = taskData?.filter(t => 
-        t.status === 'completed' && t.start_time && t.completed_at
-      ) || [];
-
-      let tiempoPromedio = '0min';
-
-      if (completedWithTimes.length > 0) {
-        const totalMinutes = completedWithTimes.reduce((acc, curr) => {
-          if (!curr.start_time || !curr.completed_at) return acc;
-          const start = new Date(curr.start_time);
-          const end = new Date(curr.completed_at);
-          return acc + (end.getTime() - start.getTime()) / (1000 * 60);
-        }, 0);
-        tiempoPromedio = `${Math.round(totalMinutes / completedWithTimes.length)}min`;
-      }
-
-      // Preparar datos de frecuencia de limpieza
-      const { data: salas } = await supabase
-        .from('salas')
-        .select('*')
-        .eq('organization_id', userProfile.organization_id)
-        .eq('estado', true);
-
-      console.log('Salas obtenidas:', salas);
-
-      const typedSalas = salas as Room[] | null;
-
-      const frecuenciaLimpieza = typedSalas?.map(sala => {
-        const asignacionesSala = taskData?.filter(a => a.area_id === sala.id) || [];
-        console.log('Asignaciones para sala', sala.nombre, ':', asignacionesSala);
-        
-        const frecuencia = Math.round(asignacionesSala.length / (selectedPeriod === 'dia' ? 1 : selectedPeriod === 'semana' ? 7 : 30));
-        return {
-          sala: sala.nombre,
-          frecuencia,
-          porcentaje: Math.round((frecuencia / 1) * 100)
-        };
-      }) || [];
-
-      console.log('Frecuencia de limpieza calculada:', frecuenciaLimpieza);
-
-      // Actualizar el estado con los conteos de tareas
-      setDashboardData(prevData => ({
-        ...prevData,
-        estadoTareas: {
-          completadas: tareasPorTurno.manana + tareasPorTurno.tarde + tareasPorTurno.noche,
-          enProgreso: 0,
-          pendientes: 0
-        }
-      }));
-
+      // Actualizar el estado
       setDashboardData({
+        ...dashboardData,
         asignacionesPendientes: {
           cantidad: pendientes,
-          variacion: Math.round((pendientes - (taskData?.filter(t => t.status === 'pending').length || 0)) / (taskData?.filter(t => t.status === 'pending').length || 0) * 100)
+          variacion: Math.round((pendientes - (taskData?.filter(t => t.status === 'pending').length || 0)) / (taskData?.filter(t => t.status === 'pending').length || 1) * 100)
         },
         personalActivo: activeUsers?.length || 0,
         tiempoPromedio,
         eficienciaGlobal: total > 0 ? Math.round((completadas / total) * 100) : 0,
-        productividadTurno: {
-          manana: tareasPorTurno.manana,
-          tarde: tareasPorTurno.tarde,
-          noche: tareasPorTurno.noche
-        },
+        productividadTurno: tareasPorTurno,
         alertasInventario,
         estadoAsignaciones,
         frecuenciaLimpieza,
         estadoTareas: {
-          completadas: tareasPorTurno.manana + tareasPorTurno.tarde + tareasPorTurno.noche,
-          enProgreso: 0,
-          pendientes: 0
+          completadas,
+          pendientes,
+          enProgreso
         }
       });
 
