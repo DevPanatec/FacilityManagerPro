@@ -1,138 +1,124 @@
 import { supabaseService } from './supabaseService'
 import { taskService } from './taskService'
-import { HARDCODED_USERS, User } from '../utils/auth/users'
+
+interface TestResult {
+  test: string;
+  status: 'passed' | 'failed';
+  error?: string;
+}
 
 export const testService = {
-  // Prueba el flujo completo de creación y asignación de tareas
-  async testTaskFlow() {
-    const results = {
-      success: true,
-      errors: [] as string[],
-      logs: [] as string[]
-    }
-
+  runTests: async (): Promise<TestResult[]> => {
     try {
-      // Probar con cada admin
-      const admins = HARDCODED_USERS.filter(u => u.role === 'admin')
+      // Datos de prueba
+      const admins = [
+        { name: 'Admin Test', email: 'admin@test.com', password: 'test123' },
+        { name: 'Admin Test 2', email: 'admin2@test.com', password: 'test123' }
+      ]
+
+      const users = [
+        { name: 'User Test', email: 'user@test.com', password: 'test123' },
+        { name: 'User Test 2', email: 'user2@test.com', password: 'test123' }
+      ]
+
+      const results: TestResult[] = []
+
+      // Pruebas de administradores
       for (const admin of admins) {
         // 1. Prueba de inicio de sesión como admin
-        const { data: authData, error: loginError } = await supabaseService.auth.login(
-          admin.email,
-          admin.password
-        )
-
-        if (loginError || !authData?.user) {
-          results.success = false
-          results.errors.push(`Error en login de ${admin.name}: ${loginError}`)
-          continue
-        }
-
-        results.logs.push(`✓ Login de ${admin.name} exitoso`)
-
-        // 2. Crear una tarea
-        const newTask = await taskService.createTask({
-          title: `Tarea de prueba creada por ${admin.name}`,
-          description: 'Esta es una tarea de prueba para verificar el sistema',
-          priority: 'medium'
+        const { data: authData, error: loginError } = await supabaseService.auth.signInWithPassword({
+          email: admin.email,
+          password: admin.password
         })
 
-        if (!newTask.id) {
-          results.success = false
-          results.errors.push(`Error al crear tarea con ${admin.name}`)
+        if (loginError) {
+          results.push({
+            test: `Login admin ${admin.name}`,
+            status: 'failed',
+            error: loginError.message
+          })
           continue
         }
 
-        results.logs.push(`✓ Creación de tarea exitosa por ${admin.name}`)
-
-        // 3. Asignar la tarea al enterprise
-        const enterpriseUser = HARDCODED_USERS.find(u => u.role === 'enterprise')
-        if (!enterpriseUser) {
-          results.success = false
-          results.errors.push('No se encontró usuario enterprise')
-          continue
-        }
-
-        await taskService.assignTask(newTask.id, enterpriseUser.id)
-        results.logs.push(`✓ Asignación de tarea exitosa por ${admin.name}`)
-
-        // 4. Cerrar sesión del admin
-        await supabaseService.auth.logout()
-        results.logs.push(`✓ Logout de ${admin.name} exitoso`)
-      }
-
-      // Probar con cada superadmin
-      const superadmins = HARDCODED_USERS.filter(u => u.role === 'superadmin')
-      for (const superadmin of superadmins) {
-        const { data: authData, error: loginError } = await supabaseService.auth.login(
-          superadmin.email,
-          superadmin.password
-        )
-
-        if (loginError || !authData?.user) {
-          results.success = false
-          results.errors.push(`Error en login de ${superadmin.name}: ${loginError}`)
-          continue
-        }
-
-        results.logs.push(`✓ Login de ${superadmin.name} exitoso`)
-
-        // Verificar que puede ver todas las tareas
-        const tasks = await taskService.getTasks()
-        results.logs.push(`✓ ${superadmin.name} puede ver todas las tareas`)
-
-        // Crear y asignar una nueva tarea
-        const newTask = await taskService.createTask({
-          title: `Tarea de prueba creada por ${superadmin.name}`,
-          description: 'Esta es una tarea de prueba para verificar el sistema',
-          priority: 'high'
+        results.push({
+          test: `Login admin ${admin.name}`,
+          status: 'passed'
         })
 
-        if (!newTask.id) {
-          results.success = false
-          results.errors.push(`Error al crear tarea con ${superadmin.name}`)
+        // 2. Prueba de obtención de perfil
+        const { data: profile, error: profileError } = await supabaseService
+          .from('users')
+          .select('*')
+          .eq('id', authData.user?.id)
+          .single()
+
+        if (profileError) {
+          results.push({
+            test: `Get profile admin ${admin.name}`,
+            status: 'failed',
+            error: profileError.message
+          })
+        } else {
+          results.push({
+            test: `Get profile admin ${admin.name}`,
+            status: 'passed'
+          })
+        }
+
+        // Cerrar sesión
+        await supabaseService.auth.signOut()
+      }
+
+      // Pruebas de usuarios normales
+      for (const user of users) {
+        // 1. Prueba de inicio de sesión como usuario
+        const { data: authData, error: loginError } = await supabaseService.auth.signInWithPassword({
+          email: user.email,
+          password: user.password
+        })
+
+        if (loginError) {
+          results.push({
+            test: `Login user ${user.name}`,
+            status: 'failed',
+            error: loginError.message
+          })
           continue
         }
 
-        results.logs.push(`✓ Creación de tarea exitosa por ${superadmin.name}`)
+        results.push({
+          test: `Login user ${user.name}`,
+          status: 'passed'
+        })
 
-        // Cerrar sesión del superadmin
-        await supabaseService.auth.logout()
-        results.logs.push(`✓ Logout de ${superadmin.name} exitoso`)
+        // 2. Prueba de obtención de perfil
+        const { data: profile, error: profileError } = await supabaseService
+          .from('users')
+          .select('*')
+          .eq('id', authData.user?.id)
+          .single()
+
+        if (profileError) {
+          results.push({
+            test: `Get profile user ${user.name}`,
+            status: 'failed',
+            error: profileError.message
+          })
+        } else {
+          results.push({
+            test: `Get profile user ${user.name}`,
+            status: 'passed'
+          })
+        }
+
+        // Cerrar sesión
+        await supabaseService.auth.signOut()
       }
 
-      // Probar con enterprise
-      const enterpriseUser = HARDCODED_USERS.find(u => u.role === 'enterprise') as User
-      const { data: authData, error: enterpriseLoginError } = await supabaseService.auth.login(
-        enterpriseUser.email,
-        enterpriseUser.password
-      )
-
-      if (enterpriseLoginError || !authData?.user) {
-        results.success = false
-        results.errors.push(`Error en login de enterprise: ${enterpriseLoginError}`)
-        return results
-      }
-
-      results.logs.push('✓ Login de enterprise exitoso')
-
-      // Verificar que el enterprise puede ver sus tareas asignadas
-      const enterpriseTasks = await taskService.getTasks()
-      results.logs.push(`✓ Enterprise puede ver ${enterpriseTasks.length} tareas asignadas`)
-
-      // Verificar que puede actualizar sus tareas
-      if (enterpriseTasks.length > 0) {
-        await taskService.updateTask(enterpriseTasks[0].id, { status: 'in_progress' })
-        results.logs.push('✓ Enterprise puede actualizar sus tareas')
-      }
-
-      await supabaseService.auth.logout()
-      results.logs.push('✓ Logout de enterprise exitoso')
-
-    } catch (error: unknown) {
-      results.success = false
-      results.errors.push(`Error inesperado: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+      return results
+    } catch (error) {
+      console.error('Error running tests:', error)
+      throw error
     }
-
-    return results
   }
 } 

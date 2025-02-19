@@ -31,28 +31,53 @@ const STATUS_TYPES = {
 } as const
 
 // GET /api/status - Obtener estados
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const type = searchParams.get('type')?.toUpperCase()
+    const supabase = createRouteHandlerClient({ cookies })
+    
+    // Obtener el usuario actual
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('No autorizado')
 
-    if (!type) {
-      return NextResponse.json(STATUS_TYPES)
-    }
+    const { data: status, error } = await supabase
+      .from('status')
+      .select('*')
+      .order('name')
 
-    if (!(type in STATUS_TYPES)) {
-      throw new Error(`Tipo de estado no válido: ${type}`)
-    }
+    if (error) throw error
 
-    return NextResponse.json(STATUS_TYPES[type as keyof typeof STATUS_TYPES])
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al obtener estados' },
-      { status: 400 }
-    )
+    return NextResponse.json(status)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener estados'
+    const status = errorMessage.includes('No autorizado') ? 403 : 400
+    return NextResponse.json({ error: errorMessage }, { status })
   }
 }
 
 // Tipos TypeScript
 export type StatusType = keyof typeof STATUS_TYPES
-export type StatusValue = typeof STATUS_TYPES[StatusType][keyof typeof STATUS_TYPES[StatusType]] 
+export type StatusValue = typeof STATUS_TYPES[StatusType][keyof typeof STATUS_TYPES[StatusType]]
+
+export async function POST(request: Request) {
+  try {
+    const supabase = createRouteHandlerClient({ cookies })
+    const body = await request.json()
+    
+    // Obtener el usuario actual
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('No autorizado')
+
+    const { data, error } = await supabase
+      .from('status')
+      .insert([body])
+      .select()
+
+    if (error) throw error
+
+    return NextResponse.json(data[0])
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear estado'
+    const status = errorMessage.includes('No autorizado') ? 403 : 400
+    return NextResponse.json({ error: errorMessage }, { status })
+  }
+} 

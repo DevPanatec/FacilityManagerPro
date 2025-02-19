@@ -3,7 +3,7 @@ import { supabaseService } from './supabaseService'
 export const authService = {
   login: async (email: string, password: string) => {
     try {
-      return await supabaseService.auth.login(email, password)
+      return await supabaseService.auth.signInWithPassword({ email, password })
     } catch (error) {
       console.error('Error en login:', error)
       throw error
@@ -12,14 +12,14 @@ export const authService = {
 
   register: async (email: string, password: string, userData: any) => {
     try {
-      const { data: auth, error: signUpError } = await supabaseService.db.auth.signUp({
+      const { data: auth, error: signUpError } = await supabaseService.auth.signUp({
         email,
         password
       })
       if (signUpError) throw signUpError
 
       if (auth.user) {
-        const { error: profileError } = await supabaseService.db
+        const { error: profileError } = await supabaseService
           .from('users')
           .insert([{
             ...userData,
@@ -38,7 +38,7 @@ export const authService = {
 
   logout: async () => {
     try {
-      await supabaseService.auth.logout()
+      await supabaseService.auth.signOut()
     } catch (error) {
       console.error('Error en logout:', error)
       throw error

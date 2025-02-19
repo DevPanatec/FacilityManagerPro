@@ -7,10 +7,12 @@ type CreateNotification = Pick<Notification, 'message' | 'title' | 'type' | 'use
 export const notificationService = {
   getNotifications: async (userId: string) => {
     try {
-      const { data, error } = await supabaseService.db
+      const { data, error } = await supabaseService
         .from('notifications')
         .select('*')
         .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+
       if (error) throw error
       return data
     } catch (error) {
@@ -19,30 +21,11 @@ export const notificationService = {
     }
   },
 
-  createNotification: async (notification: Omit<CreateNotification, 'organization_id'>) => {
+  createNotification: async (notification: any) => {
     try {
-      // Obtener el usuario actual
-      const { data: userData } = await supabaseService.db.auth.getUser()
-      if (!userData.user) throw new Error('Usuario no autenticado')
-
-      // Obtener el organization_id del usuario
-      const { data: userDetails, error: userError } = await supabaseService.db
-        .from('users')
-        .select('organization_id')
-        .eq('id', userData.user.id)
-        .single()
-
-      if (userError || !userDetails?.organization_id) {
-        throw new Error('No se pudo obtener la organización del usuario')
-      }
-
-      const { data, error } = await supabaseService.db
+      const { data, error } = await supabaseService
         .from('notifications')
-        .insert([{
-          ...notification,
-          organization_id: userDetails.organization_id,
-          read: false
-        }])
+        .insert([notification])
         .select()
         .single()
 
@@ -56,14 +39,12 @@ export const notificationService = {
 
   markAsRead: async (notificationId: string) => {
     try {
-      const { data, error } = await supabaseService.db
+      const { error } = await supabaseService
         .from('notifications')
         .update({ read: true })
         .eq('id', notificationId)
-        .select()
-        .single()
+
       if (error) throw error
-      return data
     } catch (error) {
       console.error('Error al marcar notificación como leída:', error)
       throw error

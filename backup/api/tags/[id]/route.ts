@@ -2,6 +2,34 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
+// GET /api/tags/[id] - Obtener etiqueta
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const supabase = createRouteHandlerClient({ cookies })
+    
+    // Obtener el usuario actual
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('No autorizado')
+
+    const { data: tag, error } = await supabase
+      .from('tags')
+      .select('*')
+      .eq('id', params.id)
+      .single()
+
+    if (error) throw error
+
+    return NextResponse.json(tag)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener tag'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json({ error: errorMessage }, { status })
+  }
+}
+
 // PUT /api/tags/[id] - Actualizar etiqueta
 export async function PUT(
   request: Request,
@@ -9,28 +37,26 @@ export async function PUT(
 ) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const body = await request.json()
     
+    // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
 
-    const body = await request.json()
-    const { name, color } = body
-
-    const { data: tag, error } = await supabase
+    const { data, error } = await supabase
       .from('tags')
-      .update({ name, color })
+      .update(body)
       .eq('id', params.id)
       .select()
       .single()
 
     if (error) throw error
 
-    return NextResponse.json(tag)
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return NextResponse.json(data)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar tag'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json({ error: errorMessage }, { status })
   }
 }
 
@@ -42,6 +68,7 @@ export async function DELETE(
   try {
     const supabase = createRouteHandlerClient({ cookies })
     
+    // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
 
@@ -53,10 +80,9 @@ export async function DELETE(
     if (error) throw error
 
     return NextResponse.json({ success: true })
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar tag'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json({ error: errorMessage }, { status })
   }
 } 

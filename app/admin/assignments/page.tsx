@@ -13,22 +13,18 @@ interface WorkShiftData {
   shift_type: 'morning' | 'afternoon' | 'night';
   start_time: string;
   end_time: string;
-  user_id: string | null;
+  user_id: string;
+  users: ShiftUser[];
 }
 
 interface Turno {
   id: string;
   nombre: string;
   horario: string;
+  shift_type: 'morning' | 'afternoon' | 'night';
   personasAsignadas: number;
   enLinea: number;
-  shift_type: 'morning' | 'afternoon' | 'night';
-  usuarios: {
-    id: string;
-    first_name: string;
-    last_name: string;
-    avatar_url?: string;
-  }[];
+  usuarios: ShiftUser[];
 }
 
 interface Task {
@@ -104,6 +100,28 @@ interface ShiftWithUsers {
   } | null;
 }
 
+interface ShiftUser {
+  id: string;
+  first_name: string;
+  last_name: string;
+  avatar_url?: string | null;
+}
+
+interface TurnoUsuariosAcc {
+  [key: string]: Map<string, ShiftUser>;
+}
+
+interface ShiftDataItem {
+  id: string;
+  shift_type: string;
+  main_user: Array<{
+    id: string;
+    first_name: string;
+    last_name: string;
+    avatar_url?: string | null;
+  }>;
+}
+
 export default function AssignmentsPage() {
   const [loading, setLoading] = useState(true);
   const [turnos, setTurnos] = useState<Turno[]>([]);
@@ -168,18 +186,19 @@ export default function AssignmentsPage() {
 
       if (turnosData) {
         // Crear un mapa para agrupar usuarios únicos por tipo de turno
-        const turnoUsuarios = turnosData.reduce((acc, turno) => {
+        const turnoUsuarios = (turnosData as WorkShiftData[]).reduce((acc: TurnoUsuariosAcc, turno) => {
           if (!acc[turno.shift_type]) {
             acc[turno.shift_type] = new Map();
           }
-          if (turno.users && turno.users.id) {
-            acc[turno.shift_type].set(turno.users.id, turno.users);
+          if (turno.users && turno.users.length > 0) {
+            const user = turno.users[0];
+            acc[turno.shift_type].set(user.id, user);
           }
           return acc;
-        }, {});
+        }, {} as TurnoUsuariosAcc);
 
         // Formatear los turnos con usuarios únicos
-        const turnosFormatted = [
+        const turnosFormatted: Turno[] = [
           {
             id: turnosData.find(t => t.shift_type === 'morning')?.id || '',
             nombre: 'Turno A',
@@ -598,9 +617,9 @@ export default function AssignmentsPage() {
       console.log('Datos de usuarios por turno (excluyendo usuario actual):', shiftData);
 
       // Filtrar usuarios únicos y válidos
-      const usuariosUnicos = shiftData
-        .filter(shift => shift.main_user) // Solo incluir registros con usuarios válidos
-        .map(shift => shift.main_user)
+      const usuariosUnicos = (shiftData as ShiftDataItem[])
+        .filter(shift => shift.main_user && shift.main_user.length > 0)
+        .flatMap(shift => shift.main_user)
         .filter((user, index, self) => 
           index === self.findIndex(u => u.id === user.id)
         );

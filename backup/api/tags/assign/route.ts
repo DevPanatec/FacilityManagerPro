@@ -5,65 +5,71 @@ import { NextResponse } from 'next/server'
 export async function POST(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const body = await request.json()
     
+    // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
 
-    const body = await request.json()
-    const { 
-      tag_id, 
-      entity_type, 
-      entity_id, 
-      organization_id 
-    } = body
+    const { taskId, tagId } = body
 
+    if (!taskId || !tagId) {
+      throw new Error('Se requieren taskId y tagId')
+    }
+
+    // Verificar que la tarea existe
+    const { data: task, error: taskError } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('id', taskId)
+      .single()
+
+    if (taskError) throw taskError
+    if (!task) throw new Error('Tarea no encontrada')
+
+    // Asignar tag a la tarea
     const { data, error } = await supabase
-      .from('entity_tags')
-      .insert({
-        tag_id,
-        entity_type,
-        entity_id,
-        organization_id,
-        created_by: user.id
-      })
+      .from('task_tags')
+      .insert([{ task_id: taskId, tag_id: tagId }])
       .select()
       .single()
 
     if (error) throw error
 
     return NextResponse.json(data)
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al asignar tag'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json({ error: errorMessage }, { status })
   }
 }
 
 export async function DELETE(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const body = await request.json()
     
+    // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
 
-    const { searchParams } = new URL(request.url)
-    const tag_id = searchParams.get('tag_id')
-    const entity_type = searchParams.get('entity_type')
-    const entity_id = searchParams.get('entity_id')
+    const { taskId, tagId } = body
+
+    if (!taskId || !tagId) {
+      throw new Error('Se requieren taskId y tagId')
+    }
 
     const { error } = await supabase
-      .from('entity_tags')
+      .from('task_tags')
       .delete()
-      .match({ tag_id, entity_type, entity_id })
+      .match({ task_id: taskId, tag_id: tagId })
 
     if (error) throw error
 
     return NextResponse.json({ success: true })
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al desasignar tag'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json({ error: errorMessage }, { status })
   }
 } 

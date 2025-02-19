@@ -2,66 +2,60 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { TASK_STATUS, TASK_PRIORITY } from './types'
+import { Database } from '@/types/supabase'
+
+type Task = Database['public']['Tables']['tasks']['Row']
 
 // GET /api/tasks - Obtener tareas
 export async function GET(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
-    const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organizationId')
-    const status = searchParams.get('status')
-    const assignedTo = searchParams.get('assignedTo')
-    const categoryId = searchParams.get('categoryId')
     
     // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
 
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get('status')
+    const assigned_to = searchParams.get('assigned_to')
+    const area_id = searchParams.get('area_id')
+    const sala_id = searchParams.get('sala_id')
+
     let query = supabase
       .from('tasks')
       .select(`
         *,
-        task_categories (
+        users!tasks_assigned_to_fkey (
           id,
-          name,
-          color
-        ),
-        profiles!tasks_assigned_to_fkey (
           first_name,
           last_name,
           avatar_url
-        ),
-        profiles!tasks_created_by_fkey (
-          first_name,
-          last_name
         )
       `)
+      .order('created_at', { ascending: false })
 
-    // Aplicar filtros
-    if (organizationId) {
-      query = query.eq('organization_id', organizationId)
-    }
-    if (status && status in TASK_STATUS) {
+    if (status) {
       query = query.eq('status', status)
     }
-    if (assignedTo) {
-      query = query.eq('assigned_to', assignedTo)
+    if (assigned_to) {
+      query = query.eq('assigned_to', assigned_to)
     }
-    if (categoryId) {
-      query = query.eq('category_id', categoryId)
+    if (area_id) {
+      query = query.eq('area_id', area_id)
+    }
+    if (sala_id) {
+      query = query.eq('sala_id', sala_id)
     }
 
     const { data: tasks, error } = await query
-      .order('created_at', { ascending: false })
 
     if (error) throw error
 
     return NextResponse.json(tasks)
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al obtener tareas' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener tareas'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json({ error: errorMessage }, { status })
   }
 }
 
@@ -139,11 +133,10 @@ export async function POST(request: Request) {
       ])
 
     return NextResponse.json(data[0])
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al crear tarea' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear tarea'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json({ error: errorMessage }, { status })
   }
 }
 
@@ -152,85 +145,27 @@ export async function PUT(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
     const body = await request.json()
-
+    
     // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
 
-    // Validar status y prioridad
-    if (body.status && !(body.status in TASK_STATUS)) {
-      throw new Error('Estado no válido')
-    }
-    if (body.priority && !(body.priority in TASK_PRIORITY)) {
-      throw new Error('Prioridad no válida')
-    }
+    const { id, ...updates } = body
 
-    // Obtener tarea actual para comparar cambios
-    const { data: currentTask } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('id', body.id)
-      .single()
-
-    // Actualizar tarea
     const { data, error } = await supabase
       .from('tasks')
-      .update({
-        title: body.title,
-        description: body.description,
-        status: body.status,
-        priority: body.priority,
-        category_id: body.category_id,
-        assigned_to: body.assigned_to,
-        due_date: body.due_date,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', body.id)
-      .select(`
-        *,
-        task_categories (
-          id,
-          name,
-          color
-        ),
-        profiles!tasks_assigned_to_fkey (
-          first_name,
-          last_name,
-          avatar_url
-        )
-      `)
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
 
     if (error) throw error
 
-    // Registrar cambios en task_history
-    if (currentTask) {
-      const changes: string[] = []
-      if (currentTask.status !== body.status) {
-        changes.push(`Status changed from ${currentTask.status} to ${body.status}`)
-      }
-      if (currentTask.assigned_to !== body.assigned_to) {
-        changes.push('Assignment changed')
-      }
-      if (changes.length > 0) {
-        await supabase
-          .from('task_history')
-          .insert([
-            {
-              task_id: body.id,
-              user_id: user.id,
-              action: 'update',
-              description: changes.join(', ')
-            }
-          ])
-      }
-    }
-
-    return NextResponse.json(data[0])
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al actualizar tarea' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return NextResponse.json(data)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar tarea'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json({ error: errorMessage }, { status })
   }
 }
 
@@ -240,6 +175,8 @@ export async function DELETE(request: Request) {
     const supabase = createRouteHandlerClient({ cookies })
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+
+    if (!id) throw new Error('ID de tarea requerido')
     
     // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
@@ -274,11 +211,10 @@ export async function DELETE(request: Request) {
         }
       ])
 
-    return NextResponse.json({ message: 'Tarea eliminada exitosamente' })
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al eliminar tarea' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return NextResponse.json({ success: true })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar tarea'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json({ error: errorMessage }, { status })
   }
 } 

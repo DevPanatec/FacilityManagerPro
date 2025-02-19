@@ -84,6 +84,10 @@ interface Task {
   };
 }
 
+interface UserMapType {
+  [key: string]: any;
+}
+
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -214,10 +218,10 @@ export default function Dashboard() {
       }
 
       // Crear un mapa de usuarios para fácil acceso
-      const usersMap = (usersData || []).reduce((acc, user) => {
+      const usersMap = (usersData || []).reduce((acc: UserMapType, user) => {
         acc[user.id] = user;
         return acc;
-      }, {});
+      }, {} as UserMapType);
 
       // Combinar los datos de tareas con los usuarios
       const tasksWithUsers = (taskData || []).map(task => ({

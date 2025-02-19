@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { RESOURCES, ACTIONS } from '../../../lib/types/permissions'
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const supabase = createRouteHandlerClient({ cookies })
     
@@ -14,15 +14,15 @@ export async function GET(request: Request) {
     const { data: roles, error } = await supabase
       .from('roles')
       .select('*')
+      .order('name')
 
     if (error) throw error
 
     return NextResponse.json(roles)
   } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al obtener roles' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener roles'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json({ error: errorMessage }, { status })
   }
 }
 
@@ -54,10 +54,9 @@ export async function POST(request: Request) {
     if (error) throw error
 
     return NextResponse.json(data[0])
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message || 'Error al crear rol' },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear rol'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json({ error: errorMessage }, { status })
   }
 } 

@@ -3,36 +3,26 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
 // GET /api/tags - Obtener etiquetas
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const supabase = createRouteHandlerClient({ cookies })
     
-    // Verificar autenticación
+    // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
 
-    const { searchParams } = new URL(request.url)
-    const organization_id = searchParams.get('organization_id')
-
-    // Obtener etiquetas con conteo de uso
     const { data: tags, error } = await supabase
       .from('tags')
-      .select(`
-        *,
-        entity_tags (
-          count
-        )
-      `)
-      .eq('organization_id', organization_id)
+      .select('*')
+      .order('name')
 
     if (error) throw error
 
     return NextResponse.json(tags)
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener tags'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json({ error: errorMessage }, { status })
   }
 }
 
@@ -40,31 +30,23 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
+    const body = await request.json()
     
+    // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
 
-    const body = await request.json()
-    const { name, color, organization_id } = body
-
-    const { data: tag, error } = await supabase
+    const { data, error } = await supabase
       .from('tags')
-      .insert({ 
-        name, 
-        color, 
-        organization_id,
-        created_by: user.id 
-      })
+      .insert([body])
       .select()
-      .single()
 
     if (error) throw error
 
-    return NextResponse.json(tag)
-  } catch (error) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
-    )
+    return NextResponse.json(data[0])
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al crear tag'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json({ error: errorMessage }, { status })
   }
 } 
