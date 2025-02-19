@@ -27,6 +27,10 @@ interface Task {
   }
   area?: {
     name: string
+    sala?: {
+      id: string
+      nombre: string
+    }
   }
 }
 
@@ -127,7 +131,7 @@ export default function TasksPage() {
           )
         `)
         .eq('organization_id', userProfile.organization_id)
-        .eq('assigned_to', user.id)
+        .not('assigned_to', 'is', null)
         .order('created_at', { ascending: false })
 
       if (tasksError) {
@@ -174,7 +178,7 @@ export default function TasksPage() {
 
       console.log('Tareas formateadas:', formattedTasks) // Debug
 
-      // Actualizar estadísticas usando los valores de status directamente
+      // Actualizar estadísticas usando los valores de status directly
       const stats = {
         completed: allTasks?.filter(t => t.status === 'completed').length || 0,
         pending: allTasks?.filter(t => t.status === 'pending').length || 0,
@@ -254,7 +258,7 @@ export default function TasksPage() {
             name,
             sala:salas (
               id,
-              name
+              nombre
             )
           )
         `)
@@ -278,7 +282,7 @@ export default function TasksPage() {
           name: updatedTask.area[0].name,
           sala: updatedTask.area[0].sala?.[0] ? {
             id: updatedTask.area[0].sala[0].id,
-            name: updatedTask.area[0].sala[0].name
+            nombre: updatedTask.area[0].sala[0].nombre
           } : undefined
         } : undefined
       };
@@ -597,7 +601,7 @@ export default function TasksPage() {
 
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-4">
-          <h1 className="text-xl font-semibold text-gray-800">Mis Asignaciones</h1>
+          <h1 className="text-xl font-semibold text-gray-800">Tareas Asignadas</h1>
         </div>
         <button className="p-2 hover:bg-gray-100 rounded-full">
           <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -626,9 +630,9 @@ export default function TasksPage() {
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
               />
             </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No hay asignaciones pendientes</h3>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">No hay tareas asignadas</h3>
             <p className="mt-1 text-sm text-gray-500">
-              No tienes tareas asignadas en este momento.
+              No hay tareas asignadas en este momento.
             </p>
           </div>
         ) : (
