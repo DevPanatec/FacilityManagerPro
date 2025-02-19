@@ -265,9 +265,20 @@ export default function Dashboard() {
 
       // Calcular estadísticas generales
       const completadas = taskDataArray.filter(t => t.status === 'completed').length;
-      const pendientes = taskDataArray.filter(t => t.status === 'pending').length;
+      const pendientes = taskDataArray.filter(t => 
+        t.status === 'pending' && t.assigned_to // Solo contar las que están asignadas
+      ).length;
       const enProgreso = taskDataArray.filter(t => t.status === 'in_progress').length;
       const total = taskDataArray.length;
+
+      console.log('Desglose de tareas:', {
+        total,
+        pendientes,
+        pendientesSinAsignar: taskDataArray.filter(t => t.status === 'pending' && !t.assigned_to).length,
+        pendientesAsignadas: taskDataArray.filter(t => t.status === 'pending' && t.assigned_to).length,
+        enProgreso,
+        completadas
+      });
 
       // Calcular tiempo promedio por tarea
       const completedWithTimes = taskDataArray.filter(t => 
@@ -325,12 +336,59 @@ export default function Dashboard() {
         };
       });
 
+      // Obtener inventario
+      const { data: inventoryAlerts, error: inventoryError } = await supabase
+        .from('inventory_items')
+        .select(`
+          id,
+          name,
+          quantity,
+          min_stock,
+          status,
+          organization_id
+        `)
+        .eq('organization_id', userProfile.organization_id);
+
+      console.log('Raw inventory data:', inventoryAlerts); // Debug log
+
+      if (inventoryError) {
+        console.error('Error fetching inventory:', inventoryError);
+        throw new Error('Error al obtener inventario: ' + inventoryError.message);
+      }
+
+      // Formatear alertas de inventario y filtrar los que están bajo el mínimo
+      const formattedAlerts = (inventoryAlerts || [])
+        .filter(item => {
+          console.log('Checking item:', item.name, {
+            quantity: item.quantity,
+            min_stock: item.min_stock,
+            status: item.status
+          });
+          // Incluir items que:
+          // 1. Tienen cantidad 0
+          // 2. Tienen estado out_of_stock
+          // 3. Tienen cantidad menor al stock mínimo
+          return (
+            item.quantity === 0 ||
+            item.status === 'out_of_stock' ||
+            (item.quantity < item.min_stock && item.min_stock > 0)
+          );
+        })
+        .map(item => ({
+          producto: item.name,
+          stockActual: item.quantity || 0,
+          stockMinimo: item.min_stock || 0,
+          itemsNecesarios: Math.max(0, (item.min_stock || 0) - (item.quantity || 0))
+        }));
+
+      console.log('Final formatted alerts:', formattedAlerts); // Ver alertas finales
+
       // Actualizar el estado
       setDashboardData({
         ...dashboardData,
         asignacionesPendientes: {
           cantidad: pendientes,
-          variacion: Math.round((pendientes - (taskDataArray.filter(t => t.status === 'pending').length || 0)) / (taskDataArray.filter(t => t.status === 'pending').length || 1) * 100)
+          variacion: Math.round((pendientes - (taskDataArray.filter(t => t.status === 'pending' && t.assigned_to).length || 0)) / (taskDataArray.filter(t => t.status === 'pending' && t.assigned_to).length || 1) * 100)
         },
         personalActivo: activeUsers?.length || 0,
         tiempoPromedio,
@@ -367,7 +425,7 @@ export default function Dashboard() {
             return taskTime ? (taskTime.getHours() >= 22 || taskTime.getHours() < 6) : true;
           }).length
         },
-        alertasInventario: [],
+        alertasInventario: formattedAlerts,
         estadoAsignaciones,
         frecuenciaLimpieza,
         estadoTareas: {
