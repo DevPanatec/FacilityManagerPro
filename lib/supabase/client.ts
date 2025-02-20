@@ -4,26 +4,19 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/lib/types/database'
 import { SUPABASE_URL, SUPABASE_ANON_KEY, baseAuthConfig, baseGlobalConfig } from './config.base'
 
-let supabaseClient: ReturnType<typeof createClientComponentClient<Database>> | null = null;
+let supabaseClient: ReturnType<typeof createClientComponentClient<Database, 'public'>> | null = null;
 
 // Cliente para componentes del lado del cliente
 export const createClientSupabase = () => {
   if (!supabaseClient) {
-    supabaseClient = createClientComponentClient<Database>({
+    supabaseClient = createClientComponentClient<Database, 'public'>({
       supabaseUrl: SUPABASE_URL,
       supabaseKey: SUPABASE_ANON_KEY,
       options: {
-        ...baseAuthConfig,
-        ...baseGlobalConfig,
-        auth: {
-          ...baseAuthConfig.auth,
-          persistSession: true,
-          autoRefreshToken: true,
-          detectSessionInUrl: true,
-          storage: localStorage
+        db: {
+          schema: 'public'
         },
         global: {
-          ...baseGlobalConfig.global,
           headers: {
             'X-Client-Info': 'supabase-js-web',
             'Authorization': `Bearer ${SUPABASE_ANON_KEY}`

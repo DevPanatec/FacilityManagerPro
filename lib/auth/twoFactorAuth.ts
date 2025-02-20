@@ -60,7 +60,7 @@ export class TwoFactorAuth {
       // Verificar si es un código de backup
       if (data.backup_codes?.includes(token)) {
         // Remover el código de backup usado
-        const newBackupCodes = data.backup_codes.filter(code => code !== token)
+        const newBackupCodes = data.backup_codes.filter((code: string) => code !== token)
         await supabase
           .from('user_2fa')
           .update({ backup_codes: newBackupCodes })

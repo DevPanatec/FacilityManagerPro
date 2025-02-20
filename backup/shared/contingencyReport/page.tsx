@@ -111,7 +111,7 @@ export default function ReportsPage() {
       
       const reportesActuales = response.data.reports || reportes;
       const total = reportesActuales.length;
-      const pendientes = reportesActuales.filter(r => r.estado === 'Pendiente').length;
+      const pendientes = reportesActuales.filter((r: Report) => r.estado === 'Pendiente').length;
       setStats({
         total,
         pendientes,

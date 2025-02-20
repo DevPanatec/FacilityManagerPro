@@ -6,39 +6,46 @@ import { NextResponse } from 'next/server'
 export async function GET(request: Request) {
   try {
     const supabase = createRouteHandlerClient({ cookies })
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
     
+    // Obtener el usuario actual
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('No autorizado')
+
+    const { searchParams } = new URL(request.url)
+    const role = searchParams.get('role')
+    const status = searchParams.get('status')
+
     let query = supabase
-      .from('profiles')
+      .from('users')
       .select(`
-        id,
-        user_id,
-        organization_id,
-        first_name,
-        last_name,
-        avatar_url,
-        phone,
-        position,
-        created_at,
-        organizations (
+        *,
+        roles (
           id,
-          name
+          name,
+          permissions
         )
       `)
+      .order('created_at', { ascending: false })
 
-    // Si se proporciona un userId, filtrar por ese usuario
-    if (userId) {
-      query = query.eq('user_id', userId)
+    if (role) {
+      query = query.eq('role', role)
+    }
+    if (status) {
+      query = query.eq('status', status)
     }
 
-    const { data: users, error } = await query.order('created_at', { ascending: false })
+    const { data: users, error } = await query
 
     if (error) throw error
 
     return NextResponse.json(users)
-  } catch (error) {
-    return NextResponse.json({ error: 'Error al obtener usuarios' }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al obtener usuarios'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json(
+      { error: errorMessage },
+      { status }
+    )
   }
 }
 
@@ -48,40 +55,63 @@ export async function PUT(request: Request) {
     const supabase = createRouteHandlerClient({ cookies })
     const body = await request.json()
     
-    // Verificar que el usuario solo actualice su propio perfil
+    // Obtener el usuario actual
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('No autorizado')
 
+    const { id, ...updates } = body
+
     const { data, error } = await supabase
-      .from('profiles')
-      .update({
-        first_name: body.first_name,
-        last_name: body.last_name,
-        phone: body.phone,
-        position: body.position,
-        avatar_url: body.avatar_url
-      })
-      .eq('user_id', body.user_id)
+      .from('users')
+      .update(updates)
+      .eq('id', id)
       .select()
+      .single()
 
     if (error) throw error
 
-    // Registrar la actualización en activity_logs
-    await supabase
-      .from('activity_logs')
-      .insert([
-        {
-          user_id: user.id,
-          action: 'profile_update',
-          description: 'User profile updated'
-        }
-      ])
-
     return NextResponse.json(data)
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al actualizar usuario'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
     return NextResponse.json(
-      { error: error.message || 'Error al actualizar usuario' }, 
-      { status: error.message.includes('No autorizado') ? 403 : 500 }
+      { error: errorMessage },
+      { status }
+    )
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const supabase = createRouteHandlerClient({ cookies })
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (!id) throw new Error('ID de usuario requerido')
+    
+    // Obtener el usuario actual
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('No autorizado')
+
+    // No permitir eliminar el propio usuario
+    if (id === user.id) {
+      throw new Error('No puedes eliminar tu propio usuario')
+    }
+
+    const { error } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+
+    return NextResponse.json({ success: true })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error al eliminar usuario'
+    const status = errorMessage.includes('No autorizado') ? 403 : 500
+    return NextResponse.json(
+      { error: errorMessage },
+      { status }
     )
   }
 } 

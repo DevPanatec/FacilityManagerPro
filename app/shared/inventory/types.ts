@@ -30,6 +30,7 @@ export interface InventoryUsage {
   quantity: number
   date: string
   user_id: string
+  user_name: string
   organization_id: string
   created_at: string
   updated_at: string
@@ -41,6 +42,7 @@ export interface InventoryRestock {
   quantity: number
   date: string
   supplier: string
+  organization_id: string
   created_at: string
   updated_at: string
 } 

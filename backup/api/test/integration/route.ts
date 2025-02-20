@@ -1,14 +1,21 @@
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { testService } from '@/services/testService';
+import { testService } from '@/app/services/testService';
 
 export async function GET() {
   try {
-    const results = {
-      taskFlow: await testService.testTaskFlow()
-    };
+    const supabase = createRouteHandlerClient({ cookies });
+    
+    // Obtener el usuario actual
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('No autorizado');
+
+    // Ejecutar pruebas de integración
+    const results = await testService.testTaskFlow();
 
     return NextResponse.json({
-      success: results.taskFlow.success,
+      success: results.success,
       results,
       timestamp: new Date().toISOString()
     });

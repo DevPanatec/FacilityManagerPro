@@ -3,6 +3,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { toast } from 'react-hot-toast'
 import InventoryModal from './components/InventoryModal'
+import { PencilIcon, ArrowsUpDownIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { inventoryService } from '@/app/services/inventoryService'
 
 interface InventoryItem {
   id: string
@@ -62,9 +64,9 @@ export default function InventoryPage() {
 
   const [items, setItems] = useState<InventoryItem[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | undefined>()
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
   const [search, setSearch] = useState('')
-  const [modalMode, setModalMode] = useState<'edit' | 'use' | 'restock' | 'create'>('edit')
+  const [modalMode, setModalMode] = useState<'edit' | 'use' | 'restock' | 'operations' | 'create'>('edit')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAlerts, setShowAlerts] = useState(true)
@@ -222,82 +224,93 @@ export default function InventoryPage() {
       console.log('Item encontrado:', item)
 
       const now = new Date().toISOString()
-      const isRestock = modalMode === 'restock'
-      const quantity = parseInt(data.operationQuantity)
+      const quantity = Number(data.quantity)
 
       if (isNaN(quantity) || quantity <= 0) {
         throw new Error('La cantidad debe ser mayor a 0')
       }
 
-      if (!isRestock && quantity > item.quantity) {
+      if (quantity > item.quantity) {
         throw new Error('La cantidad no puede ser mayor al stock disponible')
       }
 
-      const newQuantity = isRestock ? item.quantity + quantity : Math.max(0, item.quantity - quantity)
-      const updateData = {
-        quantity: newQuantity,
-        status: newQuantity === 0 ? 'out_of_stock' : 
-                newQuantity <= item.min_stock ? 'low' : 'available',
-        updated_at: now
-      }
+      await inventoryService.registerUsage(
+        itemId,
+        quantity,
+        user.id,
+        data.date || now,
+        data.user_name,
+        item.organization_id
+      )
 
-      if (isRestock) {
-        const restockData = {
-          inventory_id: itemId,
-          quantity: quantity,
-          supplier: data.userName || 'Sistema',
-          date: data.date,
-          created_at: now,
-          updated_at: now
-        }
-
-        console.log('Datos de reposición a insertar:', restockData)
-        const { error: restockError } = await supabase
-          .from('inventory_restock')
-          .insert([restockData])
-
-        if (restockError) {
-          console.error('Error en reposición:', restockError)
-          throw restockError
-        }
-      } else {
-        const usageData = {
-          inventory_id: itemId,
-          quantity: quantity,
-          user_id: user.id,
-          date: data.date,
-          created_at: now,
-          updated_at: now
-        }
-
-        console.log('Datos de uso a insertar:', usageData)
-        const { error: usageError } = await supabase
-          .from('inventory_usage')
-          .insert([usageData])
-
-        if (usageError) {
-          console.error('Error en uso:', usageError)
-          throw usageError
-        }
-      }
-
-      const { error: updateError } = await supabase
-        .from('inventory_items')
-        .update(updateData)
-        .eq('id', itemId)
-
-      if (updateError) {
-        console.error('Error en actualización:', updateError)
-        throw updateError
-      }
-
-      console.log('Operación completada exitosamente')
       await loadInventoryItems()
-      toast.success(isRestock ? 'Reposición registrada correctamente' : 'Uso registrado correctamente')
-    } catch (error: any) {
-      console.error('Error detallado en operación de inventario:', error)
-      toast.error(error.message || 'Error al procesar la operación')
+      toast.success('Uso registrado correctamente')
+    } catch (error) {
+      console.error('Error en registerItemUsage:', error)
+      toast.error(error instanceof Error ? error.message : 'Error al registrar uso')
       throw error
+    }
+  }
+
+  // Función para registrar reposición de item
+  const registerItemRestock = async (itemId: string, data: any) => {
+    try {
+      console.log('Iniciando registerItemRestock:', { itemId, data })
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('No autorizado')
+
+      const item = items.find(i => i.id === itemId)
+      if (!item) {
+        console.error('Item no encontrado:', itemId)
+        throw new Error('Item no encontrado')
+      }
+
+      const now = new Date().toISOString()
+      const quantity = Number(data.quantity)
+
+      if (isNaN(quantity) || quantity <= 0) {
+        throw new Error('La cantidad debe ser mayor a 0')
+      }
+
+      await inventoryService.registerRestock(
+        itemId,
+        quantity,
+        data.supplier || 'Sistema',
+        data.date || now,
+        item.organization_id
+      )
+
+      await loadInventoryItems()
+      toast.success('Reposición registrada correctamente')
+    } catch (error) {
+      console.error('Error en registerItemRestock:', error)
+      toast.error(error instanceof Error ? error.message : 'Error al registrar reposición')
+      throw error
+    }
+  }
+
+  // Función para manejar la operación según el modo
+  const handleOperation = async (itemId: string, data: any, type?: 'use' | 'restock' | 'edit' | 'create') => {
+    try {
+      if (type === 'edit' || modalMode === 'edit') {
+        await updateInventoryItem({
+          ...selectedItem!,
+          ...data
+        })
+        toast.success('Item actualizado correctamente')
+      } else if (type === 'use') {
+        await registerItemUsage(itemId, data)
+      } else if (type === 'restock') {
+        await registerItemRestock(itemId, data)
+      }
+      
+      // Recargar items después de la operación
+      await loadInventoryItems()
+      // No cerramos el modal aquí para permitir que se actualice el historial
+    } catch (error) {
+      console.error('Error en operación:', error)
+      toast.error(error instanceof Error ? error.message : 'Error al procesar la operación')
     }
   }
 
@@ -392,27 +405,78 @@ export default function InventoryPage() {
     return result
   }, [items, sortConfig, filters, search])
 
-  const handleModalSubmit = async (formData: any) => {
+  const handleModalSubmit = async (itemId: string, formData: any, type: 'use' | 'restock' | 'edit' | 'create') => {
     try {
-      if (modalMode === 'use' && selectedItem) {
-        await registerItemUsage(selectedItem.id, formData)
-      } else if (modalMode === 'edit' && selectedItem) {
-        await updateInventoryItem({
-          ...selectedItem,
-          ...formData
-        })
-      } else if (modalMode === 'create') {
-        await createInventoryItem(formData)
+      if (!selectedItem) {
+        throw new Error('No se ha seleccionado ningún item');
       }
+
+      await handleOperation(itemId, formData, type);
       
-      setIsModalOpen(false)
-      setModalMode('edit')
-      await loadInventoryItems()
+      // Recargar los datos del inventario
+      await loadInventoryItems();
+      
+      // Cerrar el modal
+      setIsModalOpen(false);
+      
+      // Limpiar el item seleccionado
+      setSelectedItem(null);
     } catch (error) {
-      console.error('Error in modal submit:', error)
-      toast.error('Error al procesar la operación')
+      console.error('Error en la operación:', error);
+      toast.error(error instanceof Error ? error.message : 'Error al procesar la operación');
     }
-  }
+  };
+
+  const handleRestockClick = (item: InventoryItem) => {
+    setSelectedItem(item);
+    setModalMode('restock');
+    setIsModalOpen(true);
+  };
+
+  const handleUseClick = (item: InventoryItem) => {
+    setSelectedItem(item);
+    setModalMode('use');
+    setIsModalOpen(true);
+  };
+
+  const handleOperationsClick = (item: InventoryItem) => {
+    setSelectedItem(item);
+    setModalMode('operations');
+    setIsModalOpen(true);
+  };
+
+  // Actualizar el renderizado de la tabla para incluir los botones de uso y reposición
+  const renderActionButtons = (item: InventoryItem) => (
+    <div className="flex space-x-2">
+      <button
+        onClick={() => handleEditClick(item)}
+        className="p-2 text-blue-600 hover:text-blue-800"
+        title="Editar"
+      >
+        <PencilIcon className="h-5 w-5" />
+      </button>
+      <button
+        onClick={() => handleOperationsClick(item)}
+        className="p-2 text-green-600 hover:text-green-800"
+        title="Operaciones"
+      >
+        <ArrowsUpDownIcon className="h-5 w-5" />
+      </button>
+      <button
+        onClick={() => deleteInventoryItem(item.id)}
+        className="p-2 text-red-600 hover:text-red-800"
+        title="Eliminar"
+      >
+        <TrashIcon className="h-5 w-5" />
+      </button>
+    </div>
+  );
+
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+    setSelectedItem(null);
+    setModalMode('edit');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -426,7 +490,7 @@ export default function InventoryPage() {
             </div>
             <button
               onClick={() => {
-                setSelectedItem(undefined)
+                setSelectedItem(null)
                 setModalMode('create')
                 setIsModalOpen(true)
               }}
@@ -653,42 +717,7 @@ export default function InventoryPage() {
                         {new Date(item.updated_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end space-x-2">
-                          <button
-                            onClick={() => handleEditClick(item)}
-                            className="text-gray-600 hover:text-blue-600"
-                            title="Editar"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => handleItemClick(item)}
-                            className="text-gray-600 hover:text-green-600"
-                            title="Registrar uso"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (window.confirm('¿Estás seguro de que deseas eliminar este item?')) {
-                                deleteInventoryItem(item.id)
-                              }
-                            }}
-                            className="text-gray-600 hover:text-red-600"
-                            title="Eliminar"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
+                        {renderActionButtons(item)}
                       </td>
                     </tr>
                   ))}
@@ -701,11 +730,8 @@ export default function InventoryPage() {
 
       <InventoryModal
         isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false)
-          setModalMode('edit')
-        }}
-        onSubmit={handleModalSubmit}
+        onClose={handleModalClose}
+        onSubmit={(itemId, formData, type) => handleModalSubmit(itemId, formData, type)}
         item={selectedItem}
         mode={modalMode}
       />

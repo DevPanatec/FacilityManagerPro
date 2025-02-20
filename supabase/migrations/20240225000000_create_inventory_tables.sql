@@ -23,6 +23,7 @@ CREATE TABLE inventory_usage (
   quantity INTEGER NOT NULL,
   date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   user_id UUID REFERENCES users(id),
+  user_name VARCHAR(255),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

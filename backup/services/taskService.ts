@@ -1,182 +1,287 @@
-import { supabaseService } from './supabaseService'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Database } from '@/types/supabase'
+import { supabaseService } from './supabaseService'
 
 type Task = Database['public']['Tables']['tasks']['Row']
 type TaskInsert = Database['public']['Tables']['tasks']['Insert']
 type TaskUpdate = Database['public']['Tables']['tasks']['Update']
 
 export const taskService = {
-  // Obtener tareas según el rol del usuario
-  async getTasks(): Promise<Task[]> {
+  async getTasks() {
+    const supabase = createClientComponentClient<Database>()
     try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
-      if (authError) throw authError
-      if (!authData?.user) throw new Error('Usuario no autenticado')
+      const authData = await supabaseService.auth.getUser()
+      if (!authData?.data?.user) throw new Error('Usuario no autenticado')
+      const userId = authData.data.user.id
 
-      const { data: tasks, error: tasksError } = await supabaseService.db
+      // Obtener el rol del usuario
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .single()
+
+      if (userError) throw userError
+
+      // Obtener tareas
+      const { data: tasks, error: tasksError } = await supabase
         .from('tasks')
-        .select('*')
+        .select(`
+          *,
+          assigned_to:users!tasks_assigned_to_fkey (
+            id,
+            first_name,
+            last_name,
+            email
+          ),
+          created_by:users!tasks_created_by_fkey (
+            id,
+            first_name,
+            last_name,
+            email
+          ),
+          area:areas (
+            id,
+            name
+          )
+        `)
+        .order('created_at', { ascending: false })
+
       if (tasksError) throw tasksError
 
-      // Filtrar tareas según el rol del usuario
-      const { data: profile, error: profileError } = await supabaseService.db
+      // Filtrar tareas según el rol
+      const filteredTasks = userData?.role === 'enterprise'
+        ? tasks.filter(task => task.assigned_to === userId)
+        : tasks
+
+      return { data: filteredTasks, error: null }
+    } catch (error) {
+      console.error('Error getting tasks:', error)
+      return { data: null, error }
+    }
+  },
+
+  async getTask(taskId: string) {
+    const supabase = createClientComponentClient<Database>()
+    try {
+      const authData = await supabaseService.auth.getUser()
+      if (!authData?.data?.user) throw new Error('Usuario no autenticado')
+      const userId = authData.data.user.id
+
+      // Obtener el rol del usuario
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role')
-        .eq('id', authData.user.id)
+        .eq('id', userId)
         .single()
-      if (profileError) throw profileError
 
-      if (profile?.role === 'enterprise') {
-        return tasks.filter(task => task.assigned_to === authData.user.id)
-      }
-      return tasks
-    } catch (error) {
-      console.error('Error al obtener tareas:', error)
-      throw error
-    }
-  },
+      if (userError) throw userError
 
-  // Crear una nueva tarea
-  async createTask(taskData: Partial<TaskInsert>): Promise<Task> {
-    try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
-      if (authError) throw authError
-      if (!authData?.user) throw new Error('Usuario no autenticado')
-
-      const newTask: TaskInsert = {
-        title: taskData.title || '',
-        description: taskData.description || '',
-        status: taskData.status || 'pending',
-        priority: taskData.priority || 'medium',
-        organization_id: taskData.organization_id || '',
-        created_by: authData.user.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-
-      const { data, error: insertError } = await supabaseService.db
+      // Obtener tarea
+      const { data: task, error: taskError } = await supabase
         .from('tasks')
-        .insert(newTask)
-        .select()
+        .select(`
+          *,
+          assigned_to:users!tasks_assigned_to_fkey (
+            id,
+            first_name,
+            last_name,
+            email
+          ),
+          created_by:users!tasks_created_by_fkey (
+            id,
+            first_name,
+            last_name,
+            email
+          ),
+          area:areas (
+            id,
+            name
+          )
+        `)
+        .eq('id', taskId)
         .single()
-      if (insertError) throw insertError
-      return data
-    } catch (error) {
-      console.error('Error al crear tarea:', error)
-      throw error
-    }
-  },
 
-  // Actualizar una tarea existente
-  async updateTask(id: string, updates: Partial<TaskUpdate>): Promise<Task> {
-    try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
-      if (authError) throw authError
-      if (!authData?.user) throw new Error('Usuario no autenticado')
+      if (taskError) throw taskError
 
       // Verificar permisos
-      const { data: profile, error: profileError } = await supabaseService.db
+      if (userData?.role === 'enterprise' && task.assigned_to !== userId) {
+        throw new Error('No tienes permiso para ver esta tarea')
+      }
+
+      return { data: task, error: null }
+    } catch (error) {
+      console.error('Error getting task:', error)
+      return { data: null, error }
+    }
+  },
+
+  async createTask(taskData: TaskInsert) {
+    const supabase = createClientComponentClient<Database>()
+    try {
+      const authData = await supabaseService.auth.getUser()
+      if (!authData?.data?.user) throw new Error('Usuario no autenticado')
+      const userId = authData.data.user.id
+
+      // Obtener el rol del usuario
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role')
-        .eq('id', authData.user.id)
+        .eq('id', userId)
         .single()
-      if (profileError) throw profileError
 
-      if (profile?.role === 'enterprise') {
-        const { data: task, error: taskError } = await supabaseService.db
+      if (userError) throw userError
+
+      // Verificar permisos
+      if (userData?.role === 'enterprise') {
+        throw new Error('No tienes permiso para crear tareas')
+      }
+
+      // Crear tarea
+      const { data: task, error: taskError } = await supabase
+        .from('tasks')
+        .insert([{
+          ...taskData,
+          created_by: userId,
+          status: taskData.status || 'pending'
+        }])
+        .select()
+        .single()
+
+      if (taskError) throw taskError
+      return { data: task, error: null }
+    } catch (error) {
+      console.error('Error creating task:', error)
+      return { data: null, error }
+    }
+  },
+
+  async updateTask(taskId: string, updates: TaskUpdate) {
+    const supabase = createClientComponentClient<Database>()
+    try {
+      const authData = await supabaseService.auth.getUser()
+      if (!authData?.data?.user) throw new Error('Usuario no autenticado')
+      const userId = authData.data.user.id
+
+      // Obtener el rol del usuario
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .single()
+
+      if (userError) throw userError
+
+      // Verificar permisos
+      if (userData?.role === 'enterprise') {
+        const { data: task, error: taskError } = await supabase
           .from('tasks')
           .select()
-          .eq('id', id)
+          .eq('id', taskId)
           .single()
+
         if (taskError) throw taskError
-        if (!task || task.assigned_to !== authData.user.id) {
+        if (!task || task.assigned_to !== userId) {
           throw new Error('No tienes permiso para modificar esta tarea')
         }
       }
 
-      const updatedTask = {
-        ...updates,
-        updated_at: new Date().toISOString()
-      }
-
-      const { data, error: updateError } = await supabaseService.db
+      // Actualizar tarea
+      const { data: task, error: taskError } = await supabase
         .from('tasks')
-        .update(updatedTask)
-        .eq('id', id)
+        .update(updates)
+        .eq('id', taskId)
         .select()
         .single()
-      if (updateError) throw updateError
-      return data
+
+      if (taskError) throw taskError
+      return { data: task, error: null }
     } catch (error) {
-      console.error('Error al actualizar tarea:', error)
-      throw error
+      console.error('Error updating task:', error)
+      return { data: null, error }
     }
   },
 
-  // Eliminar una tarea
-  async deleteTask(id: string): Promise<boolean> {
+  async deleteTask(taskId: string) {
+    const supabase = createClientComponentClient<Database>()
     try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
-      if (authError) throw authError
-      if (!authData?.user) throw new Error('Usuario no autenticado')
+      const authData = await supabaseService.auth.getUser()
+      if (!authData?.data?.user) throw new Error('Usuario no autenticado')
+      const userId = authData.data.user.id
 
-      // Verificar permisos
-      const { data: profile, error: profileError } = await supabaseService.db
+      // Obtener el rol del usuario
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role')
-        .eq('id', authData.user.id)
+        .eq('id', userId)
         .single()
-      if (profileError) throw profileError
 
-      if (profile?.role === 'enterprise') {
+      if (userError) throw userError
+
+      // Verificar permisos
+      if (userData?.role === 'enterprise') {
         throw new Error('No tienes permiso para eliminar tareas')
       }
 
-      const { error: deleteError } = await supabaseService.db
+      // Eliminar tarea
+      const { error: taskError } = await supabase
         .from('tasks')
         .delete()
-        .eq('id', id)
-      if (deleteError) throw deleteError
-      return true
+        .eq('id', taskId)
+
+      if (taskError) throw taskError
+      return { error: null }
     } catch (error) {
-      console.error('Error al eliminar tarea:', error)
-      throw error
+      console.error('Error deleting task:', error)
+      return { error }
     }
   },
 
   // Asignar una tarea a un usuario
-  async assignTask(taskId: string, userId: string): Promise<Task> {
+  async assignTask(taskId: string, assignedUserId: string) {
+    const supabase = createClientComponentClient<Database>()
     try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
-      if (authError) throw authError
-      if (!authData?.user) throw new Error('Usuario no autenticado')
+      const authData = await supabaseService.auth.getUser()
+      if (!authData?.data?.user) throw new Error('Usuario no autenticado')
+      const userId = authData.data.user.id
 
-      // Verificar permisos
-      const { data: profile, error: profileError } = await supabaseService.db
+      // Obtener el rol del usuario
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role')
-        .eq('id', authData.user.id)
+        .eq('id', userId)
         .single()
-      if (profileError) throw profileError
 
-      if (profile?.role === 'enterprise') {
+      if (userError) throw userError
+
+      // Verificar permisos
+      if (userData?.role === 'enterprise') {
         throw new Error('No tienes permiso para asignar tareas')
       }
 
-      const { data, error: updateError } = await supabaseService.db
+      // Verificar que el usuario asignado existe
+      const { data: assignedUser, error: assignedUserError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', assignedUserId)
+        .single()
+
+      if (assignedUserError) throw assignedUserError
+      if (!assignedUser) throw new Error('Usuario asignado no encontrado')
+
+      // Asignar tarea
+      const { data: task, error: taskError } = await supabase
         .from('tasks')
-        .update({
-          assigned_to: userId,
-          updated_at: new Date().toISOString()
-        })
+        .update({ assigned_to: assignedUserId })
         .eq('id', taskId)
         .select()
         .single()
-      if (updateError) throw updateError
-      return data
+
+      if (taskError) throw taskError
+      return { data: task, error: null }
     } catch (error) {
-      console.error('Error al asignar tarea:', error)
-      throw error
+      console.error('Error assigning task:', error)
+      return { data: null, error }
     }
   }
 } 
