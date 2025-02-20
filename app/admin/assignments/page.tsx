@@ -641,36 +641,36 @@ export default function AssignmentsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="px-6 -mx-6 py-6">
-        <h1 className="text-2xl font-bold text-gray-800">Gestión de Asignaciones</h1>
+      <div className="px-4 sm:px-6 -mx-4 sm:-mx-6 py-4 sm:py-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Gestión de Asignaciones</h1>
         <p className="text-sm text-gray-600 mt-1">Administra las asignaciones del personal</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
         {/* Turnos del Personal */}
-        <div>
+        <div className="w-full">
           <h2 className="text-lg font-semibold mb-4">Turnos del Personal</h2>
-          <div className="bg-gradient-to-r from-blue-50 to-white p-6 rounded-lg shadow-sm space-y-4">
+          <div className="bg-gradient-to-r from-blue-50 to-white p-4 sm:p-6 rounded-lg shadow-sm space-y-4">
             {loading ? (
               <div className="text-center py-4 text-gray-500">Cargando turnos...</div>
             ) : (
               turnos.map((turno) => (
                 <div 
                   key={turno.id}
-                  className={`p-6 rounded-lg shadow-sm cursor-pointer transition-all hover:shadow-md ${
+                  className={`p-4 sm:p-6 rounded-lg shadow-sm cursor-pointer transition-all hover:shadow-md ${
                     turno.nombre === 'Turno A' ? 'bg-blue-50 border-l-4 border-blue-500' :
                     turno.nombre === 'Turno B' ? 'bg-green-50 border-l-4 border-green-500' :
                     'bg-purple-50 border-l-4 border-purple-500'
                   }`}
                   onClick={() => handleTurnoClick(turno)}
                 >
-                  <div className="flex justify-between items-center">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 sm:gap-0">
                     <div>
-                      <h3 className="text-lg font-medium">{turno.nombre}</h3>
+                      <h3 className="text-base sm:text-lg font-medium">{turno.nombre}</h3>
                       <p className="text-sm text-gray-500 mt-1">{turno.personasAsignadas} personas asignadas</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-base font-medium">{turno.horario}</p>
+                    <div className="text-left sm:text-right">
+                      <p className="text-sm sm:text-base font-medium">{turno.horario}</p>
                       <p className="text-sm text-gray-500 mt-1">{turno.enLinea} en línea</p>
                     </div>
                   </div>
@@ -679,7 +679,7 @@ export default function AssignmentsPage() {
             )}
             <button 
               onClick={() => setShowAddUserModal(true)}
-              className="w-full py-3 bg-[#4263eb] text-white rounded-lg hover:bg-[#364fc7] transition-colors mt-4"
+              className="w-full py-2.5 sm:py-3 bg-[#4263eb] text-white rounded-lg hover:bg-[#364fc7] transition-colors mt-4 text-sm sm:text-base"
             >
               Agregar Usuario a Turno
             </button>
@@ -687,9 +687,9 @@ export default function AssignmentsPage() {
         </div>
 
         {/* Nueva Asignación */}
-        <div>
+        <div className="w-full">
           <h2 className="text-lg font-semibold mb-4">Nueva Asignación</h2>
-          <div className="bg-gradient-to-r from-blue-50 to-white p-6 rounded-lg shadow-sm space-y-4 relative">
+          <div className="bg-gradient-to-r from-blue-50 to-white p-4 sm:p-6 rounded-lg shadow-sm space-y-4 relative">
             {/* Animación de éxito */}
             {showSuccessAnimation && (
               <div className="absolute inset-0 bg-white/90 backdrop-blur-sm flex items-center justify-center z-10">
@@ -826,7 +826,7 @@ export default function AssignmentsPage() {
       {/* Tareas por Sala */}
       <div className="mt-8">
         <h2 className="text-lg font-semibold mb-4">Tareas por Sala</h2>
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {salas.map((sala) => (
             <div 
               key={sala.id}
@@ -834,7 +834,7 @@ export default function AssignmentsPage() {
               style={{ borderLeft: `4px solid ${sala.color}` }}
             >
               {/* Encabezado de la sala */}
-              <div className="p-4" style={{ backgroundColor: `${sala.color}10` }}>
+              <div className="p-3 sm:p-4" style={{ backgroundColor: `${sala.color}10` }}>
                 <h3 className="font-semibold text-gray-800">{sala.nombre}</h3>
                 <p className="text-sm text-gray-500 mt-1">
                   {sala.tareas.length} tareas pendientes
@@ -842,7 +842,7 @@ export default function AssignmentsPage() {
               </div>
 
               {/* Lista de tareas */}
-              <div className="p-4 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+              <div className="p-3 sm:p-4 max-h-[300px] sm:max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
                 {sala.tareas.length > 0 ? (
                   <div className="space-y-3">
                     {sala.tareas.map((tarea) => (
@@ -902,8 +902,8 @@ export default function AssignmentsPage() {
         <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
         
         <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-sm rounded-lg bg-gradient-to-r from-blue-50 to-white p-6 shadow-xl">
-            <Dialog.Title className="text-lg font-medium text-blue-900 mb-4">
+          <Dialog.Panel className="w-full max-w-sm mx-auto rounded-lg bg-gradient-to-r from-blue-50 to-white p-4 sm:p-6 shadow-xl">
+            <Dialog.Title className="text-base sm:text-lg font-medium text-blue-900 mb-4">
               Agregar Usuario a Turno
             </Dialog.Title>
 
@@ -914,7 +914,7 @@ export default function AssignmentsPage() {
                   Usuario
                 </label>
                 <select
-                  className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  className="w-full p-2 sm:p-2.5 text-sm border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                   value={selectedShiftUser}
                   onChange={(e) => setSelectedShiftUser(e.target.value)}
                 >
@@ -931,7 +931,7 @@ export default function AssignmentsPage() {
                   Turno
                 </label>
                 <select
-                  className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  className="w-full p-2 sm:p-2.5 text-sm border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                   value={selectedTurno}
                   onChange={(e) => setSelectedTurno(e.target.value)}
                 >
@@ -948,13 +948,13 @@ export default function AssignmentsPage() {
               <div className="flex justify-end gap-2 mt-6">
                 <button
                   onClick={() => setShowAddUserModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
+                  className="px-3 sm:px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={addUserToShift}
-                  className="px-4 py-2 text-sm font-medium text-white bg-[#4263eb] rounded-lg hover:bg-[#364fc7]"
+                  className="px-3 sm:px-4 py-2 text-sm font-medium text-white bg-[#4263eb] rounded-lg hover:bg-[#364fc7]"
                 >
                   Agregar
                 </button>
@@ -1049,11 +1049,11 @@ export default function AssignmentsPage() {
         <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
         
         <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-md w-full rounded-lg bg-white p-6 shadow-xl">
+          <Dialog.Panel className="w-full max-w-md mx-auto rounded-lg bg-white p-4 sm:p-6 shadow-xl">
             {selectedShiftDetails && (
               <>
-                <Dialog.Title className="text-xl font-semibold text-gray-900 mb-4">
-                  <div className="flex justify-between items-center">
+                <Dialog.Title className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                     <div>
                       <h3>{selectedShiftDetails.nombre}</h3>
                       <p className="text-sm text-gray-500 mt-1">{selectedShiftDetails.horario}</p>
@@ -1068,12 +1068,12 @@ export default function AssignmentsPage() {
                   </div>
                 </Dialog.Title>
 
-                <div className="space-y-4">
+                <div className="mt-4">
                   {selectedShiftDetails.usuarios.length > 0 ? (
-                    <div className="divide-y divide-gray-100">
+                    <div className="divide-y divide-gray-100 max-h-[60vh] overflow-y-auto">
                       {selectedShiftDetails.usuarios.map((usuario) => (
                         <div key={usuario.id} className="py-3 flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium">
+                          <div className="w-8 sm:w-10 h-8 sm:h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium text-sm sm:text-base">
                             {usuario.avatar_url ? (
                               <img 
                                 src={usuario.avatar_url} 
@@ -1085,34 +1085,25 @@ export default function AssignmentsPage() {
                             )}
                           </div>
                           <div>
-                            <h4 className="font-medium text-gray-900">
+                            <h4 className="font-medium text-sm sm:text-base text-gray-900">
                               {usuario.first_name} {usuario.last_name}
                             </h4>
-                            <p className="text-sm text-gray-500">Usuario asignado</p>
+                            <p className="text-xs sm:text-sm text-gray-500">Usuario asignado</p>
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-center text-gray-500 py-4">
+                    <p className="text-center text-gray-500 py-4 text-sm">
                       No hay usuarios asignados a este turno
                     </p>
                   )}
                 </div>
 
-                <div className="mt-6 flex justify-end gap-3">
-                  <button
-                    onClick={() => {
-                      setShowShiftDetailsModal(false);
-                      setShowAddUserModal(true);
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-white bg-[#4263eb] rounded-lg hover:bg-[#364fc7] transition-colors"
-                  >
-                    Agregar Usuario
-                  </button>
+                <div className="mt-6 flex justify-end">
                   <button
                     onClick={() => setShowShiftDetailsModal(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    className="px-3 sm:px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                   >
                     Cerrar
                   </button>

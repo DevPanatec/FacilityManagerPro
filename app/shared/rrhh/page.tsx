@@ -414,9 +414,9 @@ export default function RRHHPage() {
 
     return (
       <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-        <div className="relative top-10 mx-auto p-8 border w-[600px] shadow-lg rounded-xl bg-white">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-2xl font-semibold text-gray-900">Crear Nuevo Usuario</h3>
+        <div className="relative top-10 mx-auto p-4 sm:p-5 border w-full max-w-[600px] shadow-lg rounded-xl bg-white">
+          <div className="flex justify-between items-center mb-4 sm:mb-6">
+            <h3 className="text-lg sm:text-2xl font-semibold text-gray-900">Crear Nuevo Usuario</h3>
             <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -424,13 +424,13 @@ export default function RRHHPage() {
             </button>
           </div>
           
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-2 gap-6">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Nombre</label>
                 <input
                   type="text"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
                   value={newEmployee.nombre}
                   onChange={(e) => setNewEmployee({...newEmployee, nombre: e.target.value})}
                   required
@@ -440,7 +440,7 @@ export default function RRHHPage() {
                 <label className="block text-sm font-medium text-gray-700">Apellido</label>
                 <input
                   type="text"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
                   value={newEmployee.apellido}
                   onChange={(e) => setNewEmployee({...newEmployee, apellido: e.target.value})}
                   required
@@ -448,61 +448,56 @@ export default function RRHHPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Rol</label>
-                <select
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  value={newEmployee.rol}
-                  onChange={(e) => setNewEmployee({...newEmployee, rol: e.target.value})}
-                  required
-                >
-                  <option value="">Seleccionar rol</option>
-                  <option value="usuario">Usuario</option>
-                  <option value="admin">Administrador</option>
-                  <option value="admin_principal">Administrador Principal</option>
-                  <option value="enterprise">Enterprise</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Ubicación
-                </label>
-                <select
-                  value={newEmployee.ubicacion}
-                  onChange={(e) => setNewEmployee({ ...newEmployee, ubicacion: e.target.value })}
-                  className="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Seleccionar ubicación</option>
-                  <option value="Limpieza General">Limpieza General</option>
-                  <option value="Almacén">Almacén</option>
-                  <option value="Área de Inyección">Área de Inyección</option>
-                  <option value="Mantenimiento">Mantenimiento</option>
-                  <option value="Control de Calidad">Control de Calidad</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Rol</label>
+              <select
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                value={newEmployee.rol}
+                onChange={(e) => setNewEmployee({...newEmployee, rol: e.target.value})}
+                required
+              >
+                <option value="">Seleccionar rol</option>
+                <option value="usuario">Usuario</option>
+                <option value="admin">Administrador</option>
+                <option value="admin_principal">Administrador Principal</option>
+                <option value="enterprise">Enterprise</option>
+              </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Nombre de Usuario</label>
-                <input
-                  type="text"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  value={newEmployee.username}
-                  onChange={(e) => setNewEmployee({...newEmployee, username: e.target.value})}
-                  required
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Ubicación</label>
+              <select
+                value={newEmployee.ubicacion}
+                onChange={(e) => setNewEmployee({ ...newEmployee, ubicacion: e.target.value })}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                required
+              >
+                <option value="">Seleccionar ubicación</option>
+                <option value="Limpieza General">Limpieza General</option>
+                <option value="Almacén">Almacén</option>
+                <option value="Área de Inyección">Área de Inyección</option>
+                <option value="Mantenimiento">Mantenimiento</option>
+                <option value="Control de Calidad">Control de Calidad</option>
+              </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Nombre de Usuario</label>
+              <input
+                type="text"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                value={newEmployee.username}
+                onChange={(e) => setNewEmployee({...newEmployee, username: e.target.value})}
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Contraseña</label>
                 <input
                   type="password"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
                   value={newEmployee.password}
                   onChange={(e) => setNewEmployee({...newEmployee, password: e.target.value})}
                   required
@@ -512,7 +507,7 @@ export default function RRHHPage() {
                 <label className="block text-sm font-medium text-gray-700">Confirmar Contraseña</label>
                 <input
                   type="password"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
                   value={newEmployee.confirmPassword}
                   onChange={(e) => setNewEmployee({...newEmployee, confirmPassword: e.target.value})}
                   required
@@ -520,17 +515,17 @@ export default function RRHHPage() {
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3">
+            <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 mt-6">
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                className="w-full sm:w-auto px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
               >
                 Crear Usuario
               </button>
@@ -827,17 +822,17 @@ export default function RRHHPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-blue-600 p-6">
-        <div className="flex justify-between items-center">
+      <div className="bg-blue-600 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0">
           <div>
-            <h1 className="text-2xl font-bold text-white">Recursos Humanos</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-white">Recursos Humanos</h1>
             <p className="text-blue-100">Gestión de personal y turnos</p>
           </div>
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full sm:w-auto">
             <select 
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
-              className="bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
+              className="w-full sm:w-auto bg-white/10 border border-white/20 rounded-lg px-3 sm:px-4 py-2 text-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
               style={{ color: 'white' }}
             >
               <option value="" className="text-gray-900">Todos los departamentos</option>
@@ -848,7 +843,7 @@ export default function RRHHPage() {
             <select 
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-white/10 border border-white/20 rounded-lg px-4 py-2 text-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
+              className="w-full sm:w-auto bg-white/10 border border-white/20 rounded-lg px-3 sm:px-4 py-2 text-sm text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
               style={{ color: 'white' }}
             >
               <option value="" className="text-gray-900">Todos los estados</option>
@@ -860,79 +855,85 @@ export default function RRHHPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="p-6">
-        <div className="grid grid-cols-2 gap-6">
+      <div className="p-4 sm:p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
           {/* Total Personal Card */}
-          <div className="bg-white p-6 rounded-lg shadow flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <svg className="w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0">
+              <div className="flex items-center gap-4">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <svg className="w-6 sm:w-8 h-6 sm:h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold">Total Personal</h2>
+                  <p className="text-3xl sm:text-4xl font-bold text-blue-600">{stats.totalEmployees}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowAddModal(true)}
+                className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-              </div>
-              <div>
-                <h2 className="text-xl font-bold">Total Personal</h2>
-                <p className="text-4xl font-bold text-blue-600">{stats.totalEmployees}</p>
-              </div>
+                <span>Crear Usuario</span>
+              </button>
             </div>
-            <button 
-              onClick={() => setShowAddModal(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Crear Usuario
-            </button>
           </div>
 
           {/* Turnos Activos Card */}
-          <div className="bg-white p-6 rounded-lg shadow flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0">
+              <div className="flex items-center gap-4">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <svg className="w-6 sm:w-8 h-6 sm:h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold">Turnos</h2>
+                  <p className="text-3xl sm:text-4xl font-bold text-green-600">{TURNOS.length}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowShiftModal(true)}
+                className="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-green-700"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-              </div>
-              <div>
-                <h2 className="text-xl font-bold">Turnos</h2>
-                <p className="text-4xl font-bold text-green-600">{TURNOS.length}</p>
-              </div>
+                <span>Gestionar Turnos</span>
+              </button>
             </div>
-            <button 
-              onClick={() => setShowShiftModal(true)}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Gestionar Turnos
-            </button>
           </div>
         </div>
 
         {/* Grid container for Personal Registrado and Usuarios Especiales */}
-        <div className="mt-8 grid grid-cols-2 gap-6">
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {/* Personal Registrado Section */}
-          <div className="bg-white rounded-lg shadow h-[600px] flex flex-col">
-            <div className="p-6 border-b">
-              <div className="flex items-center gap-2">
+          <div className="bg-white rounded-lg shadow h-[500px] sm:h-[600px] flex flex-col">
+            <div className="p-4 sm:p-6 border-b">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                 <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
-                <h2 className="text-xl font-bold">Personal Registrado</h2>
-                <span className="text-gray-500">Total: {employees.filter(emp => emp.role === 'usuario').length} empleados</span>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold">Personal Registrado</h2>
+                  <span className="text-sm text-gray-500">Total: {employees.filter(emp => emp.role === 'usuario').length} empleados</span>
+                </div>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar">
               <table className="w-full">
                 <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Personal</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cargo</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Departamento</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Personal</th>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Cargo</th>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Departamento</th>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -940,40 +941,42 @@ export default function RRHHPage() {
                     .filter(emp => emp.role === 'usuario')
                     .map((employee) => (
                       <tr key={employee.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">
+                        <td className="px-3 sm:px-6 py-4">
                           <div className="flex items-center">
-                            <div className="h-10 w-10 flex-shrink-0">
-                              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <div className="h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0">
+                              <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-blue-100 flex items-center justify-center">
                                 <span className="font-medium text-blue-600">
                                   {(employee.first_name || '').charAt(0).toUpperCase()}
                                 </span>
                               </div>
                             </div>
-                            <div className="ml-4 flex items-center">
-                              <div>
-                                <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                                  {employee.first_name} {employee.last_name}
-                                  <div className={`w-2 h-2 rounded-full ${employee.status === 'active' ? 'bg-green-500' : 'bg-red-500'}`} 
-                                       title={employee.status === 'active' ? 'Activo' : 'Inactivo'}></div>
-                                </div>
-                                <div className="text-sm text-gray-500">ID: {employee.id}</div>
+                            <div className="ml-2 sm:ml-4">
+                              <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                {employee.first_name} {employee.last_name}
+                                <div className={`w-2 h-2 rounded-full ${employee.status === 'active' ? 'bg-green-500' : 'bg-red-500'}`} 
+                                     title={employee.status === 'active' ? 'Activo' : 'Inactivo'}></div>
+                              </div>
+                              <div className="text-xs sm:text-sm text-gray-500 sm:hidden">
+                                {employee.position} - {employee.department}
                               </div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-500">{employee.position}</td>
-                        <td className="px-6 py-4 text-sm text-gray-500">{employee.department}</td>
-                        <td className="px-6 py-4 text-sm">
-                          <button onClick={() => handleEditEmployee(employee)} className="text-blue-600 hover:text-blue-900 mr-4">
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button onClick={() => handleDeleteEmployee(employee.id)} className="text-red-600 hover:text-red-900">
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                        <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">{employee.position}</td>
+                        <td className="px-3 sm:px-6 py-4 text-sm text-gray-500 hidden sm:table-cell">{employee.department}</td>
+                        <td className="px-3 sm:px-6 py-4 text-sm">
+                          <div className="flex gap-2">
+                            <button onClick={() => handleEditEmployee(employee)} className="text-blue-600 hover:text-blue-900">
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button onClick={() => handleDeleteEmployee(employee.id)} className="text-red-600 hover:text-red-900">
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -983,41 +986,43 @@ export default function RRHHPage() {
           </div>
 
           {/* Usuarios Especiales Section */}
-          <div className="bg-white rounded-lg shadow h-[600px] flex flex-col">
-            <div className="p-6 border-b">
-              <div className="flex items-center gap-2">
+          <div className="bg-white rounded-lg shadow h-[500px] sm:h-[600px] flex flex-col">
+            <div className="p-4 sm:p-6 border-b">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                 <svg className="w-6 h-6 text-cyan-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <h2 className="text-xl font-bold">Usuarios Especiales</h2>
-                <span className="text-gray-500">Administradores y Enterprise</span>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold">Usuarios Especiales</h2>
+                  <span className="text-sm text-gray-500">Administradores y Enterprise</span>
+                </div>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 space-y-4">
               {employees
                 .filter(emp => emp.role === 'admin' || emp.role === 'enterprise' || emp.role === 'admin_principal')
                 .map(employee => (
-                  <div key={employee.id} className="group p-4 bg-white rounded-xl border border-gray-200 hover:border-cyan-200 hover:shadow-sm transition-all">
+                  <div key={employee.id} className="group p-3 sm:p-4 bg-white rounded-xl border border-gray-200 hover:border-cyan-200 hover:shadow-sm transition-all">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
-                        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
-                          <span className="text-white font-medium text-lg">
+                        <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
+                          <span className="text-white font-medium text-base sm:text-lg">
                             {(employee.first_name || '').charAt(0).toUpperCase()}
                           </span>
                         </div>
-                        <div className="ml-4">
+                        <div className="ml-3 sm:ml-4">
                           <div className="text-sm font-medium text-gray-900">
                             {employee.first_name} {employee.last_name}
                           </div>
-                          <div className="text-sm text-cyan-600">
+                          <div className="text-xs sm:text-sm text-cyan-600">
                             {employee.role === 'admin_principal' ? 'Admin Principal' : 
                              employee.role === 'enterprise' ? 'Enterprise' : 'Administrador'}
                           </div>
                           <div className="text-xs text-gray-500">ID: {employee.id}</div>
                         </div>
                       </div>
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                      <div className="flex gap-2">
                         <button onClick={() => handleEditEmployee(employee)} className="text-cyan-600 hover:text-cyan-900">
                           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -1041,9 +1046,9 @@ export default function RRHHPage() {
       {showAddModal && <AddEmployeeModal />}
       {showModal && selectedEmployee && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-xl bg-white">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Editar Usuario</h3>
+          <div className="relative top-10 mx-auto p-4 sm:p-5 border w-full max-w-[500px] shadow-lg rounded-xl bg-white">
+            <div className="flex justify-between items-center mb-4 sm:mb-6">
+              <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Editar Usuario</h3>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -1053,67 +1058,65 @@ export default function RRHHPage() {
             <form onSubmit={(e) => {
               e.preventDefault();
               handleUpdateEmployee(selectedEmployee);
-            }}>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Nombre</label>
-                  <input
-                    type="text"
-                    value={selectedEmployee.first_name || ''}
-                    onChange={(e) => setSelectedEmployee({...selectedEmployee, first_name: e.target.value})}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Apellido</label>
-                  <input
-                    type="text"
-                    value={selectedEmployee.last_name || ''}
-                    onChange={(e) => setSelectedEmployee({...selectedEmployee, last_name: e.target.value})}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Cargo</label>
-                  <input
-                    type="text"
-                    value={selectedEmployee.position || ''}
-                    onChange={(e) => setSelectedEmployee({...selectedEmployee, position: e.target.value})}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Departamento</label>
-                  <input
-                    type="text"
-                    value={selectedEmployee.department || ''}
-                    onChange={(e) => setSelectedEmployee({...selectedEmployee, department: e.target.value})}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Estado</label>
-                  <select
-                    value={selectedEmployee.status}
-                    onChange={(e) => setSelectedEmployee({...selectedEmployee, status: e.target.value})}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  >
-                    <option value="active">Activo</option>
-                    <option value="inactive">Inactivo</option>
-                  </select>
-                </div>
+            }} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Nombre</label>
+                <input
+                  type="text"
+                  value={selectedEmployee.first_name || ''}
+                  onChange={(e) => setSelectedEmployee({...selectedEmployee, first_name: e.target.value})}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                />
               </div>
-              <div className="mt-6 flex justify-end space-x-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Apellido</label>
+                <input
+                  type="text"
+                  value={selectedEmployee.last_name || ''}
+                  onChange={(e) => setSelectedEmployee({...selectedEmployee, last_name: e.target.value})}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Cargo</label>
+                <input
+                  type="text"
+                  value={selectedEmployee.position || ''}
+                  onChange={(e) => setSelectedEmployee({...selectedEmployee, position: e.target.value})}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Departamento</label>
+                <input
+                  type="text"
+                  value={selectedEmployee.department || ''}
+                  onChange={(e) => setSelectedEmployee({...selectedEmployee, department: e.target.value})}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Estado</label>
+                <select
+                  value={selectedEmployee.status}
+                  onChange={(e) => setSelectedEmployee({...selectedEmployee, status: e.target.value})}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                >
+                  <option value="active">Activo</option>
+                  <option value="inactive">Inactivo</option>
+                </select>
+              </div>
+              <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 mt-6">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                  className="w-full sm:w-auto px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                 >
                   Guardar Cambios
                 </button>
@@ -1124,73 +1127,73 @@ export default function RRHHPage() {
       )}
 
       {/* Modal de Gestión de Turnos */}
-      {showShiftModal && (
-        <Dialog 
-          open={showShiftModal} 
-          onClose={() => setShowShiftModal(false)}
-          className="relative z-50"
-        >
-          <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
-          
-          <div className="fixed inset-0 flex items-center justify-center p-4">
-            <Dialog.Panel className="mx-auto max-w-4xl rounded-lg bg-gradient-to-r from-blue-50 to-white p-6 shadow-xl">
-              <div className="flex justify-between items-center mb-4">
-                <Dialog.Title className="text-lg font-medium text-blue-900">
-                  Gestionar Turnos
-                </Dialog.Title>
+      <Dialog 
+        open={showShiftModal} 
+        onClose={() => setShowShiftModal(false)}
+        className="relative z-50"
+      >
+        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+        
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <Dialog.Panel className="w-full max-w-2xl mx-auto rounded-lg bg-gradient-to-r from-blue-50 to-white p-4 sm:p-6 shadow-xl">
+            <div className="flex justify-between items-center mb-4">
+              <Dialog.Title className="text-base sm:text-lg font-medium text-blue-900">
+                Gestionar Turnos
+              </Dialog.Title>
+              <button
+                onClick={() => setShowShiftModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="border-b border-gray-200">
+              <nav className="-mb-px flex flex-wrap sm:flex-nowrap gap-2 sm:gap-8" aria-label="Tabs">
                 <button
-                  onClick={() => setShowShiftModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  onClick={() => setActiveTab('view')}
+                  className={`${
+                    activeTab === 'view'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-sm flex-1 sm:flex-none text-center`}
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  Ver Distribución
                 </button>
-              </div>
+                <button
+                  onClick={() => setActiveTab('add')}
+                  className={`${
+                    activeTab === 'add'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-sm flex-1 sm:flex-none text-center`}
+                >
+                  Asignar Turno
+                </button>
+                <button
+                  onClick={() => setActiveTab('move')}
+                  className={`${
+                    activeTab === 'move'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-sm flex-1 sm:flex-none text-center`}
+                >
+                  Cambiar Turno
+                </button>
+              </nav>
+            </div>
 
-              {/* Tabs */}
-              <div className="border-b border-gray-200 mb-6">
-                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                  <button
-                    onClick={() => setActiveTab('view')}
-                    className={`${
-                      activeTab === 'view'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                  >
-                    Ver Distribución
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('add')}
-                    className={`${
-                      activeTab === 'add'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                  >
-                    Asignar Turno
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('move')}
-                    className={`${
-                      activeTab === 'move'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                  >
-                    Cambiar Turno
-                  </button>
-                </nav>
-              </div>
-
-              {/* Contenido de las pestañas */}
+            {/* Contenido de las pestañas */}
+            <div className="mt-4 sm:mt-6">
               {activeTab === 'view' && (
-                <div className="grid grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                   {/* Turno Mañana */}
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <h3 className="text-lg font-semibold text-blue-900 mb-3">Turno Mañana (06:00 - 14:00)</h3>
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  <div className="bg-blue-50 p-3 sm:p-4 rounded-lg">
+                    <h3 className="text-base sm:text-lg font-semibold text-blue-900 mb-3">Turno Mañana (06:00 - 14:00)</h3>
+                    <div className="space-y-2 max-h-[200px] sm:max-h-[300px] overflow-y-auto">
                       {currentShifts
                         .filter(shift => shift.shift === 'mañana')
                         .map(user => (
@@ -1204,9 +1207,9 @@ export default function RRHHPage() {
                   </div>
 
                   {/* Turno Tarde */}
-                  <div className="bg-orange-50 p-4 rounded-lg">
-                    <h3 className="text-lg font-semibold text-orange-900 mb-3">Turno Tarde (14:00 - 22:00)</h3>
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  <div className="bg-orange-50 p-3 sm:p-4 rounded-lg">
+                    <h3 className="text-base sm:text-lg font-semibold text-orange-900 mb-3">Turno Tarde (14:00 - 22:00)</h3>
+                    <div className="space-y-2 max-h-[200px] sm:max-h-[300px] overflow-y-auto">
                       {currentShifts
                         .filter(shift => shift.shift === 'tarde')
                         .map(user => (
@@ -1220,9 +1223,9 @@ export default function RRHHPage() {
                   </div>
 
                   {/* Turno Noche */}
-                  <div className="bg-purple-50 p-4 rounded-lg">
-                    <h3 className="text-lg font-semibold text-purple-900 mb-3">Turno Noche (22:00 - 06:00)</h3>
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  <div className="bg-purple-50 p-3 sm:p-4 rounded-lg">
+                    <h3 className="text-base sm:text-lg font-semibold text-purple-900 mb-3">Turno Noche (22:00 - 06:00)</h3>
+                    <div className="space-y-2 max-h-[200px] sm:max-h-[300px] overflow-y-auto">
                       {currentShifts
                         .filter(shift => shift.shift === 'noche')
                         .map(user => (
@@ -1245,7 +1248,7 @@ export default function RRHHPage() {
                       Usuario
                     </label>
                     <select
-                      className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      className="w-full p-2 sm:p-2.5 text-sm border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                       value={selectedUser}
                       onChange={(e) => setSelectedUser(e.target.value)}
                     >
@@ -1264,7 +1267,7 @@ export default function RRHHPage() {
                       Turno
                     </label>
                     <select
-                      className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      className="w-full p-2 sm:p-2.5 text-sm border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                       value={selectedTurno}
                       onChange={(e) => setSelectedTurno(e.target.value)}
                     >
@@ -1275,34 +1278,19 @@ export default function RRHHPage() {
                     </select>
                   </div>
 
-                  {/* Fecha de Inicio */}
-                  <div>
-                    <label className="block text-sm font-medium text-blue-700 mb-1">
-                      Fecha de Inicio
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                    />
-                  </div>
-
-                  {/* Botones */}
-                  <div className="flex justify-end gap-2 mt-6">
+                  <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 mt-6">
                     <button
+                      type="button"
                       onClick={() => setShowShiftModal(false)}
-                      className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
+                      className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
                     >
                       Cancelar
                     </button>
                     <button
                       onClick={handleCreateShift}
-                      className="px-4 py-2 text-sm font-medium text-white bg-[#4263eb] rounded-lg hover:bg-[#364fc7]"
-                      disabled={isCreating || !selectedUser || !selectedDate || !selectedTurno}
+                      className="w-full sm:w-auto px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                     >
-                      {isCreating ? 'Creando...' : 'Crear Turno'}
+                      Asignar Turno
                     </button>
                   </div>
                 </div>
@@ -1310,69 +1298,63 @@ export default function RRHHPage() {
 
               {activeTab === 'move' && (
                 <div className="space-y-4">
-                  {/* Usuario a mover */}
+                  {/* Usuario a Mover */}
                   <div>
                     <label className="block text-sm font-medium text-blue-700 mb-1">
-                      Seleccionar Usuario
+                      Usuario a Mover
                     </label>
                     <select
-                      className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      className="w-full p-2 sm:p-2.5 text-sm border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                       value={userToMove}
                       onChange={(e) => setUserToMove(e.target.value)}
                     >
                       <option value="">Seleccionar Usuario</option>
-                      {currentShifts.map((shift) => {
-                        const uniqueKey = `${shift.user_id}-${shift.shift}`;
-                        return (
-                          <option key={uniqueKey} value={shift.user_id}>
-                            {shift.user_name} - Turno actual: {shift.shift}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-
-                  {/* Turno destino */}
-                  <div>
-                    <label className="block text-sm font-medium text-blue-700 mb-1">
-                      Nuevo Turno
-                    </label>
-                    <select
-                      className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                      value={targetShift}
-                      onChange={(e) => setTargetShift(e.target.value)}
-                    >
-                      <option value="">Seleccionar Turno</option>
-                      {TURNOS.map(turno => (
-                        <option key={turno.id} value={turno.id}>
-                          {turno.nombre} ({turno.inicio} - {turno.fin})
+                      {currentShifts.map((shift) => (
+                        <option key={shift.user_id} value={shift.user_id}>
+                          {shift.user_name} - Turno actual: {shift.shift}
                         </option>
                       ))}
                     </select>
                   </div>
 
-                  {/* Botones */}
-                  <div className="flex justify-end gap-2 mt-6">
+                  {/* Turno Destino */}
+                  <div>
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
+                      Turno Destino
+                    </label>
+                    <select
+                      className="w-full p-2 sm:p-2.5 text-sm border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      value={targetShift}
+                      onChange={(e) => setTargetShift(e.target.value)}
+                    >
+                      <option value="">Seleccionar Turno</option>
+                      <option value="morning">Turno A (06:00 - 14:00)</option>
+                      <option value="afternoon">Turno B (14:00 - 22:00)</option>
+                      <option value="night">Turno C (22:00 - 06:00)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 mt-6">
                     <button
+                      type="button"
                       onClick={() => setShowShiftModal(false)}
-                      className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
+                      className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
                     >
                       Cancelar
                     </button>
                     <button
                       onClick={handleMoveUser}
-                      className="px-4 py-2 text-sm font-medium text-white bg-[#4263eb] rounded-lg hover:bg-[#364fc7]"
-                      disabled={!userToMove || !targetShift}
+                      className="w-full sm:w-auto px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                     >
-                      Cambiar Turno
+                      Mover Usuario
                     </button>
                   </div>
                 </div>
               )}
-            </Dialog.Panel>
-          </div>
-        </Dialog>
-      )}
+            </div>
+          </Dialog.Panel>
+        </div>
+      </Dialog>
 
       <style jsx>{`
         .custom-scrollbar::-webkit-scrollbar {
