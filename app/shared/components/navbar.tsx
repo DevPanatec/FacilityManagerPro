@@ -140,6 +140,7 @@ export default function Navbar({ role = '', isEnterprise = false, organizationNa
   const router = useRouter()
   const pathname = usePathname();
   const [userRole, setUserRole] = useState<UserRole>((role || 'enterprise') as UserRole);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     const storedRole = localStorage.getItem('userRole');
@@ -162,92 +163,168 @@ export default function Navbar({ role = '', isEnterprise = false, organizationNa
 
   return (
     <header className="bg-gradient-to-r from-blue-700 to-blue-500 text-white shadow-lg">
-      <div className="max-w-7xl mx-auto flex items-center justify-between py-4 px-4">
-        {/* Logo y nombre */}
-        <div className="flex items-center space-x-3">
-          {effectiveRole === 'enterprise' ? (
-            <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">
-              San Miguel Arcángel
-            </h1>
-          ) : (
-            <>
-              <div className="p-4 bg-white rounded-xl shadow-lg">
-                <Image
-                  src="/logo.jpg"
-                  alt="Logo Marpes"
-                  width={256}
-                  height={256}
-                  className="object-contain"
-                  priority
-                />
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight whitespace-nowrap ml-6">
-                Hombres de Blanco
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between h-16">
+          {/* Logo y nombre */}
+          <div className="flex items-center">
+            {effectiveRole === 'enterprise' ? (
+              <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">
+                San Miguel Arcángel
               </h1>
-            </>
-          )}
-        </div>
-
-        {/* Navegación principal */}
-        <nav className="hidden lg:flex flex-1 justify-center px-10">
-          <div className="flex items-center space-x-4">
-            {navItems && navItems.length > 0 ? (
-              navItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`
-                    flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium
-                    transition-all duration-200 group
-                    ${pathname === item.href 
-                      ? 'bg-blue-800 text-white' 
-                      : 'text-blue-100 hover:bg-blue-800/50 hover:text-white'
-                    }
-                  `}
-                >
-                  <svg 
-                    className={`w-5 h-5 ${pathname === item.href ? 'text-white' : 'text-blue-200 group-hover:text-white'}`}
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round" 
-                      strokeWidth="2" 
-                      d={item.icon}
-                    />
-                  </svg>
-                  <span>{item.label}</span>
-                </Link>
-              ))
             ) : (
-              <div className="text-white">No hay elementos de navegación disponibles</div>
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-white rounded-xl shadow-lg">
+                  <Image
+                    src="/logo.jpg"
+                    alt="Logo Marpes"
+                    width={40}
+                    height={40}
+                    className="object-contain"
+                    priority
+                  />
+                </div>
+                <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">
+                  Hombres de Blanco
+                </h1>
+              </div>
             )}
           </div>
-        </nav>
 
-        {/* Botón de cerrar sesión */}
-        <div className="flex items-center">
-          <button 
-            onClick={handleLogout}
-            className="flex items-center space-x-2 px-4 py-2 rounded-lg 
-                      text-blue-100 hover:bg-blue-800/50 hover:text-white
-                      transition-all duration-200"
-            title="Cerrar Sesión"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth="2" 
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-              />
-            </svg>
-            <span className="hidden md:inline text-sm font-medium">
-              Cerrar Sesión
-            </span>
-          </button>
+          {/* Botón de menú móvil */}
+          <div className="flex items-center sm:hidden">
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="inline-flex items-center justify-center p-2 rounded-md text-white hover:bg-blue-600 focus:outline-none"
+            >
+              <svg
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                {isMenuOpen ? (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                ) : (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                )}
+              </svg>
+            </button>
+          </div>
+
+          {/* Navegación desktop */}
+          <div className="hidden sm:flex sm:items-center sm:space-x-4">
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`
+                  flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium
+                  transition-all duration-200 group
+                  ${pathname === item.href 
+                    ? 'bg-blue-800 text-white' 
+                    : 'text-blue-100 hover:bg-blue-800/50 hover:text-white'
+                  }
+                `}
+              >
+                <svg 
+                  className={`w-5 h-5 ${pathname === item.href ? 'text-white' : 'text-blue-200 group-hover:text-white'}`}
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth="2" 
+                    d={item.icon}
+                  />
+                </svg>
+                <span>{item.label}</span>
+              </Link>
+            ))}
+            
+            <button 
+              onClick={handleLogout}
+              className="flex items-center space-x-2 px-3 py-2 rounded-lg 
+                        text-blue-100 hover:bg-blue-800/50 hover:text-white
+                        transition-all duration-200"
+              title="Cerrar Sesión"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth="2" 
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                />
+              </svg>
+              <span className="hidden md:inline">Cerrar Sesión</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Menú móvil */}
+        <div className={`${isMenuOpen ? 'block' : 'hidden'} sm:hidden`}>
+          <div className="pt-2 pb-3 space-y-1">
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`
+                  flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium
+                  ${pathname === item.href 
+                    ? 'bg-blue-800 text-white' 
+                    : 'text-blue-100 hover:bg-blue-800/50 hover:text-white'
+                  }
+                `}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <svg 
+                  className="w-5 h-5"
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth="2" 
+                    d={item.icon}
+                  />
+                </svg>
+                <span>{item.label}</span>
+              </Link>
+            ))}
+            
+            <button 
+              onClick={() => {
+                handleLogout();
+                setIsMenuOpen(false);
+              }}
+              className="flex items-center space-x-2 w-full px-3 py-2 rounded-md text-base font-medium
+                        text-blue-100 hover:bg-blue-800/50 hover:text-white"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth="2" 
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                />
+              </svg>
+              <span>Cerrar Sesión</span>
+            </button>
+          </div>
         </div>
       </div>
     </header>

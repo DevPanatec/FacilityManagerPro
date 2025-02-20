@@ -46,8 +46,8 @@ const nextConfig = {
     return config;
   },
   
-  // Configuraciones de seguridad
-  poweredByHeader: false, // Remover el header X-Powered-By
+  // Configuraciones de seguridad básicas
+  poweredByHeader: false,
   
   headers: async () => [
     {
@@ -85,24 +85,14 @@ const nextConfig = {
     }
   ],
 
-  // Configuración de seguridad para API routes
+  // Configuración para desarrollo local
   async rewrites() {
-    return {
-      beforeFiles: [
-        // Proteger rutas de API sensibles
-        {
-          source: '/api/:path*',
-          has: [
-            {
-              type: 'header',
-              key: 'x-api-key',
-              missing: true
-            }
-          ],
-          destination: '/api/unauthorized'
-        }
-      ]
-    }
+    return [
+      {
+        source: '/:path*',
+        destination: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/:path*`
+      }
+    ]
   }
 }
 

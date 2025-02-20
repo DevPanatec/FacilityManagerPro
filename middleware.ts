@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import type { Database } from '@/app/lib/supabase/types'
 import { validateInput } from './lib/middleware/inputValidation'
+import crypto from 'crypto'
 
 // Generar nonce para CSP
 const generateNonce = () => {
@@ -50,67 +51,34 @@ const ROLE_ROUTES: Record<string, string[]> = {
   usuario: ['/user']
 };
 
-export async function middleware(req: NextRequest) {
-  // 1. Crear respuesta inicial y cliente de Supabase
-  const res = NextResponse.next()
-  const supabase = createMiddlewareClient<Database>({ req, res })
-  const nonce = generateNonce()
+export function middleware(request: NextRequest) {
+  // Construir la política CSP más permisiva temporalmente
+  const csp = `
+    default-src 'self' https:;
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' https:;
+    style-src 'self' 'unsafe-inline' https:;
+    img-src 'self' data: blob: https:;
+    font-src 'self' data: https:;
+    connect-src 'self' https: wss:;
+    frame-ancestors 'self';
+    form-action 'self';
+    base-uri 'self';
+    object-src 'none';
+  `.replace(/\s{2,}/g, ' ').trim()
 
-  try {
-    // 2. Permitir acceso a rutas públicas y assets
-    if (isPublicRoute(req.nextUrl.pathname)) {
-      return addSecurityHeaders(res, nonce)
-    }
+  // Clonar los headers de la respuesta
+  const response = NextResponse.next()
+  const headers = new Headers(response.headers)
 
-    // 3. Validar input para rutas API
-    if (req.nextUrl.pathname.startsWith('/api/')) {
-      const validationResponse = await validateInput(req)
-      if (validationResponse.status !== 200) {
-        return validationResponse
-      }
-    }
+  // Agregar los headers de seguridad
+  headers.set('Content-Security-Policy', csp)
 
-    // 4. Verificar sesión
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    
-    // Si no hay sesión y la ruta requiere autenticación, redirigir a login
-    const isAuthRoute = req.nextUrl.pathname.startsWith('/auth')
-    const isApiRoute = req.nextUrl.pathname.startsWith('/api')
-    
-    if (!session && !isAuthRoute && !isApiRoute && !isPublicRoute(req.nextUrl.pathname)) {
-      return redirectToLogin(req)
-    }
-
-    // Si hay sesión y está en login/registro, redirigir al dashboard
-    if (session && (req.nextUrl.pathname === '/login' || req.nextUrl.pathname === '/register')) {
-      return NextResponse.redirect(new URL('/dashboard', req.url))
-    }
-
-    if (session) {
-      // 5. Verificar rol y permisos
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('role, id')
-        .eq('id', session.user.id)
-        .single()
-
-      if (userError || !userData) {
-        return redirectToLogin(req)
-      }
-
-      // 6. Validar acceso a rutas según rol
-      const response = await validateRouteAccess(req, userData, res)
-      
-      // 7. Añadir headers de seguridad y datos de usuario
-      return addSecurityHeaders(response, nonce, userData)
-    }
-
-    return addSecurityHeaders(res, nonce)
-
-  } catch (error) {
-    console.error('Error en middleware:', error)
-    return redirectToLogin(req)
-  }
+  // Retornar la respuesta con los nuevos headers
+  return new NextResponse(null, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  })
 }
 
 // Funciones auxiliares
@@ -188,7 +156,5 @@ function addSecurityHeaders(
 
 // Configurar las rutas que deben ser manejadas por el middleware
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|public).*)'
-  ]
+  matcher: '/:path*',
 }
