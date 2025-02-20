@@ -15,7 +15,7 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
 // Definir las tareas por tipo de área
-const tasksByAreaType = {
+const tasksByAreaType: { [key: string]: string[] } = {
   CAMAS: [
     'SE REALIZA HIGIENE DE MANOS Y SE COLOCA EL EQUIPO DE PROTECCIÓN PERSONAL',
     'SE CLASIFICA EL ÁREA SEGÚN EL TIPO DE LIMPIEZA PROFUNDA',

@@ -4,14 +4,7 @@ export type Area = {
   id: number;
   nombre: string;
   color: string;
-  tareas: Tarea[];
-};
-
-export type Tarea = {
-  id: number;
-  descripcion: string;
-  prioridad: string;
-  estado: string;
+  tareas: any[];
 };
 
 export const getAreas = (): Area[] => {
@@ -32,7 +25,21 @@ export const getTareas = () => {
   return null;
 };
 
-export const setTareas = (tareas) => {
+export interface Tarea {
+  id: string | number;
+  descripcion: string;
+  prioridad: string;
+  estado: string;
+  title?: string;
+  status?: string;
+  priority?: string;
+  due_date?: string;
+  assigned_to?: string;
+  area_id?: string;
+  sala_id?: string;
+}
+
+export const setTareas = (tareas: any[]) => {
   if (typeof window !== 'undefined') {
     localStorage.setItem('tareas', JSON.stringify(tareas));
   }
