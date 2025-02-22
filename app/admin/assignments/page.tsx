@@ -104,12 +104,39 @@ interface ShiftWithUsers {
   } | null;
 }
 
+interface ShiftHours {
+  start: string;
+  end: string;
+}
+
+interface ShiftHoursState {
+  morning: ShiftHours;
+  afternoon: ShiftHours;
+  night: ShiftHours;
+}
+
+interface ShiftHourData {
+  organization_id: string;
+  shift_type: 'morning' | 'afternoon' | 'night';
+  start_time: string;
+  end_time: string;
+}
+
+// Función para formatear la hora en formato militar simple
+const formatTime = (time: string): string => {
+  if (!time) return '';
+  // Remover los segundos y mantener solo horas y minutos
+  const [hours, minutes] = time.split(':');
+  return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+};
+
 export default function AssignmentsPage() {
   const [loading, setLoading] = useState(true);
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [salas, setSalas] = useState<Sala[]>([]);
   const [usuarios, setUsuarios] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState('');
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [selectedArea, setSelectedArea] = useState('');
   const [selectedSala, setSelectedSala] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState('');
@@ -124,11 +151,67 @@ export default function AssignmentsPage() {
   const [selectedShiftDetails, setSelectedShiftDetails] = useState<WorkShiftWithUsers | null>(null);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isDeepTasks, setIsDeepTasks] = useState(false);
+
+  // Update the state definition with the proper type
+  const [shiftHours, setShiftHours] = useState<ShiftHoursState>({
+    morning: { start: '06:00', end: '14:00' },
+    afternoon: { start: '14:00', end: '22:00' },
+    night: { start: '22:00', end: '06:00' }
+  });
+
+  const [tempShiftHours, setTempShiftHours] = useState<ShiftHoursState>({
+    morning: { start: '06:00', end: '14:00' },
+    afternoon: { start: '14:00', end: '22:00' },
+    night: { start: '22:00', end: '06:00' }
+  });
 
   const supabase = createClientComponentClient();
 
+  // Update the loadShiftHours function with proper types
+  const loadShiftHours = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!userProfile) return;
+
+      const { data: shiftHoursData } = await supabase
+        .from('shift_hours')
+        .select('*')
+        .eq('organization_id', userProfile.organization_id);
+
+      if (shiftHoursData && shiftHoursData.length > 0) {
+        const formattedHours: ShiftHoursState = {
+          morning: { start: '06:00', end: '14:00' },
+          afternoon: { start: '14:00', end: '22:00' },
+          night: { start: '22:00', end: '06:00' }
+        };
+
+        (shiftHoursData as ShiftHourData[]).forEach(shift => {
+          const key = shift.shift_type;
+          formattedHours[key] = { 
+            start: shift.start_time, 
+            end: shift.end_time 
+          };
+        });
+
+        setShiftHours(formattedHours);
+      }
+    } catch (error) {
+      console.error('Error loading shift hours:', error);
+    }
+  };
+
   useEffect(() => {
     loadData();
+    loadShiftHours(); // Add this line to load shift hours
   }, []);
 
   const loadData = async () => {
@@ -146,6 +229,28 @@ export default function AssignmentsPage() {
         .single();
 
       if (!userProfile) throw new Error('Perfil no encontrado');
+
+      // Primero cargar los horarios de los turnos
+      const { data: shiftHoursData } = await supabase
+        .from('shift_hours')
+        .select('*')
+        .eq('organization_id', userProfile.organization_id);
+
+      // Crear un objeto con los horarios por tipo de turno
+      const shiftHoursByType = {
+        morning: { start: '06:00', end: '14:00' },
+        afternoon: { start: '14:00', end: '22:00' },
+        night: { start: '22:00', end: '06:00' }
+      };
+
+      if (shiftHoursData) {
+        shiftHoursData.forEach(shift => {
+          shiftHoursByType[shift.shift_type] = {
+            start: shift.start_time,
+            end: shift.end_time
+          };
+        });
+      }
 
       // Cargar turnos con usuarios
       const { data: turnosData } = await supabase
@@ -168,42 +273,42 @@ export default function AssignmentsPage() {
 
       if (turnosData) {
         // Crear un mapa para agrupar usuarios únicos por tipo de turno
-        const turnoUsuarios = turnosData.reduce((acc, turno) => {
+        const turnoUsuarios = turnosData.reduce((acc: { [key: string]: Map<string, any> }, turno) => {
           if (!acc[turno.shift_type]) {
             acc[turno.shift_type] = new Map();
           }
-          if (turno.users && turno.users.id) {
+          if (turno.users) {
             acc[turno.shift_type].set(turno.users.id, turno.users);
           }
           return acc;
         }, {});
 
-        // Formatear los turnos con usuarios únicos
+        // Formatear los turnos con usuarios únicos y horarios dinámicos
         const turnosFormatted = [
           {
             id: turnosData.find(t => t.shift_type === 'morning')?.id || '',
             nombre: 'Turno A',
-            horario: '06:00 - 14:00',
-            shift_type: 'morning',
-            personasAsignadas: turnoUsuarios['morning'] ? turnoUsuarios['morning'].size : 0,
+            horario: `${formatTime(shiftHoursByType.morning.start)} - ${formatTime(shiftHoursByType.morning.end)}`,
+            shift_type: 'morning' as const,
+            personasAsignadas: turnoUsuarios['morning']?.size || 0,
             enLinea: 0,
             usuarios: turnoUsuarios['morning'] ? Array.from(turnoUsuarios['morning'].values()) : []
           },
           {
             id: turnosData.find(t => t.shift_type === 'afternoon')?.id || '',
             nombre: 'Turno B',
-            horario: '14:00 - 22:00',
-            shift_type: 'afternoon',
-            personasAsignadas: turnoUsuarios['afternoon'] ? turnoUsuarios['afternoon'].size : 0,
+            horario: `${formatTime(shiftHoursByType.afternoon.start)} - ${formatTime(shiftHoursByType.afternoon.end)}`,
+            shift_type: 'afternoon' as const,
+            personasAsignadas: turnoUsuarios['afternoon']?.size || 0,
             enLinea: 0,
             usuarios: turnoUsuarios['afternoon'] ? Array.from(turnoUsuarios['afternoon'].values()) : []
           },
           {
             id: turnosData.find(t => t.shift_type === 'night')?.id || '',
             nombre: 'Turno C',
-            horario: '22:00 - 06:00',
-            shift_type: 'night',
-            personasAsignadas: turnoUsuarios['night'] ? turnoUsuarios['night'].size : 0,
+            horario: `${formatTime(shiftHoursByType.night.start)} - ${formatTime(shiftHoursByType.night.end)}`,
+            shift_type: 'night' as const,
+            personasAsignadas: turnoUsuarios['night']?.size || 0,
             enLinea: 0,
             usuarios: turnoUsuarios['night'] ? Array.from(turnoUsuarios['night'].values()) : []
           }
@@ -361,27 +466,24 @@ export default function AssignmentsPage() {
 
   const handleCreateAssignment = async () => {
     try {
-      if (!selectedUser || !selectedSala || !selectedArea || !selectedDate || !startTime) {
-        toast.error('Por favor complete todos los campos');
-        return;
+      // Validación inicial
+      if (isDeepTasks) {
+        if (selectedUsers.length === 0 || !selectedSala || !selectedArea || !selectedDate || !startTime) {
+          toast.error('Por favor complete todos los campos y seleccione al menos un usuario');
+          return;
+        }
+      } else {
+        if (!selectedUser || !selectedSala || !selectedArea || !selectedDate || !startTime) {
+          toast.error('Por favor complete todos los campos');
+          return;
+        }
       }
 
       setIsCreating(true);
 
-      // Debug logs
-      console.log('Datos seleccionados:', {
-        selectedUser,
-        selectedSala,
-        selectedArea,
-        selectedDate,
-        startTime,
-        userMap
-      });
-
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No autorizado');
 
-      // Obtener el organization_id del usuario
       const { data: userProfile, error: profileError } = await supabase
         .from('users')
         .select('organization_id')
@@ -392,56 +494,104 @@ export default function AssignmentsPage() {
         throw new Error('Error al obtener el perfil del usuario');
       }
 
-      // Combinar fecha y hora de inicio
-      const startDateTime = new Date(selectedDate);
+      // Formatear la fecha y hora correctamente
       const [hours, minutes] = startTime.split(':');
-      startDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      const formattedTime = `${hours}:${minutes}`;
 
-      // Formatear la fecha y hora en el formato correcto para PostgreSQL
-      const formattedDateTime = startDateTime.toISOString().split('T')[0] + ' ' + 
-                               startDateTime.toTimeString().split(' ')[0];
+      if (isDeepTasks) {
+        // Obtener las tareas profundas activas del área seleccionada
+        const { data: deepTasks, error: deepTasksError } = await supabase
+          .from('deep_tasks')
+          .select('*')
+          .eq('area_id', selectedArea)
+          .eq('status', 'active')
+          .order('created_at', { ascending: true });
 
-      // Debug log para el objeto de la asignación
-      const newAssignment = {
-        title: `Asignación para ${selectedUser}`,
-        description: `Tarea asignada para ${selectedUser} en el área seleccionada`,
-        organization_id: userProfile.organization_id,
-        assigned_to: userMap[selectedUser],
-        sala_id: selectedSala,
-        area_id: selectedArea,
-        start_time: formattedDateTime,
-        status: 'pending',
-        type: 'assignment'
-      };
+        if (deepTasksError) throw deepTasksError;
 
-      console.log('Nueva asignación a crear:', newAssignment);
+        if (!deepTasks || deepTasks.length === 0) {
+          toast.error('No hay tareas profundas configuradas para esta área');
+          return;
+        }
 
-      const { data: insertData, error: insertError } = await supabase
-        .from('tasks')
-        .insert([newAssignment])
-        .select()
-        .single();
+        // Crear asignaciones para cada combinación de tarea profunda y usuario
+        const assignments = [];
+        for (const task of deepTasks) {
+          for (const userName of selectedUsers) {
+            assignments.push({
+              title: task.name,
+              description: task.description || 'Tarea profunda asignada',
+              organization_id: userProfile.organization_id,
+              assigned_to: userMap[userName],
+              sala_id: selectedSala,
+              area_id: selectedArea,
+              start_date: selectedDate,
+              start_time: formattedTime,
+              status: 'pending',
+              type: 'deep_assignment',
+              created_by: user.id,
+              priority: 'medium',
+              deep_task_id: task.id
+            });
+          }
+        }
 
-      if (insertError) {
-        console.error('Error detallado:', insertError);
-        throw insertError;
+        // Insertar todas las asignaciones en lotes
+        for (let i = 0; i < assignments.length; i += 10) {
+          const batch = assignments.slice(i, i + 10);
+          const { error: insertError } = await supabase
+            .from('tasks')
+            .insert(batch);
+
+          if (insertError) {
+            console.error('Error en lote:', insertError);
+            throw insertError;
+          }
+        }
+
+        toast.success(`Se crearon ${assignments.length} asignaciones profundas`);
+      } else {
+        // Insertar una única asignación normal
+        const { error: insertError } = await supabase
+          .from('tasks')
+          .insert({
+            title: `Asignación para ${selectedUser}`,
+            description: `Tarea asignada para ${selectedUser} en el área seleccionada`,
+            organization_id: userProfile.organization_id,
+            assigned_to: userMap[selectedUser],
+            sala_id: selectedSala,
+            area_id: selectedArea,
+            start_date: selectedDate,
+            start_time: formattedTime,
+            status: 'pending',
+            type: 'regular_assignment',
+            created_by: user.id,
+            priority: 'medium'
+          });
+
+        if (insertError) {
+          console.error('Error de inserción:', insertError);
+          throw insertError;
+        }
+        toast.success('Asignación creada exitosamente');
       }
 
-      console.log('Asignación creada:', insertData);
-
+      // Mostrar animación y resetear el formulario
       setShowSuccessAnimation(true);
       setTimeout(() => {
         setShowSuccessAnimation(false);
         setSelectedUser('');
+        setSelectedUsers([]);
         setSelectedSala(null);
         setSelectedArea('');
         setSelectedDate('');
         setStartTime('');
+        setIsDeepTasks(false);
         loadData();
       }, 2000);
 
     } catch (error) {
-      console.error('Error detallado al crear la asignación:', error);
+      console.error('Error al crear la asignación:', error);
       toast.error('Error al crear la asignación');
     } finally {
       setIsCreating(false);
@@ -620,6 +770,101 @@ export default function AssignmentsPage() {
     }
   };
 
+  const handleShiftHoursUpdate = async () => {
+    try {
+      if (!tempShiftHours.morning.start || !tempShiftHours.morning.end ||
+          !tempShiftHours.afternoon.start || !tempShiftHours.afternoon.end ||
+          !tempShiftHours.night.start || !tempShiftHours.night.end) {
+        toast.error('Por favor complete todos los campos');
+        return;
+      }
+
+      setIsCreating(true);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
+
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!userProfile) throw new Error('Perfil no encontrado');
+
+      // Primero eliminar los registros existentes
+      const { error: deleteError } = await supabase
+        .from('shift_hours')
+        .delete()
+        .eq('organization_id', userProfile.organization_id);
+
+      if (deleteError) throw deleteError;
+
+      // Insertar los nuevos registros
+      const { error: insertError } = await supabase
+        .from('shift_hours')
+        .insert([
+          {
+            organization_id: userProfile.organization_id,
+            shift_type: 'morning',
+            start_time: tempShiftHours.morning.start,
+            end_time: tempShiftHours.morning.end
+          },
+          {
+            organization_id: userProfile.organization_id,
+            shift_type: 'afternoon',
+            start_time: tempShiftHours.afternoon.start,
+            end_time: tempShiftHours.afternoon.end
+          },
+          {
+            organization_id: userProfile.organization_id,
+            shift_type: 'night',
+            start_time: tempShiftHours.night.start,
+            end_time: tempShiftHours.night.end
+          }
+        ]);
+
+      if (insertError) throw insertError;
+
+      // Actualizar los horarios en el estado local
+      setShiftHours(tempShiftHours);
+
+      // Actualizar los turnos en la interfaz
+      const updatedTurnos = turnos.map(turno => {
+        let horario = '';
+        switch (turno.shift_type) {
+          case 'morning':
+            horario = `${tempShiftHours.morning.start} - ${tempShiftHours.morning.end}`;
+            break;
+          case 'afternoon':
+            horario = `${tempShiftHours.afternoon.start} - ${tempShiftHours.afternoon.end}`;
+            break;
+          case 'night':
+            horario = `${tempShiftHours.night.start} - ${tempShiftHours.night.end}`;
+            break;
+        }
+        return {
+          ...turno,
+          horario
+        };
+      });
+
+      setTurnos(updatedTurnos);
+      
+      // Recargar los datos actualizados
+      await loadData();
+      await loadShiftHours();
+
+      toast.success('Horarios actualizados correctamente');
+      setShowAddUserModal(false);
+    } catch (error) {
+      console.error('Error al actualizar los horarios:', error);
+      toast.error('Error al actualizar los horarios');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="px-6 -mx-6 py-6">
@@ -662,7 +907,7 @@ export default function AssignmentsPage() {
               onClick={() => setShowAddUserModal(true)}
               className="w-full py-3 bg-[#4263eb] text-white rounded-lg hover:bg-[#364fc7] transition-colors mt-4"
             >
-              Agregar Usuario a Turno
+              Configurar Horarios
             </button>
           </div>
         </div>
@@ -721,18 +966,76 @@ export default function AssignmentsPage() {
                 <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
-                Usuario
+                {isDeepTasks ? 'Usuarios' : 'Usuario'}
               </label>
-              <select 
-                className="w-full p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                value={selectedUser}
-                onChange={(e) => setSelectedUser(e.target.value)}
-              >
-                <option value="">Seleccionar Usuario</option>
-                {usuarios.map((usuario) => (
-                  <option key={usuario} value={usuario}>{usuario}</option>
-                ))}
-              </select>
+              
+              {isDeepTasks ? (
+                // Selector múltiple mejorado para tareas profundas
+                <div className="space-y-2">
+                  <div className="max-h-[200px] overflow-y-auto border border-blue-100 rounded-lg bg-white divide-y">
+                    {usuarios.map((usuario) => (
+                      <label
+                        key={usuario}
+                        className="flex items-center p-3 hover:bg-blue-50 cursor-pointer transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedUsers.includes(usuario)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedUsers([...selectedUsers, usuario]);
+                            } else {
+                              setSelectedUsers(selectedUsers.filter(u => u !== usuario));
+                            }
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+                        <span className="ml-3 text-sm text-gray-700">{usuario}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {selectedUsers.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {selectedUsers.map(user => (
+                        <span
+                          key={user}
+                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                        >
+                          {user}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedUsers(selectedUsers.filter(u => u !== user))}
+                            className="ml-1 inline-flex items-center justify-center"
+                          >
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                        </span>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedUsers([])}
+                        className="text-xs text-gray-500 hover:text-red-500"
+                      >
+                        Limpiar selección
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Selector único para tareas normales
+                <select 
+                  className="w-full p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  value={selectedUser}
+                  onChange={(e) => setSelectedUser(e.target.value)}
+                >
+                  <option value="">Seleccionar Usuario</option>
+                  {usuarios.map((usuario) => (
+                    <option key={usuario} value={usuario}>{usuario}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {/* Sala y Área */}
@@ -769,6 +1072,32 @@ export default function AssignmentsPage() {
                   placeholder="Hora de inicio"
                 />
               </div>
+            </div>
+
+            {/* Switch para Tareas Profundas */}
+            <div className="flex items-center justify-between py-2">
+              <label className="flex items-center gap-2 text-sm font-medium text-blue-700">
+                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Incluir Tareas Profundas
+              </label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isDeepTasks}
+                className={`${
+                  isDeepTasks ? 'bg-blue-600' : 'bg-gray-200'
+                } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
+                onClick={() => setIsDeepTasks(!isDeepTasks)}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`${
+                    isDeepTasks ? 'translate-x-5' : 'translate-x-0'
+                  } pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
+                />
+              </button>
             </div>
 
             {/* Botón de Crear Asignación */}
@@ -823,14 +1152,13 @@ export default function AssignmentsPage() {
               </div>
 
               {/* Lista de tareas */}
-              <div className="p-4 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+              <div className="p-4 max-h-[400px] overflow-y-auto">
                 {sala.tareas.length > 0 ? (
                   <div className="space-y-3">
                     {sala.tareas.map((tarea) => (
                       <div 
                         key={tarea.id}
-                        className="p-4 bg-gray-50 rounded-lg border-l-4 cursor-pointer hover:bg-gray-100 transition-colors"
-                        style={{ borderLeftColor: sala.color }}
+                        className="p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
                         onClick={() => handleTaskClick(tarea)}
                       >
                         <div className="flex justify-between items-start">
@@ -845,23 +1173,6 @@ export default function AssignmentsPage() {
                           </span>
                         </div>
                         <p className="text-sm text-gray-600 mt-2">{tarea.description}</p>
-                        <div className="flex items-center justify-between mt-3 text-sm">
-                          <div className="flex items-center gap-2 text-gray-500">
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            <span>Creada: {tarea.created_at}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-500">
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <span>Vence: {tarea.due_date}</span>
-                          </div>
-                        </div>
-                        <div className="mt-2 pt-2 border-t border-gray-200">
-                          <span className="text-sm text-gray-500">Estado: {tarea.status === 'pending' ? 'Pendiente' : tarea.status === 'in_progress' ? 'En Progreso' : 'Completada'}</span>
-                        </div>
                       </div>
                     ))}
                   </div>
@@ -873,236 +1184,6 @@ export default function AssignmentsPage() {
           ))}
         </div>
       </div>
-
-      {/* Modal para agregar usuario a turno */}
-      <Dialog 
-        open={showAddUserModal} 
-        onClose={() => setShowAddUserModal(false)}
-        className="relative z-50"
-      >
-        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
-        
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-sm rounded-lg bg-gradient-to-r from-blue-50 to-white p-6 shadow-xl">
-            <Dialog.Title className="text-lg font-medium text-blue-900 mb-4">
-              Agregar Usuario a Turno
-            </Dialog.Title>
-
-            <div className="space-y-4">
-              {/* Selector de Usuario */}
-              <div>
-                <label className="block text-sm font-medium text-blue-700 mb-1">
-                  Usuario
-                </label>
-                <select
-                  className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                  value={selectedShiftUser}
-                  onChange={(e) => setSelectedShiftUser(e.target.value)}
-                >
-                  <option value="">Seleccionar Usuario</option>
-                  {usuarios.map((usuario, index) => (
-                    <option key={index} value={usuario}>{usuario}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Selector de Turno */}
-              <div>
-                <label className="block text-sm font-medium text-blue-700 mb-1">
-                  Turno
-                </label>
-                <select
-                  className="w-full p-2 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                  value={selectedTurno}
-                  onChange={(e) => setSelectedTurno(e.target.value)}
-                >
-                  <option value="">Seleccionar Turno</option>
-                  {turnos.map((turno) => (
-                    <option key={turno.id} value={turno.id}>
-                      {turno.nombre} ({turno.horario})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Botones */}
-              <div className="flex justify-end gap-2 mt-6">
-                <button
-                  onClick={() => setShowAddUserModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={addUserToShift}
-                  className="px-4 py-2 text-sm font-medium text-white bg-[#4263eb] rounded-lg hover:bg-[#364fc7]"
-                >
-                  Agregar
-                </button>
-              </div>
-            </div>
-          </Dialog.Panel>
-        </div>
-      </Dialog>
-
-      {/* Modal de detalles de tarea */}
-      <Dialog 
-        open={showTaskDetailsModal} 
-        onClose={() => setShowTaskDetailsModal(false)}
-        className="relative z-50"
-      >
-        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
-        
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-2xl w-full rounded-lg bg-white p-6 shadow-xl">
-            {selectedTask && (
-              <>
-                <Dialog.Title className="text-xl font-semibold text-gray-900 mb-4 flex justify-between items-start">
-                  <div>
-                    <h3>{selectedTask.title}</h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {selectedTask.assignee ? `Asignado a: ${selectedTask.assignee.first_name} ${selectedTask.assignee.last_name}` : 'Sin asignar'}
-                    </p>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-sm ${
-                    selectedTask.priority === 'high' ? 'bg-red-100 text-red-700' :
-                    selectedTask.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-green-100 text-green-700'
-                  }`}>
-                    {selectedTask.priority === 'high' ? 'Alta' :
-                     selectedTask.priority === 'medium' ? 'Media' : 'Baja'}
-                  </span>
-                </Dialog.Title>
-
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-1">Descripción</h4>
-                    <p className="text-gray-600 bg-gray-50 p-3 rounded-lg">
-                      {selectedTask.description || 'Sin descripción'}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-1">Fecha de Creación</h4>
-                      <p className="text-gray-600">{selectedTask.created_at}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-1">Fecha de Vencimiento</h4>
-                      <p className="text-gray-600">{selectedTask.due_date || 'No especificada'}</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-1">Estado</h4>
-                    <span className={`inline-block px-3 py-1 rounded-full text-sm ${
-                      selectedTask.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                      selectedTask.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                      'bg-green-100 text-green-700'
-                    }`}>
-                      {selectedTask.status === 'pending' ? 'Pendiente' :
-                       selectedTask.status === 'in_progress' ? 'En Progreso' :
-                       'Completada'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex justify-end">
-                  <button
-                    onClick={() => setShowTaskDetailsModal(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    Cerrar
-                  </button>
-                </div>
-              </>
-            )}
-          </Dialog.Panel>
-        </div>
-      </Dialog>
-
-      {/* Modal de detalles del turno */}
-      <Dialog 
-        open={showShiftDetailsModal} 
-        onClose={() => setShowShiftDetailsModal(false)}
-        className="relative z-50"
-      >
-        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
-        
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-md w-full rounded-lg bg-white p-6 shadow-xl">
-            {selectedShiftDetails && (
-              <>
-                <Dialog.Title className="text-xl font-semibold text-gray-900 mb-4">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h3>{selectedShiftDetails.nombre}</h3>
-                      <p className="text-sm text-gray-500 mt-1">{selectedShiftDetails.horario}</p>
-                    </div>
-                    <div className={`px-3 py-1 rounded-full text-sm ${
-                      selectedShiftDetails.nombre === 'Turno A' ? 'bg-blue-100 text-blue-700' :
-                      selectedShiftDetails.nombre === 'Turno B' ? 'bg-green-100 text-green-700' :
-                      'bg-purple-100 text-purple-700'
-                    }`}>
-                      {selectedShiftDetails.usuarios.length} usuarios
-                    </div>
-                  </div>
-                </Dialog.Title>
-
-                <div className="space-y-4">
-                  {selectedShiftDetails.usuarios.length > 0 ? (
-                    <div className="divide-y divide-gray-100">
-                      {selectedShiftDetails.usuarios.map((usuario) => (
-                        <div key={usuario.id} className="py-3 flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium">
-                            {usuario.avatar_url ? (
-                              <img 
-                                src={usuario.avatar_url} 
-                                alt={`${usuario.first_name} ${usuario.last_name}`}
-                                className="w-full h-full rounded-full object-cover"
-                              />
-                            ) : (
-                              `${usuario.first_name[0]}${usuario.last_name[0]}`
-                            )}
-                          </div>
-                          <div>
-                            <h4 className="font-medium text-gray-900">
-                              {usuario.first_name} {usuario.last_name}
-                            </h4>
-                            <p className="text-sm text-gray-500">Usuario asignado</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-center text-gray-500 py-4">
-                      No hay usuarios asignados a este turno
-                    </p>
-                  )}
-                </div>
-
-                <div className="mt-6 flex justify-end gap-3">
-                  <button
-                    onClick={() => {
-                      setShowShiftDetailsModal(false);
-                      setShowAddUserModal(true);
-                    }}
-                    className="px-4 py-2 text-sm font-medium text-white bg-[#4263eb] rounded-lg hover:bg-[#364fc7] transition-colors"
-                  >
-                    Agregar Usuario
-                  </button>
-                  <button
-                    onClick={() => setShowShiftDetailsModal(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    Cerrar
-                  </button>
-                </div>
-              </>
-            )}
-          </Dialog.Panel>
-        </div>
-      </Dialog>
     </div>
   );
-} 
+}

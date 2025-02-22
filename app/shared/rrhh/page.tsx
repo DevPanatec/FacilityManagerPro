@@ -124,6 +124,19 @@ export default function RRHHPage() {
     area: string;
   }[]>([]);
 
+  // Add new state variables for shift hours
+  const [shiftHours, setShiftHours] = useState({
+    morning: { start: '06:00', end: '14:00' },
+    afternoon: { start: '14:00', end: '22:00' },
+    night: { start: '22:00', end: '06:00' }
+  });
+  const [editingShiftHours, setEditingShiftHours] = useState(false);
+  const [tempShiftHours, setTempShiftHours] = useState({
+    morning: { start: '06:00', end: '14:00' },
+    afternoon: { start: '14:00', end: '22:00' },
+    night: { start: '22:00', end: '06:00' }
+  });
+
   // Definir los turnos disponibles
   const TURNOS = [
     { id: 'morning', nombre: 'Mañana', inicio: '06:00', fin: '14:00' },
@@ -802,6 +815,55 @@ export default function RRHHPage() {
     }
   };
 
+  // Add new function to handle shift hours update
+  const handleShiftHoursUpdate = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
+
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!userProfile) throw new Error('Perfil no encontrado');
+
+      // Update shift hours in the database
+      const { error: updateError } = await supabase
+        .from('shift_hours')
+        .upsert([
+          {
+            organization_id: userProfile.organization_id,
+            shift_type: 'morning',
+            start_time: tempShiftHours.morning.start,
+            end_time: tempShiftHours.morning.end
+          },
+          {
+            organization_id: userProfile.organization_id,
+            shift_type: 'afternoon',
+            start_time: tempShiftHours.afternoon.start,
+            end_time: tempShiftHours.afternoon.end
+          },
+          {
+            organization_id: userProfile.organization_id,
+            shift_type: 'night',
+            start_time: tempShiftHours.night.start,
+            end_time: tempShiftHours.night.end
+          }
+        ]);
+
+      if (updateError) throw updateError;
+
+      setShiftHours(tempShiftHours);
+      setEditingShiftHours(false);
+      toast.success('Horarios actualizados exitosamente');
+    } catch (error: any) {
+      console.error('Error al actualizar horarios:', error);
+      toast.error('Error al actualizar los horarios');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -1146,6 +1208,145 @@ export default function RRHHPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
+              </div>
+
+              {/* Add Shift Hours Management Section */}
+              <div className="mb-6 p-4 bg-white rounded-lg shadow">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-blue-900">Horarios de Turnos</h3>
+                  <button
+                    onClick={() => {
+                      if (editingShiftHours) {
+                        handleShiftHoursUpdate();
+                      } else {
+                        setEditingShiftHours(true);
+                        setTempShiftHours({...shiftHours});
+                      }
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                      editingShiftHours 
+                        ? 'bg-green-600 text-white hover:bg-green-700' 
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {editingShiftHours ? 'Guardar Cambios' : 'Editar Horarios'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  {/* Morning Shift */}
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <h4 className="text-sm font-medium text-blue-900 mb-2">Turno Mañana</h4>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-xs text-blue-700">Hora Inicio</label>
+                        <input
+                          type="time"
+                          value={editingShiftHours ? tempShiftHours.morning.start : shiftHours.morning.start}
+                          onChange={(e) => editingShiftHours && setTempShiftHours({
+                            ...tempShiftHours,
+                            morning: { ...tempShiftHours.morning, start: e.target.value }
+                          })}
+                          disabled={!editingShiftHours}
+                          className="w-full p-1 text-sm border rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-blue-700">Hora Fin</label>
+                        <input
+                          type="time"
+                          value={editingShiftHours ? tempShiftHours.morning.end : shiftHours.morning.end}
+                          onChange={(e) => editingShiftHours && setTempShiftHours({
+                            ...tempShiftHours,
+                            morning: { ...tempShiftHours.morning, end: e.target.value }
+                          })}
+                          disabled={!editingShiftHours}
+                          className="w-full p-1 text-sm border rounded"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Afternoon Shift */}
+                  <div className="p-3 bg-orange-50 rounded-lg">
+                    <h4 className="text-sm font-medium text-orange-900 mb-2">Turno Tarde</h4>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-xs text-orange-700">Hora Inicio</label>
+                        <input
+                          type="time"
+                          value={editingShiftHours ? tempShiftHours.afternoon.start : shiftHours.afternoon.start}
+                          onChange={(e) => editingShiftHours && setTempShiftHours({
+                            ...tempShiftHours,
+                            afternoon: { ...tempShiftHours.afternoon, start: e.target.value }
+                          })}
+                          disabled={!editingShiftHours}
+                          className="w-full p-1 text-sm border rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-orange-700">Hora Fin</label>
+                        <input
+                          type="time"
+                          value={editingShiftHours ? tempShiftHours.afternoon.end : shiftHours.afternoon.end}
+                          onChange={(e) => editingShiftHours && setTempShiftHours({
+                            ...tempShiftHours,
+                            afternoon: { ...tempShiftHours.afternoon, end: e.target.value }
+                          })}
+                          disabled={!editingShiftHours}
+                          className="w-full p-1 text-sm border rounded"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Night Shift */}
+                  <div className="p-3 bg-purple-50 rounded-lg">
+                    <h4 className="text-sm font-medium text-purple-900 mb-2">Turno Noche</h4>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-xs text-purple-700">Hora Inicio</label>
+                        <input
+                          type="time"
+                          value={editingShiftHours ? tempShiftHours.night.start : shiftHours.night.start}
+                          onChange={(e) => editingShiftHours && setTempShiftHours({
+                            ...tempShiftHours,
+                            night: { ...tempShiftHours.night, start: e.target.value }
+                          })}
+                          disabled={!editingShiftHours}
+                          className="w-full p-1 text-sm border rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-purple-700">Hora Fin</label>
+                        <input
+                          type="time"
+                          value={editingShiftHours ? tempShiftHours.night.end : shiftHours.night.end}
+                          onChange={(e) => editingShiftHours && setTempShiftHours({
+                            ...tempShiftHours,
+                            night: { ...tempShiftHours.night, end: e.target.value }
+                          })}
+                          disabled={!editingShiftHours}
+                          className="w-full p-1 text-sm border rounded"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {editingShiftHours && (
+                  <div className="flex justify-end mt-4">
+                    <button
+                      onClick={() => {
+                        setEditingShiftHours(false);
+                        setTempShiftHours({...shiftHours});
+                      }}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 mr-2"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Tabs */}
