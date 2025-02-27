@@ -1,0 +1,9 @@
+email,password,first_name,last_name,role,organization_id
+admin1@hospitalintegrado.com,AdminHospital123!,Patricia,Mendoza,admin,0d7f71d0-1b5f-473f-a3d5-68c3abf99584
+admin2@hospitalintegrado.com,AdminHospital123!,Carlos,Rivera,admin,0d7f71d0-1b5f-473f-a3d5-68c3abf99584
+admin3@hospitalintegrado.com,AdminHospital123!,Laura,Castillo,admin,0d7f71d0-1b5f-473f-a3d5-68c3abf99584
+admin4@hospitalintegrado.com,AdminHospital123!,Roberto,Jiménez,admin,0d7f71d0-1b5f-473f-a3d5-68c3abf99584
+admin5@hospitalintegrado.com,AdminHospital123!,María,González,admin,0d7f71d0-1b5f-473f-a3d5-68c3abf99584
+coordinador1@hospitalintegrado.com,CoordHospital123!,Fernando,Vargas,enterprise,0d7f71d0-1b5f-473f-a3d5-68c3abf99584
+coordinador2@hospitalintegrado.com,CoordHospital123!,Ana,Martínez,enterprise,0d7f71d0-1b5f-473f-a3d5-68c3abf99584
+coordinador3@hospitalintegrado.com,CoordHospital123!,Jorge,Sánchez,enterprise,0d7f71d0-1b5f-473f-a3d5-68c3abf99584 

@@ -1,0 +1,45 @@
+{
+  "success": [],
+  "failed": [
+    {
+      "email": "admin1@hospitalintegrado.com",
+      "id": "cec53283-0e5a-4daa-9764-ea5b315aea63",
+      "error": "Auth: false, Table: true"
+    },
+    {
+      "email": "admin2@hospitalintegrado.com",
+      "id": "a6c6649b-eeeb-48bd-9a4c-22827a80d2bd",
+      "error": "Auth: false, Table: true"
+    },
+    {
+      "email": "admin3@hospitalintegrado.com",
+      "id": "5664ef47-4e29-4668-b3bc-e9127937df20",
+      "error": "Auth: false, Table: true"
+    },
+    {
+      "email": "admin4@hospitalintegrado.com",
+      "id": "72fff088-1614-40c0-9a0d-794c0f10a6bf",
+      "error": "Auth: false, Table: true"
+    },
+    {
+      "email": "admin5@hospitalintegrado.com",
+      "id": "469c3b14-4379-4dce-81bd-22499e4dab23",
+      "error": "Auth: false, Table: true"
+    },
+    {
+      "email": "coordinador1@hospitalintegrado.com",
+      "id": "e1bfa61c-81e4-43f0-9e14-72fe0dc0afc7",
+      "error": "Auth: false, Table: true"
+    },
+    {
+      "email": "coordinador2@hospitalintegrado.com",
+      "id": "db3f066d-738f-4d21-a2e0-8c61f35c585d",
+      "error": "Auth: false, Table: true"
+    },
+    {
+      "email": "coordinador3@hospitalintegrado.com",
+      "id": "dc2e6115-2823-4385-8161-90e305937d1e",
+      "error": "Auth: false, Table: true"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "timestamp": "2025-02-27T18:39:54.315Z",
+  "summary": {
+    "total": 8,
+    "successful": 0,
+    "failed": 8,
+    "skipped": 0
+  },
+  "successful": [],
+  "failed": [
+    {
+      "email": "admin1@hospitalintegrado.com",
+      "error": "column \"role_id\" of relation \"users\" does not exist"
+    },
+    {
+      "email": "admin2@hospitalintegrado.com",
+      "error": "column \"role_id\" of relation \"users\" does not exist"
+    },
+    {
+      "email": "admin3@hospitalintegrado.com",
+      "error": "column \"role_id\" of relation \"users\" does not exist"
+    },
+    {
+      "email": "admin4@hospitalintegrado.com",
+      "error": "column \"role_id\" of relation \"users\" does not exist"
+    },
+    {
+      "email": "admin5@hospitalintegrado.com",
+      "error": "column \"role_id\" of relation \"users\" does not exist"
+    },
+    {
+      "email": "coordinador1@hospitalintegrado.com",
+      "error": "column \"role_id\" of relation \"users\" does not exist"
+    },
+    {
+      "email": "coordinador2@hospitalintegrado.com",
+      "error": "column \"role_id\" of relation \"users\" does not exist"
+    },
+    {
+      "email": "coordinador3@hospitalintegrado.com",
+      "error": "Organization with ID 0d7f71d0-1b5f-473f-a3d5-68c3abf99584  not found"
+    }
+  ],
+  "skipped": []
+}

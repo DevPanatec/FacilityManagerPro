@@ -1,0 +1,53 @@
+{
+  "success": [],
+  "failed": [
+    {
+      "email": "admin1@hospitalintegrado.com",
+      "success": false,
+      "error": "Invalid API key",
+      "exists_in_auth": true
+    },
+    {
+      "email": "admin2@hospitalintegrado.com",
+      "success": false,
+      "error": "Invalid API key",
+      "exists_in_auth": true
+    },
+    {
+      "email": "admin3@hospitalintegrado.com",
+      "success": false,
+      "error": "Invalid API key",
+      "exists_in_auth": true
+    },
+    {
+      "email": "admin4@hospitalintegrado.com",
+      "success": false,
+      "error": "Invalid API key",
+      "exists_in_auth": true
+    },
+    {
+      "email": "admin5@hospitalintegrado.com",
+      "success": false,
+      "error": "Invalid API key",
+      "exists_in_auth": true
+    },
+    {
+      "email": "coordinador1@hospitalintegrado.com",
+      "success": false,
+      "error": "Invalid API key",
+      "exists_in_auth": true
+    },
+    {
+      "email": "coordinador2@hospitalintegrado.com",
+      "success": false,
+      "error": "Invalid API key",
+      "exists_in_auth": true
+    },
+    {
+      "email": "coordinador3@hospitalintegrado.com",
+      "success": false,
+      "error": "Invalid API key",
+      "exists_in_auth": true
+    }
+  ]
+}

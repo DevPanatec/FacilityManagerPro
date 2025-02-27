@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificador de Login - Facility Manager Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        form {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="email"], input[type="password"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0069d9;
+        }
+        #results {
+            margin-top: 20px;
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            min-height: 100px;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        #userList {
+            margin-top: 20px;
+        }
+        #userList table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        #userList th, #userList td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        #userList th {
+            background-color: #f2f2f2;
+        }
+        .user-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .user-item:hover {
+            background: #f9f9f9;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Verificador de Login - Facility Manager Pro</h1>
+    
+    <p>Esta herramienta te permite verificar si los usuarios pueden iniciar sesión correctamente en Supabase.</p>
+    
+    <form id="loginForm">
+        <div>
+            <label for="email">Email:</label>
+            <input type="email" id="email" required placeholder="Correo electrónico">
+        </div>
+        <div>
+            <label for="password">Contraseña:</label>
+            <input type="password" id="password" required placeholder="Contraseña" value="Password123!">
+        </div>
+        <button type="submit">Verificar Login</button>
+    </form>
+    
+    <div>
+        <h3>Lista de usuarios para probar:</h3>
+        <div id="userList">
+            <div class="user-item" data-email="admin1@hospitalintegrado.com">admin1@hospitalintegrado.com - Patricia Mendoza (admin)</div>
+            <div class="user-item" data-email="admin2@hospitalintegrado.com">admin2@hospitalintegrado.com - Carlos Rivera (admin)</div>
+            <div class="user-item" data-email="admin3@hospitalintegrado.com">admin3@hospitalintegrado.com - Laura Castillo (admin)</div>
+            <div class="user-item" data-email="admin4@hospitalintegrado.com">admin4@hospitalintegrado.com - Roberto Jiménez (admin)</div>
+            <div class="user-item" data-email="admin5@hospitalintegrado.com">admin5@hospitalintegrado.com - María González (admin)</div>
+            <div class="user-item" data-email="coordinador1@hospitalintegrado.com">coordinador1@hospitalintegrado.com - Fernando Vargas (enterprise)</div>
+            <div class="user-item" data-email="coordinador2@hospitalintegrado.com">coordinador2@hospitalintegrado.com - Ana Martínez (enterprise)</div>
+            <div class="user-item" data-email="coordinador3@hospitalintegrado.com">coordinador3@hospitalintegrado.com - Jorge Sánchez (enterprise)</div>
+        </div>
+    </div>
+    
+    <h3>Resultados:</h3>
+    <div id="results">
+        <p>Los resultados del intento de inicio de sesión aparecerán aquí.</p>
+    </div>
+    
+    <div>
+        <h3>Instrucciones:</h3>
+        <ol>
+            <li>Antes de usar esta herramienta, asegúrate de haber ejecutado el script SQL <code>verify-users-sql.sql</code> en el SQL Editor de Supabase.</li>
+            <li>Haz clic en uno de los usuarios de la lista para cargar automáticamente su correo.</li>
+            <li>La contraseña por defecto para todos los usuarios es <strong>Password123!</strong></li>
+            <li>Haz clic en "Verificar Login" para intentar iniciar sesión.</li>
+            <li>Verifica los resultados en la sección de resultados.</li>
+        </ol>
+    </div>
+
+    <script>
+        // Configuración de Supabase
+        const supabaseUrl = 'https://wldiefpqmfjxernvuywv.supabase.co';
+        const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsZGllZnBxbWZqeGVybnZ1eXd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYzMDY0MjUsImV4cCI6MjA1MTg4MjQyNX0.gPrqf-VBZAaVvBJZNnrITF1z17ik0pqt91pRGrtBWyo';
+        
+        // Inicializar cliente de Supabase
+        const supabase = supabase.createClient(supabaseUrl, supabaseAnonKey);
+        
+        // Elementos del DOM
+        const loginForm = document.getElementById('loginForm');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const resultsDiv = document.getElementById('results');
+        const userItems = document.querySelectorAll('.user-item');
+        
+        // Event listeners
+        loginForm.addEventListener('submit', handleLogin);
+        userItems.forEach(item => {
+            item.addEventListener('click', () => {
+                emailInput.value = item.getAttribute('data-email');
+            });
+        });
+        
+        // Función para manejar el inicio de sesión
+        async function handleLogin(event) {
+            event.preventDefault();
+            
+            const email = emailInput.value;
+            const password = passwordInput.value;
+            
+            resultsDiv.innerHTML = '<p>Verificando inicio de sesión...</p>';
+            
+            try {
+                // Intentar inicio de sesión
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email,
+                    password
+                });
+                
+                if (error) {
+                    resultsDiv.innerHTML = `
+                        <p class="error">❌ Error al iniciar sesión: ${error.message}</p>
+                        <p>Detalles del error:</p>
+                        <pre>${JSON.stringify(error, null, 2)}</pre>
+                        <p>Asegúrate de:</p>
+                        <ul>
+                            <li>Haber ejecutado el script SQL en Supabase</li>
+                            <li>Que la contraseña sea correcta (Password123!)</li>
+                            <li>Que el usuario exista y esté verificado en auth.users</li>
+                        </ul>
+                    `;
+                } else {
+                    resultsDiv.innerHTML = `
+                        <p class="success">✅ Inicio de sesión exitoso para ${email}</p>
+                        <p>ID de usuario: ${data.user.id}</p>
+                        <p>Rol: ${data.user.role}</p>
+                        <p>Email verificado: ${data.user.email_confirmed_at ? 'Sí' : 'No'}</p>
+                        <p>Datos del usuario:</p>
+                        <pre>${JSON.stringify(data.user, null, 2)}</pre>
+                    `;
+                    
+                    // Cerrar sesión automáticamente después de probar
+                    await supabase.auth.signOut();
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <p class="error">❌ Error general: ${error.message}</p>
+                    <pre>${JSON.stringify(error, null, 2)}</pre>
+                `;
+            }
+        }
+    </script>
+</body>
+</html> 

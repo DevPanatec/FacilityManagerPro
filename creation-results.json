@@ -1,0 +1,37 @@
+{
+  "success": [],
+  "failed": [
+    {
+      "email": "admin1@hospitalintegrado.com",
+      "error": "Error en la creación"
+    },
+    {
+      "email": "admin2@hospitalintegrado.com",
+      "error": "Error en la creación"
+    },
+    {
+      "email": "admin3@hospitalintegrado.com",
+      "error": "Error en la creación"
+    },
+    {
+      "email": "admin4@hospitalintegrado.com",
+      "error": "Error en la creación"
+    },
+    {
+      "email": "admin5@hospitalintegrado.com",
+      "error": "Error en la creación"
+    },
+    {
+      "email": "coordinador1@hospitalintegrado.com",
+      "error": "Error en la creación"
+    },
+    {
+      "email": "coordinador2@hospitalintegrado.com",
+      "error": "Error en la creación"
+    },
+    {
+      "email": "coordinador3@hospitalintegrado.com",
+      "error": "Error en la creación"
+    }
+  ]
+}
