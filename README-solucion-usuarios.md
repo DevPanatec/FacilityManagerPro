@@ -1,123 +1,86 @@
-# Solución para la Creación de Usuarios en FacilityManagerPro
+# Solución para Creación de Usuarios Administradores en FacilityManagerPro
 
-Este paquete contiene scripts y herramientas para implementar una solución completa al problema de creación de usuarios en FacilityManagerPro. La solución resuelve el ciclo de dependencia entre las tablas `users` y `auth.users` y proporciona una forma eficiente de crear múltiples usuarios.
+## Problema
 
-## Contenido del Paquete
+La aplicación FacilityManagerPro requiere crear usuarios administradores asociados a organizaciones específicas, pero se han encontrado varios obstáculos:
 
-- `create-user-sql-script.sql`: Script SQL para configurar la base de datos
-- `batch-create-users.js`: Script para crear múltiples usuarios en lote
-- `users-to-create.csv`: Archivo CSV de ejemplo con usuarios
-- `solucion-definitiva-usuarios.md`: Documento explicativo de la solución
-- `README-solucion-usuarios.md`: Este archivo
+1. **Restricciones de clave foránea**: La tabla `public.users` tiene una restricción de clave foránea con `auth.users`, lo que impide la creación directa de usuarios en la tabla pública.
+2. **Falta de sincronización**: Los usuarios deben existir tanto en `auth.users` (sistema de autenticación de Supabase) como en `public.users` (tabla de la aplicación).
+3. **Permisos limitados**: No se pueden ejecutar operaciones privilegiadas en `auth.users` desde la API pública.
 
-## Pasos para Implementar la Solución
+## Soluciones implementadas
 
-### 1. Instalar Dependencias
+### 1. Script SQL para crear una función RPC
 
-```bash
-npm install @supabase/supabase-js uuid csv-parser
-```
+Se ha creado un script SQL (`crear-funcion-rpc.sql`) que implementa:
 
-### 2. Configurar la Base de Datos
+- Una función `create_user_rpc` con seguridad elevada (SECURITY DEFINER) que puede:
+  - Verificar si la organización existe
+  - Crear el usuario en `auth.users` con contraseña encriptada
+  - Crear el usuario en `public.users` con los detalles necesarios
+  - Devolver el ID del usuario creado
+- Una función auxiliar `list_database_functions` para verificar la existencia de funciones RPC
 
-1. **Acceder al Panel de Administración de Supabase**:
-   - Inicia sesión en el panel de Supabase: https://wldiefpqmfjxernvuywv.supabase.co/dashboard
-   - Ve a la sección "SQL Editor" (requiere permisos de administrador)
+Este script debe ejecutarse en el SQL Editor de Supabase con permisos de administrador.
 
-2. **Ejecutar el Script SQL**:
-   - Abre el archivo `create-user-sql-script.sql` 
-   - Copia todo el contenido
-   - Pégalo en el editor SQL de Supabase
-   - Ejecuta el script
+### 2. Script JavaScript para usar la función RPC
 
-3. **Verificar la Instalación**:
-   - Asegúrate de que todas las funciones se han creado correctamente
-   - Puedes probar con una consulta: `SELECT * FROM pg_proc WHERE proname LIKE '%user_rpc%';`
+Se ha creado un script Node.js (`prueba-rpc-admin.js`) que:
 
-### 3. Configurar el Script de Creación de Usuarios
+- Verifica si la función RPC existe
+- Verifica si la organización existe
+- Comprueba si el usuario ya existe
+- Crea el usuario administrador asociado a la organización específica
+- Guarda los resultados y proporciona información de acceso
 
-1. **Preparar los Datos de Usuarios**:
-   - Opción 1: Edita el archivo `users-to-create.csv` con los usuarios que deseas crear
-   - Opción 2: Crea un archivo `users-to-create.json` siguiendo el formato de ejemplo
-   - Opción 3: Modifica la lista `defaultUsersToCreate` en `batch-create-users.js`
+### 3. Script alternativo para creación directa
 
-2. **Verificar la Configuración de Supabase**:
-   - Asegúrate de que las variables `supabaseUrl` y `supabaseServiceKey` en `batch-create-users.js` son correctas
+Como solución alternativa, se creó un script (`create-admin-directly.js`) que:
 
-### 4. Crear Usuarios
+- Intenta insertar directamente en `public.users` 
+- Genera instrucciones SQL para la sincronización manual
+- Proporciona pasos detallados para completar el proceso
 
-Ejecuta el script para crear los usuarios:
+### 4. Instrucciones para creación manual
 
-```bash
-node batch-create-users.js
-```
+Se han documentado instrucciones paso a paso (`instrucciones-crear-admin.md`) para:
 
-El script:
-- Verificará la existencia de cada usuario antes de intentar crearlo
-- Validará que todos los campos requeridos estén presentes
-- Confirmará que la organización existe
-- Creará los usuarios utilizando la función RPC
-- Generará un archivo de resultados con los detalles de la operación
+1. Crear el usuario mediante la interfaz de Supabase
+2. Actualizar los metadatos necesarios
+3. Verificar la creación correcta
+4. Probar el inicio de sesión
 
-### 5. Verificar los Resultados
+## Guía de uso
 
-Después de ejecutar el script, se generará un archivo con los resultados (por ejemplo, `user-creation-results-2025-02-27T17-42-49.json`). Este archivo contendrá:
-- Un resumen con los totales de usuarios creados, fallidos y saltados
-- Listas detalladas de los usuarios procesados
-- Información sobre cualquier error que haya ocurrido
+### Para crear un usuario administrador automáticamente:
 
-### 6. Utilizar los Nuevos Usuarios
+1. Ejecutar el script SQL en Supabase:
+   ```
+   psql -f crear-funcion-rpc.sql
+   ```
+   O copiar y pegar el contenido en el SQL Editor de Supabase.
 
-Los usuarios creados pueden iniciar sesión de inmediato con sus credenciales:
-
-```
-Email: [email configurado]
-Contraseña: [contraseña configurada]
-```
-
-## Funciones Adicionales
-
-Esta solución también proporciona funciones SQL para:
-
-1. **Actualizar Usuarios Existentes**:
-   ```sql
-   SELECT update_user_rpc(
-     'id-del-usuario',
-     'nuevo-email@ejemplo.com',
-     'Nuevo Nombre',
-     'Nuevo Apellido',
-     'nuevo-rol',
-     'id-de-organizacion'
-   );
+2. Ejecutar el script JavaScript:
+   ```
+   node prueba-rpc-admin.js
    ```
 
-2. **Cambiar Contraseñas**:
-   ```sql
-   SELECT reset_password_rpc(
-     'id-del-usuario',
-     'NuevaContraseña123!'
-   );
-   ```
+### Para crear un usuario administrador manualmente:
 
-3. **Eliminar Usuarios**:
-   ```sql
-   SELECT delete_user_rpc('id-del-usuario');
-   ```
+Sigue las instrucciones detalladas en `instrucciones-crear-admin.md`.
 
-## Solución de Problemas
+## Notas importantes
 
-Si encuentras errores durante la ejecución del script SQL o al crear usuarios, verifica:
+- **Seguridad**: Los scripts utilizan una clave de servicio de Supabase (service_role) que tiene permisos elevados. Mantenla segura y no la incluyas en código de producción expuesto públicamente.
+- **Contraseñas**: Las contraseñas en estos ejemplos son demostrativas. En producción, utiliza contraseñas seguras y nunca las almacenes en texto plano.
+- **Integración**: Para integrar esta funcionalidad en la aplicación principal, considera implementar una API serverless o una Edge Function de Supabase.
 
-1. **Permisos**: Asegúrate de estar utilizando un usuario con permisos suficientes (service_role)
-2. **Estructura de la Base de Datos**: Confirma que las tablas `users` y `auth.users` tienen la estructura esperada
-3. **Restricciones**: Verifica si la restricción de clave foránea se eliminó correctamente
-4. **Logs**: Revisa los mensajes de error para identificar el problema específico
+## Resolución de problemas
 
-## Notas Importantes
+- Si la función RPC no existe o no funciona, verifica los permisos del usuario que ejecuta el SQL.
+- Si hay errores de clave foránea, verifica que estás creando el usuario en `auth.users` antes que en `public.users`.
+- Para verificar la existencia de la función RPC, ejecuta `node verificar-funciones-rpc.js`.
 
-- Esta solución modifica la estructura de la base de datos y debe ser implementada por un administrador.
-- La eliminación de la restricción de clave foránea no debería afectar la integridad de los datos existentes.
-- Los scripts pueden personalizarse según las necesidades específicas de tu implementación.
-- Recuerda mantener seguras las claves de API y las contraseñas generadas.
+## Contacto
 
-Para cualquier consulta adicional o soporte, contacta al administrador del sistema. 
+Para obtener asistencia adicional, contacta al equipo de desarrollo de FacilityManagerPro. 

@@ -1,178 +1,89 @@
-# Instrucciones para crear un usuario administrador en Supabase
+# Instrucciones para crear manualmente un usuario administrador en Supabase
 
-Debido a las restricciones de clave foránea en las tablas de usuarios de Supabase, la creación automatizada de usuarios administrativos no siempre es posible a través de la API normal. Este documento proporciona instrucciones paso a paso para crear un usuario administrador mediante métodos directos en la consola de Supabase.
+Debido a las restricciones en la configuración actual de Supabase, es necesario seguir estos pasos para crear un nuevo usuario administrador asociado a la organización HospitalesGlobales.
 
-## Método 1: Utilizando la consola de SQL en Supabase
+## Paso 1: Acceder al panel de Supabase
 
-1. Inicia sesión en tu panel de control de Supabase.
-2. Navega a la sección "SQL Editor" en el menú izquierdo.
-3. Crea una nueva consulta y copia el siguiente código (ajusta los valores según sea necesario):
+1. Accede al panel de administración de Supabase: https://app.supabase.io
+2. Selecciona el proyecto de Facility Manager Pro
+3. Ve a la sección "Authentication" en el menú lateral
 
-```sql
--- Primero, creamos una función SQL que facilita la creación de usuarios completos
-CREATE OR REPLACE FUNCTION create_admin_user(
-  p_email TEXT,
-  p_password TEXT,
-  p_role TEXT,
-  p_first_name TEXT,
-  p_last_name TEXT,
-  p_organization_id UUID
-) RETURNS json AS $$
-DECLARE
-  v_user_id UUID;
-  v_result json;
-BEGIN
-  -- Crear el usuario en auth.users (sistema de autenticación)
-  INSERT INTO auth.users (
-    email,
-    encrypted_password,
-    email_confirmed_at,
-    role,
-    created_at,
-    updated_at
-  )
-  VALUES (
-    p_email,
-    crypt(p_password, gen_salt('bf')),
-    now(),
-    'authenticated',
-    now(),
-    now()
-  )
-  RETURNING id INTO v_user_id;
-  
-  -- Crear el registro en public.users (tabla de la aplicación)
-  INSERT INTO public.users (
-    id,
-    email,
-    role,
-    first_name,
-    last_name,
-    organization_id,
-    status,
-    created_at,
-    updated_at,
-    timezone,
-    language,
-    metadata,
-    failed_login_attempts
-  ) VALUES (
-    v_user_id,
-    p_email,
-    p_role,
-    p_first_name,
-    p_last_name,
-    p_organization_id,
-    'active',
-    now(),
-    now(),
-    'UTC',
-    'es',
-    '{}',
-    0
-  );
-  
-  SELECT json_build_object(
-    'id', v_user_id,
-    'email', p_email,
-    'role', p_role,
-    'organization_id', p_organization_id
-  ) INTO v_result;
-  
-  RETURN v_result;
-EXCEPTION WHEN OTHERS THEN
-  RETURN json_build_object(
-    'error', SQLERRM,
-    'code', SQLSTATE
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-```
+## Paso 2: Crear el usuario en Auth
 
-4. Ejecuta la consulta para crear la función.
-5. Ahora, crea una nueva consulta y ejecuta lo siguiente para crear tu usuario administrador (ajusta los valores):
+1. En la sección "Authentication", haz clic en "Users"
+2. Haz clic en el botón "Add User" o "New User"
+3. Ingresa los siguientes datos:
+   - Email: admin.hospital@facilitymanagerpro.com
+   - Password: Admin123!
+   - (Marca la opción "Auto-confirm user" si está disponible)
+4. Guarda el UUID generado para el usuario, lo necesitarás más adelante
+
+## Paso 3: Agregar el usuario a la tabla public.users
+
+1. Ve a la sección "Table Editor" en el menú lateral
+2. Selecciona la tabla "users" del esquema "public"
+3. Haz clic en "Insert" o "New Row"
+4. Ingresa los siguientes datos:
+   - id: (Usa el UUID generado en el paso anterior)
+   - email: admin.hospital@facilitymanagerpro.com
+   - first_name: Admin
+   - last_name: Hospital
+   - role: admin
+   - organization_id: 0d7f71d0-1b5f-473f-a3d5-68c3abf99584
+   - status: active
+   - created_at: (Usa la función `now()`)
+   - updated_at: (Usa la función `now()`)
+5. Guarda los cambios
+
+## Paso 4: Actualizar el usuario en Auth con metadatos
+
+1. Ve a la sección "SQL Editor" en el menú lateral
+2. Abre un nuevo script o consulta
+3. Copia el siguiente SQL y reemplaza `[USER_UUID]` con el UUID del usuario:
 
 ```sql
-SELECT create_admin_user(
-  'admin@facilitymanagerpro.com', -- Email 
-  'SecurePass123!',              -- Contraseña
-  'admin',                       -- Rol (admin)
-  'Admin',                       -- Nombre
-  'Principal',                   -- Apellido
-  '0d7f71d0-1b5f-473f-a3d5-68c3abf99584'  -- ID de la organización
-);
+UPDATE auth.users SET
+  raw_user_meta_data = jsonb_build_object(
+    'first_name', 'Admin',
+    'last_name', 'Hospital',
+    'email_verified', true,
+    'phone_verified', true,
+    'verified', true,
+    'complete_profile', true
+  ),
+  raw_app_meta_data = jsonb_build_object(
+    'provider', 'email',
+    'providers', ARRAY['email']::text[],
+    'role', 'admin'
+  ),
+  role = 'authenticated',
+  email_confirmed_at = NOW()
+WHERE id = '[USER_UUID]';
 ```
 
-6. Verifica que el usuario se haya creado correctamente consultando:
+4. Ejecuta el script SQL
 
-```sql
-SELECT * FROM public.users WHERE email = 'admin@facilitymanagerpro.com';
-```
+## Paso 5: Verificar la creación del usuario
 
-## Método 2: Utilizando la interfaz de Supabase y SQL
+1. Ve a la sección "Authentication" > "Users" y verifica que el usuario esté listado
+2. Ve a la sección "Table Editor" > "public.users" y verifica que el usuario esté listado
+3. Confirma que los datos son correctos en ambas tablas
 
-### Paso 1: Crear el usuario en Authentication
+## Paso 6: Prueba de inicio de sesión
 
-1. En el panel de Supabase, ve a la sección "Authentication" > "Users".
-2. Haz clic en "Invite user" (Invitar usuario).
-3. Introduce la dirección de correo electrónico del administrador y haz clic en "Invite".
-4. Esto enviará un correo electrónico con un enlace para establecer la contraseña.
+1. Intenta iniciar sesión en la aplicación usando:
+   - Email: admin.hospital@facilitymanagerpro.com
+   - Password: Admin123!
+2. Verifica que puedas acceder con privilegios de administrador y que estés asociado a la organización correcta
 
-### Paso 2: Obtener el ID del usuario creado
+## Solución a largo plazo
 
-1. Una vez que el usuario haya establecido su contraseña y se haya registrado, ve a "Authentication" > "Users".
-2. Busca el usuario recién creado y toma nota de su UUID.
+Para automatizar este proceso y evitar problemas en el futuro, te recomendamos:
 
-### Paso 3: Agregar el registro a la tabla users con el rol de admin
+1. Ejecutar el script SQL "crear-funcion-rpc.sql" en el SQL Editor de Supabase para crear una función RPC que maneje ambas inserciones de manera atómica
+2. Usar el script "prueba-rpc-admin.js" para probar la función RPC después de crearla
+3. Integrar esta función en tu aplicación para manejar la creación de usuarios de manera más robusta
 
-1. Ve a "SQL Editor".
-2. Crea una nueva consulta y ejecuta:
+## Contacto
 
-```sql
-INSERT INTO public.users (
-  id,
-  email,
-  role,
-  first_name,
-  last_name,
-  organization_id,
-  status,
-  created_at,
-  updated_at,
-  timezone,
-  language,
-  metadata,
-  failed_login_attempts
-) VALUES (
-  'UUID-DEL-USUARIO-OBTENIDO-EN-EL-PASO-2',
-  'admin@facilitymanagerpro.com',
-  'admin',
-  'Admin',
-  'Principal',
-  '0d7f71d0-1b5f-473f-a3d5-68c3abf99584',
-  'active',
-  now(),
-  now(),
-  'UTC',
-  'es',
-  '{}',
-  0
-);
-```
-
-## Método 3: Utilizando Edge Functions de Supabase (avanzado)
-
-Si necesitas una solución más avanzada y programática, puedes crear una Edge Function en Supabase que se encargue de la creación de usuarios administrativos con manejo apropiado de errores y permisos.
-
-1. Configura y despliega una Edge Function siguiendo la documentación oficial de Supabase.
-2. Implementa la lógica de creación de usuario con acceso al Service Role API.
-
-## Solución de problemas comunes
-
-### Error de clave foránea (foreign key constraint)
-
-Si encuentras un error como "violates foreign key constraint", esto generalmente significa que estás intentando insertar un registro en `public.users` con un ID que no existe en `auth.users`. Asegúrate de seguir los pasos en el orden correcto.
-
-### Error de duplicado (duplicate key value)
-
-Si encuentras un error de clave duplicada, esto significa que ya existe un usuario con el mismo email o ID. Puedes verificar si el usuario ya existe y actualizar sus datos en lugar de insertar un nuevo registro. 
+Si encuentras problemas durante este proceso, contacta al administrador del sistema o al equipo de desarrollo. 
