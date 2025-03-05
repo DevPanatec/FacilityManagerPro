@@ -491,82 +491,158 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Función para reparar automáticamente inconsistencias
+-- Crear o reemplazar la función para reparar la integridad de usuarios
 CREATE OR REPLACE FUNCTION public.repair_users_integrity()
-RETURNS TABLE (
-    user_id uuid,
-    action text,
-    success boolean
+RETURNS TABLE(
+    user_id UUID,
+    user_email TEXT,
+    previous_status TEXT,
+    action_taken TEXT,
+    new_status TEXT
 ) AS $$
 DECLARE
-    integrity_rec RECORD;
-    repair_success BOOLEAN;
-    action_taken TEXT;
+    auth_user RECORD;
+    public_user RECORD;
+    default_role TEXT := 'user'; -- Asignar un rol por defecto válido
 BEGIN
-    -- Iterar sobre cada registro con problemas
-    FOR integrity_rec IN (
-        SELECT * FROM public.verify_users_integrity() 
-        WHERE status != 'Sincronizado'
-    ) LOOP
-        repair_success := FALSE;
+    -- Para cada usuario en auth.users
+    FOR auth_user IN SELECT id, email, raw_app_meta_data FROM auth.users LOOP
+        -- Verificar si existe en public.users
+        SELECT * INTO public_user FROM public.users WHERE id = auth_user.id;
         
-        -- Caso 1: Usuario existe en auth.users pero no en public.users
-        IF integrity_rec.in_auth_users AND NOT integrity_rec.in_public_users THEN
+        IF public_user.id IS NULL THEN
+            -- No existe en public.users, intentar crearlo
             BEGIN
                 INSERT INTO public.users (
                     id, 
                     email, 
-                    first_name, 
-                    last_name,
-                    role,
-                    created_at,
-                    updated_at,
-                    status
-                )
-                SELECT 
-                    id, 
-                    email, 
-                    COALESCE(raw_user_meta_data->>'first_name', 'Usuario'),
-                    COALESCE(raw_user_meta_data->>'last_name', 'Restaurado'),
-                    COALESCE(raw_app_meta_data->>'role', 'user'),
-                    created_at,
-                    updated_at,
-                    'active'
-                FROM auth.users
-                WHERE id = integrity_rec.user_id;
+                    role, 
+                    organization_id,
+                    first_name,
+                    last_name
+                ) VALUES (
+                    auth_user.id, 
+                    auth_user.email, 
+                    default_role, -- Usar rol por defecto válido
+                    '0d7f71d0-1b5f-473f-a3d5-68c3abf99584', -- Organización por defecto
+                    'Usuario', -- Nombre por defecto
+                    'Restaurado' -- Apellido por defecto
+                );
                 
-                action_taken := 'Creado en public.users';
-                repair_success := TRUE;
-            EXCEPTION WHEN OTHERS THEN
-                action_taken := 'Error al crear en public.users: ' || SQLERRM;
-                repair_success := FALSE;
+                RETURN QUERY SELECT 
+                    auth_user.id,
+                    auth_user.email,
+                    'Falta en public.users'::TEXT,
+                    'Creado en public.users con rol por defecto'::TEXT,
+                    'Sincronizado'::TEXT;
+            EXCEPTION
+                WHEN OTHERS THEN
+                    RETURN QUERY SELECT 
+                        auth_user.id,
+                        auth_user.email,
+                        'Falta en public.users'::TEXT,
+                        'Error al crear en public.users: ' || SQLERRM,
+                        'Falta en public.users'::TEXT;
             END;
-        
-        -- Caso 2: Usuario existe en public.users pero no en auth.users
-        ELSIF integrity_rec.in_public_users AND NOT integrity_rec.in_auth_users THEN
-            BEGIN
-                -- Este caso se manejará automáticamente por el trigger sync_public_to_auth
-                -- Actualizamos el registro para activar el trigger
-                UPDATE public.users
-                SET updated_at = NOW()
-                WHERE id = integrity_rec.user_id;
-                
-                action_taken := 'Actualizado para activar sincronización con auth.users';
-                repair_success := TRUE;
-            EXCEPTION WHEN OTHERS THEN
-                action_taken := 'Error al actualizar para sincronización: ' || SQLERRM;
-                repair_success := FALSE;
-            END;
+        ELSE
+            -- Verificar si el usuario auth tiene la configuración adecuada
+            IF auth_user.raw_app_meta_data IS NULL OR 
+               NOT (auth_user.raw_app_meta_data ? 'provider') OR 
+               NOT (auth_user.raw_app_meta_data ? 'providers') OR
+               NOT (auth_user.raw_app_meta_data->'providers' @> '"email"'::jsonb) THEN
+               
+                -- Actualizar metadata en auth.users
+                BEGIN
+                    UPDATE auth.users
+                    SET 
+                        raw_app_meta_data = 
+                            CASE 
+                                WHEN raw_app_meta_data IS NULL THEN 
+                                    jsonb_build_object(
+                                        'provider', 'email',
+                                        'providers', jsonb_build_array('email')
+                                    )
+                                ELSE
+                                    jsonb_set(
+                                        jsonb_set(
+                                            raw_app_meta_data,
+                                            '{provider}',
+                                            '"email"'
+                                        ),
+                                        '{providers}',
+                                        '["email"]'
+                                    )
+                            END,
+                        confirmation_token = '',
+                        recovery_token = '',
+                        email_change_token_new = '',
+                        email_change = ''
+                    WHERE id = auth_user.id;
+                    
+                    RETURN QUERY SELECT 
+                        auth_user.id,
+                        auth_user.email,
+                        'Metadata incorrecta'::TEXT,
+                        'Actualizada metadata en auth.users'::TEXT,
+                        'Metadata corregida'::TEXT;
+                EXCEPTION
+                    WHEN OTHERS THEN
+                        RETURN QUERY SELECT 
+                            auth_user.id,
+                            auth_user.email,
+                            'Metadata incorrecta'::TEXT,
+                            'Error al actualizar metadata: ' || SQLERRM,
+                            'Metadata incorrecta'::TEXT;
+                END;
+            ELSE
+                -- Todo correcto
+                RETURN QUERY SELECT 
+                    auth_user.id,
+                    auth_user.email,
+                    'Correcto'::TEXT,
+                    'No se requiere acción'::TEXT,
+                    'Correcto'::TEXT;
+            END IF;
         END IF;
-        
-        -- Devolver resultados de la reparación
-        user_id := integrity_rec.user_id;
-        action := action_taken;
-        success := repair_success;
-        RETURN NEXT;
     END LOOP;
     
+    -- Retornar
     RETURN;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Crear o reemplazar la función para actualizar un usuario específico
+CREATE OR REPLACE FUNCTION public.fix_user_metadata(user_email TEXT)
+RETURNS TEXT AS $$
+DECLARE
+    user_id UUID;
+    result TEXT;
+BEGIN
+    -- Obtener el ID del usuario por email
+    SELECT id INTO user_id FROM auth.users WHERE email = user_email;
+    
+    IF user_id IS NULL THEN
+        RETURN 'Error: Usuario no encontrado';
+    END IF;
+    
+    -- Actualizar metadata
+    UPDATE auth.users
+    SET 
+        raw_app_meta_data = 
+            jsonb_build_object(
+                'provider', 'email',
+                'providers', jsonb_build_array('email')
+            ),
+        confirmation_token = '',
+        recovery_token = '',
+        email_change_token_new = '',
+        email_change = ''
+    WHERE id = user_id;
+    
+    RETURN 'Usuario actualizado correctamente: ' || user_email;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'Error al actualizar usuario: ' || SQLERRM;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -852,4 +928,10 @@ BEGIN
     RAISE NOTICE '- Para ver dependencias: SELECT * FROM public.user_dependency_view;';
     RAISE NOTICE '============================================================';
 END;
-$$; 
+$$;
+
+-- Arreglar el usuario nuevo recién creado
+SELECT public.fix_user_complete('admin_final_test@hospitalintegrado.com');
+
+-- Arreglar el usuario original problemático
+SELECT public.fix_user_complete('admin_nuevo_test@hospitalintegrado.com'); 
