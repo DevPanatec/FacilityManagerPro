@@ -698,7 +698,7 @@ export default function TasksPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <span className="text-sm text-gray-600">
-                      Vence: {new Date(task.due_date).toLocaleDateString()}
+                      Vence: {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'Sin fecha'}
                     </span>
                   </div>
                 </div>

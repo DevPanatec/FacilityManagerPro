@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { toast } from 'react-hot-toast'
 import { FaUser, FaLock } from 'react-icons/fa'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { Database } from '@/lib/types/database'
+import { supabase } from '@/lib/supabase'
 
 export default function LoginForm() {
   const router = useRouter()
@@ -16,7 +15,6 @@ export default function LoginForm() {
     password: '',
     showPassword: false
   })
-  const supabase = createClientComponentClient<Database>()
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -41,26 +39,26 @@ export default function LoginForm() {
 
       if (authError) {
         console.error('Error en login:', authError)
-        toast.error(authError.message || 'Error al iniciar sesión')
+        if (authError.message.includes('Invalid login credentials')) {
+          toast.error('Credenciales inválidas')
+        } else {
+          toast.error('Error al iniciar sesión. Por favor intenta de nuevo.')
+        }
         return
       }
-
-      console.log('Login exitoso:', authData)
 
       if (!authData?.user) {
-        toast.error('Credenciales inválidas')
+        toast.error('Error al iniciar sesión')
         return
       }
 
-      // Obtener datos del usuario y su organización
-      console.log('Buscando datos del usuario:', authData.user.id)
+      // Esperar un momento para asegurar que la sesión esté establecida
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Obtener datos del usuario
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select(`
-          id,
-          role,
-          organization_id
-        `)
+        .select('id, role, organization_id')
         .eq('id', authData.user.id)
         .single()
 
@@ -70,43 +68,35 @@ export default function LoginForm() {
         return
       }
 
-      console.log('Datos del usuario:', userData)
-
       if (!userData) {
         toast.error('Usuario no encontrado')
         return
       }
 
-      // Validar rol y redireccionar según corresponda
-      console.log('Rol del usuario:', userData.role)
+      // Guardar datos básicos
+      localStorage.setItem('userRole', userData.role)
+      localStorage.setItem('userId', userData.id)
+
+      // Redireccionar según el rol
       if (userData.role === 'superadmin') {
-        console.log('Usuario es superadmin, guardando datos...')
-        localStorage.setItem('userRole', userData.role)
-        localStorage.setItem('userId', userData.id)
-        console.log('Datos guardados, redirigiendo...')
         window.location.href = '/superadmin/dashboard'
-      } else if (userData.role === 'enterprise') {
-        localStorage.setItem('userRole', userData.role)
-        localStorage.setItem('userId', userData.id)
-        localStorage.setItem('organizationId', userData.organization_id)
-        const { data: orgData } = await supabase
-          .from('organizations')
-          .select('name')
-          .eq('id', userData.organization_id)
-          .single()
-        localStorage.setItem('organizationName', orgData?.name || '')
-        window.location.href = '/enterprise/dashboard'
-      } else if (userData.role === 'admin') {
-        localStorage.setItem('userRole', userData.role)
-        localStorage.setItem('userId', userData.id)
-        localStorage.setItem('organizationId', userData.organization_id)
-        const { data: orgData } = await supabase
-          .from('organizations')
-          .select('name')
-          .eq('id', userData.organization_id)
-          .single()
-        localStorage.setItem('organizationName', orgData?.name || '')
-        window.location.href = '/admin/dashboard'
+      } else if (['enterprise', 'admin'].includes(userData.role)) {
+        if (userData.organization_id) {
+          localStorage.setItem('organizationId', userData.organization_id)
+          
+          // Obtener nombre de la organización
+          const { data: orgData } = await supabase
+            .from('organizations')
+            .select('name')
+            .eq('id', userData.organization_id)
+            .single()
+
+          if (orgData?.name) {
+            localStorage.setItem('organizationName', orgData.name)
+          }
+        }
+        
+        window.location.href = `/${userData.role}/dashboard`
       } else {
         console.log('Rol no autorizado:', userData.role)
         toast.error('Acceso no autorizado')

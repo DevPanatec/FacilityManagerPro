@@ -50,7 +50,6 @@ interface FileWithPreview extends File {
   preview: string;
 }
 
-// Interfaz para los datos que vienen de Supabase
 interface SupabaseReport {
   id: string;
   title: string;
@@ -59,7 +58,7 @@ interface SupabaseReport {
   status: string;
   priority: string;
   area_id: string;
-  subarea_id: string | null;  // Added subarea_id field
+  subarea_id: string | null;
   organization_id: string;
   created_by: string;
   attachments: Array<{
@@ -117,6 +116,7 @@ export default function ReportsPage() {
   const [selectedSubarea, setSelectedSubarea] = useState<string | null>(null);
   const [subareas, setSubareas] = useState<Array<{id: string; nombre: string; descripcion: string | null}>>([]);
   const [contingencyType, setContingencyType] = useState('');
+  const [customTitle, setCustomTitle] = useState('');
   const [description, setDescription] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<ContingencyReport | null>(null);
@@ -229,31 +229,9 @@ export default function ReportsPage() {
       setIsLoading(true);
       setError(null);
 
-      // Get current date in local timezone
-      const now = new Date();
-      const startDate = new Date(now);
-
-      // Set the start date based on filter
-      if (timeFilter === 'dia') {
-        // Set to start of current day in local timezone
-        startDate.setHours(0, 0, 0, 0);
-      } else if (timeFilter === 'semana') {
-        // Set to 7 days ago from current time
-        startDate.setDate(now.getDate() - 7);
-      } else if (timeFilter === 'mes') {
-        // Set to 1 month ago from current time
-        startDate.setMonth(now.getMonth() - 1);
-      }
-
-      // Ensure end date is set to end of current day
-      const endDate = new Date(now);
-      endDate.setHours(23, 59, 59, 999);
-
-      console.log('Filtro de fechas:', {
-        filtro: timeFilter,
-        fechaInicio: startDate.toISOString(),
-        fechaFin: endDate.toISOString()
-      });
+      // Set fixed start date to February 20th, 2025
+      const startDate = new Date('2025-02-20T00:00:00-05:00');
+      console.log('Filtrando reportes desde:', startDate.toISOString());
 
       // Cargar reportes
       let reportsQuery = supabase
@@ -262,7 +240,7 @@ export default function ReportsPage() {
           *,
           creator:user_profiles!created_by(id, first_name, last_name),
           assignee:user_profiles!assigned_to(id, first_name, last_name),
-          area:areas!inner(
+          area:areas!left(
             id, 
             name,
             sala:salas(
@@ -299,8 +277,6 @@ export default function ReportsPage() {
           )
         `)
         .eq('organization_id', userData.organization_id)
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', endDate.toISOString())
         .order('created_at', { ascending: false });
 
       const { data: reports, error: reportsError } = await reportsQuery;
@@ -318,35 +294,43 @@ export default function ReportsPage() {
         return;
       }
 
+      // Filtrar los reportes para mostrar solo los del 20 de febrero en adelante
+      const filteredReports = reports.filter(report => {
+        const reportDate = new Date(report.created_at);
+        return reportDate >= startDate;
+      });
+
       console.log('Resultado de la consulta:', {
-        reportesEncontrados: reports.length,
+        reportesEncontrados: filteredReports.length,
+        reportesTotales: reports.length,
         fechaInicio: startDate,
-        fechaFin: endDate,
+        fechaFin: new Date(),
         organizacionId: userData.organization_id
       });
 
       // Mapear los reportes con la información
-      const reportsWithOrgs = reports.map((report: any) => {
+      const reportsWithOrgs = filteredReports.map((report: any) => {
         const sala = report.area?.sala;
         const tasks = report.area?.tasks || [];
         
         console.log('Datos del reporte:', {
           id: report.id,
-          area: report.area?.name,
-          sala: sala?.nombre,
+          fecha: new Date(report.created_at).toLocaleDateString(),
+          titulo: report.title,
           tipo: report.type?.name,
-          tasks: tasks.length
+          area: report.area?.name || 'No aplica',
+          sala: sala?.nombre || 'No aplica'
         });
         
         return {
           id: report.id,
-          title: report.type?.name || report.title,
+          title: report.title || report.type?.name || 'Sin título',
           description: report.description,
           date: report.created_at,
           status: report.status === 'completed' ? 'Completada' as const : 'Pendiente' as const,
           type: report.type?.name || 'No especificado',
-          area: report.area?.name || 'No especificada',
-          sala: sala?.nombre || 'No especificada',
+          area: report.area?.name || 'No aplica',
+          sala: sala?.nombre || 'No aplica',
           tasks: tasks.map((task: any) => ({
             id: task.id,
             title: task.title,
@@ -463,8 +447,18 @@ export default function ReportsPage() {
         throw new Error('Usuario no tiene organización asignada');
       }
 
-      if (!selectedArea) {
+      if (!contingencyType) {
+        toast.error('Por favor seleccione un tipo de contingencia');
+        return;
+      }
+
+      if (contingencyType !== 'other' && !selectedArea) {
         toast.error('Por favor seleccione un área');
+        return;
+      }
+
+      if (contingencyType === 'other' && !customTitle) {
+        toast.error('Por favor ingrese un título para la contingencia');
         return;
       }
 
@@ -577,45 +571,45 @@ export default function ReportsPage() {
       // Crear el nuevo reporte
       try {
         const selectedType = contingencyTypes.find(type => type.id === contingencyType);
-        if (!selectedType) {
+        if (!selectedType && contingencyType !== 'other') {
           throw new Error('Tipo de contingencia no válido');
         }
 
-        // Crear el reporte
-        const newReport = {
-          title: selectedType.name,
+        // Preparar los datos del reporte
+        const reportData: any = {
+          title: contingencyType === 'other' ? customTitle : contingencyTypes.find(type => type.id === contingencyType)?.name || 'Sin título',
           description: JSON.stringify({
             details: {
-            area: selectedArea,
-            sala: selectedSala,
-            fecha: new Date().toLocaleDateString(),
-            horaInicio: new Date().toLocaleTimeString(),
-            horaFin: new Date().toLocaleTimeString(),
-            actividades: orderedTaskDescriptions,
-            imagenes: uploadedUrls.reduce((acc, url, index) => {
-              if (index === 0) acc.inicial = url;
-              else if (index === 1) acc.durante = url;
-              else if (index === 2) acc.final = url;
-              return acc;
-            }, {} as { inicial?: string; durante?: string; final?: string })
+              area: selectedArea || null,
+              sala: selectedSala || null,
+              fecha: new Date().toLocaleDateString(),
+              horaInicio: new Date().toLocaleTimeString(),
+              horaFin: new Date().toLocaleTimeString(),
+              descripcion: description,
+              imagenes: uploadedUrls.reduce((acc, url, index) => {
+                if (index === 0) acc.inicial = url;
+                else if (index === 1) acc.durante = url;
+                else if (index === 2) acc.final = url;
+                return acc;
+              }, {} as { inicial?: string; durante?: string; final?: string })
             },
             images: uploadedUrls
           }),
           status: 'pending',
           priority: 'medium',
-          area_id: selectedArea,
+          area_id: selectedArea || null,
           organization_id: userData.organization_id,
           created_by: session.user.id,
           assigned_to: session.user.id,
-          type_id: selectedType.id
+          type_id: contingencyType === 'other' ? null : contingencyType
         };
 
-        console.log('Guardando reporte con datos:', newReport);
+        console.log('Guardando reporte con datos:', reportData);
 
         // Insertar el reporte
-        const { data: reportData, error: insertError } = await supabase
+        const { data: insertedReport, error: insertError } = await supabase
           .from('contingencies')
-          .insert([newReport])
+          .insert([reportData])
           .select()
           .single();
 
@@ -624,32 +618,35 @@ export default function ReportsPage() {
           throw insertError;
         }
 
-        if (!reportData) {
+        if (!insertedReport) {
           throw new Error('No se recibieron datos del reporte creado');
         }
 
-        console.log('Reporte creado exitosamente:', reportData);
+        console.log('Reporte creado exitosamente:', insertedReport);
 
-        // Crear la asignación relacionada
-        const newAssignment = {
-          organization_id: userData.organization_id,
-          user_id: session.user.id,
-          area_id: selectedArea,
-          start_time: new Date().toISOString(),
-          end_time: new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
-          status: 'pending'
-        };
+        // Solo crear la asignación si hay un área seleccionada
+        if (selectedArea) {
+          // Crear la asignación relacionada
+          const newAssignment = {
+            organization_id: userData.organization_id,
+            user_id: session.user.id,
+            area_id: selectedArea,
+            start_time: new Date().toISOString(),
+            end_time: new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours from now
+            status: 'pending'
+          };
 
-        console.log('Guardando asignación con datos:', newAssignment);
+          console.log('Guardando asignación con datos:', newAssignment);
 
-        const { error: assignmentError } = await supabase
-          .from('assignments')
-          .insert([newAssignment])
-          .select();
+          const { error: assignmentError } = await supabase
+            .from('assignments')
+            .insert([newAssignment])
+            .select();
 
-        if (assignmentError) {
-          console.error('Error detallado al crear la asignación:', assignmentError);
-          throw new Error('Error al crear la asignación relacionada');
+          if (assignmentError) {
+            console.error('Error detallado al crear la asignación:', assignmentError);
+            throw new Error('Error al crear la asignación relacionada');
+          }
         }
 
         // Actualizar la lista de reportes
@@ -657,6 +654,7 @@ export default function ReportsPage() {
         
         // Limpiar el formulario
         setContingencyType('');
+        setCustomTitle('');
         setSelectedSala(null);
         setSelectedArea('');
         setSelectedSubarea(null);
@@ -690,6 +688,33 @@ export default function ReportsPage() {
     } catch (error) {
       console.error('Error al actualizar el estado:', error);
       toast.error('Error al actualizar el estado');
+    }
+  };
+
+  const handleDeleteReport = async (reportId: string) => {
+    try {
+      if (!confirm('¿Estás seguro de que deseas eliminar este reporte? Esta acción no se puede deshacer.')) {
+        return;
+      }
+
+      const { error } = await supabase
+        .from('contingencies')
+        .delete()
+        .eq('id', reportId);
+
+      if (error) {
+        console.error('Error al eliminar el reporte:', error);
+        throw error;
+      }
+
+      // Cerrar el modal si está abierto
+      setShowModal(false);
+      // Recargar la lista de reportes
+      await loadData();
+      toast.success('Reporte eliminado exitosamente');
+    } catch (error) {
+      console.error('Error al eliminar el reporte:', error);
+      toast.error('Error al eliminar el reporte');
     }
   };
 
@@ -800,7 +825,7 @@ export default function ReportsPage() {
                             </svg>
                             Área
                           </p>
-                          <p className="font-medium text-gray-900">{selectedReport.area || 'No especificada'}</p>
+                          <p className="font-medium text-gray-900">{selectedReport.area || 'No aplica'}</p>
                         </div>
                         <div className="col-span-2 bg-gray-50 p-3 rounded-lg">
                           <p className="text-gray-500 text-sm font-medium mb-1 flex items-center gap-2">
@@ -831,7 +856,7 @@ export default function ReportsPage() {
                         <div className="bg-gray-50 p-4 rounded-lg">
                           <h4 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
                             <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2H9m0 0V5a2 2 0 012-2h2a2 2 0 012 2m0 0V7m0 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                             </svg>
                             Tareas del Área
                           </h4>
@@ -931,49 +956,61 @@ export default function ReportsPage() {
           </div>
 
           {/* Botones de acción */}
-          <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end gap-2">
+          <div className="mt-6 pt-4 border-t border-gray-200 flex justify-between gap-2">
+            {/* Botón de eliminar */}
             <button
-              onClick={handleDownloadPDF}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors flex items-center gap-2"
+              onClick={() => handleDeleteReport(selectedReport.id)}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
-              <span>Descargar PDF</span>
+              <span>Eliminar</span>
             </button>
-            <button
-              onClick={() => setShowModal(false)}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-            >
-              Cerrar
-            </button>
-            {selectedReport.status === 'Pendiente' ? (
+            <div className="flex gap-2">
               <button
-                onClick={() => {
-                  handleUpdateStatus(selectedReport.id, 'Completada');
-                  setShowModal(false);
-                }}
-                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors flex items-center gap-2"
+                onClick={handleDownloadPDF}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 00-2-2V7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
-                <span>Marcar como resuelto</span>
+                <span>Descargar PDF</span>
               </button>
-            ) : (
               <button
-                onClick={() => {
-                  handleUpdateStatus(selectedReport.id, 'Pendiente');
-                  setShowModal(false);
-                }}
-                className="px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-lg hover:bg-yellow-700 focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors flex items-center gap-2"
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span>Reabrir reporte</span>
+                Cerrar
               </button>
-            )}
+              {selectedReport.status === 'Pendiente' ? (
+                <button
+                  onClick={() => {
+                    handleUpdateStatus(selectedReport.id, 'Completada');
+                    setShowModal(false);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Marcar como resuelto</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    handleUpdateStatus(selectedReport.id, 'Pendiente');
+                    setShowModal(false);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-lg hover:bg-yellow-700 focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Reabrir reporte</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -995,7 +1032,7 @@ export default function ReportsPage() {
 
     return (
       <div className="divide-y divide-gray-100">
-        <div className="grid grid-cols-4 gap-2 p-3 text-xs font-medium text-gray-500 bg-gray-50">
+        <div className="grid grid-cols-4 gap-2 p-3 text-xs font-medium text-gray-500 bg-gray-50 sticky top-0 z-10">
           <div className="flex items-center gap-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1029,7 +1066,7 @@ export default function ReportsPage() {
               <span className="text-gray-600">{new Date(report.date).toLocaleDateString()}</span>
             </div>
             <div className="truncate text-gray-600" title={report.sala}>
-              {report.sala || 'No especificada'}
+              {report.sala || 'No aplica'}
             </div>
             <div className="truncate text-gray-600" title={report.area}>
               {report.area}
@@ -1042,6 +1079,7 @@ export default function ReportsPage() {
                   setShowModal(true);
                 }}
                 className="text-blue-500 hover:text-blue-600"
+                title="Ver detalles"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -1056,9 +1094,20 @@ export default function ReportsPage() {
                     ? 'text-gray-400 hover:text-green-500' 
                     : 'text-green-500 hover:text-green-600'
                 }`}
+                title={report.status === 'Pendiente' ? 'Marcar como completado' : 'Marcar como pendiente'}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </button>
+              {/* Icono de eliminar */}
+              <button
+                onClick={() => handleDeleteReport(report.id)}
+                className="text-gray-400 hover:text-red-500"
+                title="Eliminar reporte"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
               </button>
             </div>
@@ -1091,18 +1140,7 @@ export default function ReportsPage() {
             <h1 className="text-3xl font-bold text-gray-900 bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
               Reportes de Contingencia
             </h1>
-            <p className="mt-2 text-gray-600">Sistema de gestión y seguimiento de incidentes</p>
-          </div>
-          <div className="mt-4 md:mt-0">
-            <select
-              value={timeFilter}
-              onChange={(e) => setTimeFilter(e.target.value)}
-              className="bg-white border-2 border-blue-100 rounded-xl px-6 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-blue-200 cursor-pointer shadow-sm hover:shadow-md"
-            >
-              <option value="dia">Reportes de Hoy</option>
-              <option value="semana">Reportes de la Semana</option>
-              <option value="mes">Reportes del Mes</option>
-            </select>
+            <p className="mt-2 text-gray-600">Sistema de gestión y seguimiento de incidentes desde 20 de febrero de 2025</p>
           </div>
         </div>
 
@@ -1114,7 +1152,7 @@ export default function ReportsPage() {
             <div className="flex items-start">
               <div className="bg-blue-50 rounded-2xl p-3">
                 <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2m0 0V9a2 2 0 012-2h2a2 2 0 012 2m0 0V7m0 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
               </div>
               <div className="ml-4">
@@ -1164,7 +1202,7 @@ export default function ReportsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Lista de Reportes */}
           <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-            <div className="p-4 border-b border-gray-100">
+            <div className="p-4 border-b border-gray-100 sticky top-0 bg-white z-10">
               <div className="flex items-center space-x-2">
                 <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -1172,7 +1210,9 @@ export default function ReportsPage() {
                 <h3 className="text-lg font-semibold text-gray-900">Reportes</h3>
               </div>
             </div>
-            {renderReportList()}
+            <div className="max-h-[calc(100vh-20rem)] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+              {renderReportList()}
+            </div>
           </div>
 
           {/* Formulario de Nuevo Reporte */}
@@ -1188,44 +1228,8 @@ export default function ReportsPage() {
 
             <form onSubmit={handleSaveReport} className="p-4">
               <div className="grid grid-cols-2 gap-4">
-                {/* Área */}
-                <div className="col-span-2 md:col-span-1">
-                  <SalaAreaSelector
-                    onSalaChange={(sala) => {
-                      setSelectedSala(sala?.id || null);
-                      console.log('Sala seleccionada:', sala);
-                    }}
-                    onAreaChange={(area) => {
-                      setSelectedArea(area?.id || '');
-                      console.log('Área seleccionada:', area);
-                    }}
-                    className="space-y-2"
-                  />
-                </div>
-
-                {/* Mostrar subáreas automáticamente */}
-                {subareas.length > 0 && (
-                  <div className="col-span-2 md:col-span-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Subáreas del Área
-                    </label>
-                    <div className="space-y-2 bg-gray-50 p-3 rounded-lg">
-                      {subareas.map((subarea) => (
-                        <div key={subarea.id} className="flex items-start space-x-2 p-2 bg-white rounded-lg shadow-sm">
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900">{subarea.nombre}</p>
-                            {subarea.descripcion && (
-                              <p className="text-xs text-gray-500 mt-1">{subarea.descripcion}</p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {/* Tipo de Contingencia */}
-                <div className="col-span-2 md:col-span-1">
+                <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Tipo de Contingencia
                   </label>
@@ -1240,26 +1244,56 @@ export default function ReportsPage() {
                     disabled={!userData?.organization_id}
                   >
                     <option value="">Seleccionar tipo</option>
-                    {contingencyTypes.length === 0 && (
-                      <option value="" disabled>
-                        {userData?.organization_id ? 'No hay tipos disponibles' : 'Cargando...'}
-                      </option>
-                    )}
+                    <option value="other">Otra contingencia</option>
                     {contingencyTypes.map((tipo) => (
                       <option key={tipo.id} value={tipo.id}>
                         {tipo.name}
                       </option>
                     ))}
                   </select>
-                  {contingencyTypes.length === 0 && userData?.organization_id && (
-                    <p className="mt-1 text-sm text-red-500">
-                      No hay tipos de contingencia configurados para esta organización
-                    </p>
-                  )}
                 </div>
+
+                {/* Campos para Otra Contingencia */}
+                {contingencyType === 'other' && (
+                  <>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Título de la Contingencia
+                      </label>
+                      <input
+                        type="text"
+                        value={customTitle}
+                        onChange={(e) => setCustomTitle(e.target.value)}
+                        placeholder="Ingrese el título de la contingencia"
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Área y Sala (opcional si es otra contingencia) */}
+                {contingencyType !== 'other' && (
+                  <div className="col-span-2 md:col-span-1">
+                    <SalaAreaSelector
+                      onSalaChange={(sala) => {
+                        setSelectedSala(sala?.id || null);
+                        console.log('Sala seleccionada:', sala);
+                      }}
+                      onAreaChange={(area) => {
+                        setSelectedArea(area?.id || '');
+                        console.log('Área seleccionada:', area);
+                      }}
+                      className="space-y-2"
+                    />
+                  </div>
+                )}
 
                 {/* Descripción */}
                 <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Descripción
+                  </label>
                   <textarea
                     value={description}
                     onChange={(e) => {
@@ -1267,13 +1301,16 @@ export default function ReportsPage() {
                       console.log('Descripción actualizada:', e.target.value);
                     }}
                     placeholder="Descripción detallada de la contingencia..."
-                    className="w-full h-32 rounded-lg border border-gray-200 text-sm focus:ring-blue-500"
+                    className="w-full h-32 px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
                   />
                 </div>
 
                 {/* Imágenes */}
                 <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Evidencia Fotográfica (Opcional)
+                  </label>
                   <div
                     {...getRootProps()}
                     className={`border border-dashed rounded-lg p-3 text-center cursor-pointer ${
@@ -1316,7 +1353,7 @@ export default function ReportsPage() {
                   <button
                     type="submit"
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={!selectedArea || !contingencyType || !description}
+                    disabled={!contingencyType || (!selectedArea && contingencyType !== 'other') || !description || (contingencyType === 'other' && !customTitle)}
                   >
                     Crear Reporte
                   </button>
