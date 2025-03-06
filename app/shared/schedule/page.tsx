@@ -284,6 +284,7 @@ export default function SchedulePage() {
           setSelectedTask(null)
         }}
         onSave={handleSaveTask}
+        onDelete={handleDeleteTask}
         task={selectedTask}
         organizationId={tasks[0]?.organization_id || ''}
       />

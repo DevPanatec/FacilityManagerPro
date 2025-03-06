@@ -63,6 +63,7 @@ type TaskModalProps = {
   isOpen: boolean
   onClose: () => void
   onSave: (taskData: TaskInput) => void
+  onDelete?: (taskId: string) => void
   task?: Task | null
   organizationId: string
 }
@@ -89,13 +90,11 @@ interface User {
 type TaskPriority = Database['public']['Tables']['tasks']['Row']['priority']
 type TaskStatus = Database['public']['Tables']['tasks']['Row']['status']
 
-export function TaskModal({ isOpen, onClose, onSave, task, organizationId }: TaskModalProps) {
+export function TaskModal({ isOpen, onClose, onSave, onDelete, task, organizationId }: TaskModalProps) {
   const supabase = createClientComponentClient<Database>()
 
   const [title, setTitle] = useState(task?.title || '')
   const [description, setDescription] = useState<string | undefined>(task?.description || undefined)
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | undefined>(task?.priority || undefined)
-  const [status, setStatus] = useState<'pending' | 'in_progress' | 'completed' | 'cancelled' | undefined>(task?.status || undefined)
   const [dueDate, setDueDate] = useState<string | undefined>(task?.due_date || undefined)
   const [selectedArea, setSelectedArea] = useState<string | undefined>(task?.area_id || undefined)
   const [assignedTo, setAssignedTo] = useState<string | undefined>(task?.assigned_to || undefined)
@@ -103,6 +102,7 @@ export function TaskModal({ isOpen, onClose, onSave, task, organizationId }: Tas
   const [error, setError] = useState<string | null>(null)
   const [areas, setAreas] = useState<Area[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [isCustomTask, setIsCustomTask] = useState(false)
   const [loading, setLoading] = useState({
     areas: false,
     users: false
@@ -187,20 +187,35 @@ export function TaskModal({ isOpen, onClose, onSave, task, organizationId }: Tas
       return
     }
 
+    const fullDescription = description ? 
+      `${description}\n\nResponsable: ${assignedTo}` : 
+      `Responsable: ${assignedTo}`
+
     const taskData: TaskInput = {
       title,
-      description: description || null,
-      priority: priority || 'medium',
-      status: status || 'pending',
+      description: fullDescription,
       due_date: dueDate || null,
-      area_id: selectedArea || null,
-      assigned_to: assignedTo || null,
+      area_id: isCustomTask ? null : selectedArea || null,
+      assigned_to: null,
       organization_id: organizationId,
+      status: 'pending',
+      priority: 'medium'
     }
 
     onSave(taskData)
     onClose()
   }
+
+  const handleDelete = async () => {
+    if (!task?.id) return;
+    
+    if (window.confirm('¿Estás seguro de que deseas eliminar esta tarea? Esta acción no se puede deshacer.')) {
+      if (onDelete) {
+        onDelete(task.id);
+      }
+      onClose();
+    }
+  };
 
   if (!isOpen) return null
 
@@ -227,76 +242,95 @@ export function TaskModal({ isOpen, onClose, onSave, task, organizationId }: Tas
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Tipo de tarea */}
+          <div className="flex items-center space-x-2 p-2 bg-gray-50 rounded-lg">
+            <input
+              type="checkbox"
+              id="customTask"
+              checked={isCustomTask}
+              onChange={(e) => setIsCustomTask(e.target.checked)}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="customTask" className="text-sm text-gray-700">
+              Tarea adicional
+            </label>
+          </div>
+
           <input
             type="text"
             placeholder="Título de la tarea"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="w-full p-2 border rounded-lg"
+            required
           />
 
           <textarea
             placeholder="Descripción"
             value={description || ''}
             onChange={(e) => setDescription(e.target.value || undefined)}
-            className="w-full p-2 border rounded-lg"
+            className="w-full p-2 border rounded-lg h-24"
           />
 
-          <div className="grid grid-cols-2 gap-4">
-            <select 
-              value={priority || ''} 
-              onChange={(e) => setPriority(e.target.value as 'low' | 'medium' | 'high')}
-              className="w-full p-2 border rounded-lg"
-            >
-              <option value="">Prioridad</option>
-              <option value="low">Baja</option>
-              <option value="medium">Media</option>
-              <option value="high">Alta</option>
-            </select>
+          {!isCustomTask && (
+            <div className="space-y-4">
+              <SalaAreaSelector
+                onAreaChange={(area) => setSelectedArea(area?.id || undefined)}
+                onSalaChange={() => {}}
+                className="space-y-2"
+              />
+            </div>
+          )}
 
-            <select 
-              value={status || ''} 
-              onChange={(e) => setStatus(e.target.value as 'pending' | 'in_progress' | 'completed' | 'cancelled')}
+          <div className="space-y-4">
+            <input
+              type="text"
+              placeholder="Nombre del responsable"
+              value={assignedTo || ''}
+              onChange={(e) => setAssignedTo(e.target.value)}
               className="w-full p-2 border rounded-lg"
-            >
-              <option value="">Estado</option>
-              <option value="pending">Pendiente</option>
-              <option value="in_progress">En progreso</option>
-              <option value="completed">Completada</option>
-              <option value="cancelled">Cancelada</option>
-            </select>
+            />
+
+            <input
+              type="date"
+              value={dueDate || ''}
+              onChange={(e) => setDueDate(e.target.value || undefined)}
+              className="w-full p-2 border rounded-lg"
+            />
           </div>
 
-          <input
-            type="datetime-local"
-            value={dueDate ? new Date(dueDate).toISOString().slice(0, 16) : ''}
-            onChange={(e) => setDueDate(e.target.value)}
-            className="w-full p-2 border rounded-lg"
-          />
-
-          <SalaAreaSelector
-            defaultAreaId={task?.area_id || undefined}
-            onAreaChange={(area: Area | null) => setSelectedArea(area?.id)}
-          />
-
-          <select
-            value={assignedTo || ''}
-            onChange={(e) => setAssignedTo(e.target.value)}
-            className="w-full p-2 border rounded-lg"
-          >
-            <option value="">Asignar a...</option>
-            {users.map(user => (
-              <option key={user.id} value={user.id}>
-                {user.first_name} {user.last_name}
-              </option>
-            ))}
-          </select>
-
-          <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit">Guardar</Button>
+          <div className="flex justify-between space-x-2">
+            {/* Botón de eliminar - solo visible al editar una tarea existente */}
+            {task && onDelete && (
+              <Button
+                type="button"
+                onClick={handleDelete}
+                className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center gap-2"
+                disabled={isSubmitting}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Eliminar
+              </Button>
+            )}
+            <div className="flex space-x-2">
+              <Button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                disabled={isSubmitting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Guardando...' : task ? 'Actualizar' : 'Crear'}
+              </Button>
+            </div>
           </div>
         </form>
       </div>
