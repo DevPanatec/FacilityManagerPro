@@ -170,10 +170,19 @@ export default function RRHHPage() {
       if (!userData) throw new Error('Usuario no encontrado');
       if (!userData.organization_id) throw new Error('Usuario no tiene organización asignada');
 
-      // Consulta simplificada que solo obtiene usuarios de la misma organización
+      // Consulta que obtiene empleados con sus datos de usuario
       const { data: employeesData, error: employeesError } = await supabase
-        .from('users')
-        .select('*')
+        .from('employees')
+        .select(`
+          *,
+          users (
+            email,
+            first_name,
+            last_name,
+            role,
+            status
+          )
+        `)
         .eq('organization_id', userData.organization_id);
 
       if (employeesError) {
@@ -186,17 +195,20 @@ export default function RRHHPage() {
         throw new Error(`Error al cargar empleados: ${employeesError.message}`);
       }
 
-      // Filtrar superadmins después de obtener los datos
-      const filteredEmployees = (employeesData || []).filter(emp => emp.role !== 'superadmin');
-
-      const formattedEmployees = filteredEmployees.map(emp => ({
-        ...emp,
-        position: 'Usuario',
-        department: 'General',
-        work_shift: 'morning',
-        hire_date: emp.created_at,
-        contact_info: {
-          email: emp.email,
+      // Formatear los datos de empleados
+      const formattedEmployees = (employeesData || []).map(emp => ({
+        id: emp.id,
+        first_name: emp.users?.first_name || emp.first_name,
+        last_name: emp.users?.last_name || emp.last_name,
+        position: emp.position,
+        department: emp.department,
+        work_shift: emp.work_shift_id || 'morning',
+        status: emp.users?.status || emp.status || 'active',
+        hire_date: emp.hire_date,
+        role: emp.users?.role || emp.role,
+        email: emp.users?.email || '',
+        contact_info: emp.contact_info || {
+          email: emp.users?.email || '',
           phone: ''
         }
       }));
