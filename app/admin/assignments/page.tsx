@@ -38,7 +38,6 @@ interface Task {
   status: string;
   priority: string;
   created_at: string;
-  due_date: string;
   assigned_to?: string;
   assignee?: {
     first_name: string;
@@ -365,7 +364,6 @@ export default function AssignmentsPage() {
               status,
               priority,
               created_at,
-              due_date,
               start_date,
               end_time,
               start_time,
@@ -377,7 +375,7 @@ export default function AssignmentsPage() {
               )
             `)
             .eq('sala_id', sala.id)
-            .eq('type', 'assignment')
+            .eq('type', 'assignment')  // Solo tareas normales
             .eq('organization_id', userProfile.organization_id)
             .not('status', 'eq', 'cancelled')
             .order('created_at', { ascending: false });
@@ -406,7 +404,6 @@ export default function AssignmentsPage() {
             status: task.status || 'pending',
             priority: task.priority || 'medium',
             created_at: new Date(task.created_at).toLocaleDateString(),
-            due_date: task.due_date ? new Date(task.due_date).toLocaleDateString() : '',
             assigned_to: task.assigned_to,
             assignee: task.users ? {
               first_name: task.users[0]?.first_name,
@@ -484,79 +481,86 @@ export default function AssignmentsPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No autorizado');
 
-      const { data: userProfile, error: profileError } = await supabase
+      const { data: userProfile } = await supabase
         .from('users')
         .select('organization_id')
         .eq('id', user.id)
         .single();
 
-      if (profileError || !userProfile) {
-        throw new Error('Error al obtener el perfil del usuario');
-      }
+      if (!userProfile) throw new Error('Error al obtener el perfil del usuario');
 
       // Formatear la fecha y hora correctamente
       const [hours, minutes] = startTime.split(':');
       const formattedTime = `${hours}:${minutes}`;
 
+      // Obtener información de sala y área
+      const { data: salaInfo } = await supabase
+        .from('salas')
+        .select('nombre')
+        .eq('id', selectedSala)
+        .single();
+
+      const { data: areaInfo } = await supabase
+        .from('areas')
+        .select('name')
+        .eq('id', selectedArea)
+        .single();
+
       if (isDeepTasks) {
-        // Obtener las tareas profundas activas del área seleccionada
+        // Obtener las tareas profundas activas
         const { data: deepTasks, error: deepTasksError } = await supabase
           .from('deep_tasks')
           .select('*')
-          .eq('area_id', selectedArea)
-          .eq('status', 'active')
+          .eq('active', true)
           .order('created_at', { ascending: true });
 
         if (deepTasksError) throw deepTasksError;
 
         if (!deepTasks || deepTasks.length === 0) {
-          toast.error('No hay tareas profundas configuradas para esta área');
+          toast.error('No hay tareas profundas configuradas');
           return;
         }
 
-        // Crear asignaciones para cada combinación de tarea profunda y usuario
-        const assignments = [];
-        for (const task of deepTasks) {
-          for (const userName of selectedUsers) {
-            assignments.push({
-              title: task.name,
-              description: task.description || 'Tarea profunda asignada',
-              organization_id: userProfile.organization_id,
-              assigned_to: userMap[userName],
-              sala_id: selectedSala,
-              area_id: selectedArea,
-              start_date: selectedDate,
-              start_time: formattedTime,
+        // Crear una asignación por cada usuario seleccionado
+        for (const userName of selectedUsers) {
+          const taskData = {
+            title: `Limpieza Profunda - ${salaInfo?.nombre || ''} - ${areaInfo?.name || ''}`,
+            description: `Tarea de limpieza profunda asignada a ${userName}`,
+            organization_id: userProfile.organization_id,
+            assigned_to: userMap[userName],
+            sala_id: selectedSala,
+            area_id: selectedArea,
+            start_date: selectedDate,
+            start_time: formattedTime,
+            status: 'pending',
+            type: 'deep_cleaning',
+            created_by: user.id,
+            priority: 'medium',
+            deep_tasks: deepTasks.map((task, index) => ({
+              id: task.id,
+              name: task.name,
+              description: task.description,
+              step: index + 1,
               status: 'pending',
-              type: 'deep_assignment',
-              created_by: user.id,
-              priority: 'medium',
-              deep_task_id: task.id
-            });
-          }
-        }
+              completed_at: null
+            }))
+          };
 
-        // Insertar todas las asignaciones en lotes
-        for (let i = 0; i < assignments.length; i += 10) {
-          const batch = assignments.slice(i, i + 10);
           const { error: insertError } = await supabase
             .from('tasks')
-            .insert(batch);
+            .insert([taskData]);
 
-          if (insertError) {
-            console.error('Error en lote:', insertError);
-            throw insertError;
-          }
+          if (insertError) throw insertError;
         }
 
-        toast.success(`Se crearon ${assignments.length} asignaciones profundas`);
+        toast.success(`Se crearon ${selectedUsers.length} asignaciones de limpieza profunda`);
       } else {
         // Insertar una única asignación normal
         const { error: insertError } = await supabase
           .from('tasks')
           .insert({
-            title: `Asignación para ${selectedUser}`,
-            description: `Tarea asignada para ${selectedUser} en el área seleccionada`,
+            title: `${salaInfo?.nombre || ''} - ${areaInfo?.name || ''}`,
+            description: `Tarea asignada para ${selectedUser}`,
             organization_id: userProfile.organization_id,
             assigned_to: userMap[selectedUser],
             sala_id: selectedSala,
@@ -564,15 +568,13 @@ export default function AssignmentsPage() {
             start_date: selectedDate,
             start_time: formattedTime,
             status: 'pending',
-            type: 'regular_assignment',
+            type: 'assignment',  // Asegurarnos de que es una tarea normal
             created_by: user.id,
-            priority: 'medium'
+            priority: 'medium',
+            deep_tasks: null  // Explícitamente establecer deep_tasks como null para tareas normales
           });
 
-        if (insertError) {
-          console.error('Error de inserción:', insertError);
-          throw insertError;
-        }
+        if (insertError) throw insertError;
         toast.success('Asignación creada exitosamente');
       }
 

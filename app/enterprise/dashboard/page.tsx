@@ -716,11 +716,6 @@ export default function EnterpriseOverviewPage() {
                                   <div className="flex items-center gap-2 text-xs text-gray-500">
                                     <span>Asignado a: {task.assigned_name}</span>
                                   </div>
-                                  {task.due_date && (
-                                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                                      <span>Vence: {new Date(task.due_date).toLocaleDateString()}</span>
-                                    </div>
-                                  )}
                                 </div>
                               </div>
                             ))}
