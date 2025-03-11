@@ -243,8 +243,10 @@ export default function AssignmentsPage() {
       };
 
       if (shiftHoursData) {
-        shiftHoursData.forEach(shift => {
-          shiftHoursByType[shift.shift_type] = {
+        shiftHoursData.forEach((shift: ShiftHourData) => {
+          // Usar type assertion para indicar que shift.shift_type es una clave válida
+          const shiftType = shift.shift_type as keyof ShiftHoursState;
+          shiftHoursByType[shiftType] = {
             start: shift.start_time,
             end: shift.end_time
           };
@@ -276,8 +278,13 @@ export default function AssignmentsPage() {
           if (!acc[turno.shift_type]) {
             acc[turno.shift_type] = new Map();
           }
-          if (turno.users) {
-            acc[turno.shift_type].set(turno.users.id, turno.users);
+          if (turno.users && Array.isArray(turno.users) && turno.users.length > 0) {
+            // Iteramos sobre cada usuario en el array
+            turno.users.forEach(user => {
+              if (user && user.id) {
+                acc[turno.shift_type].set(user.id, user);
+              }
+            });
           }
           return acc;
         }, {});
