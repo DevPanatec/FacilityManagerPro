@@ -170,45 +170,42 @@ export default function RRHHPage() {
       if (!userData) throw new Error('Usuario no encontrado');
       if (!userData.organization_id) throw new Error('Usuario no tiene organización asignada');
 
-      // Consulta que obtiene empleados con sus datos de usuario
-      const { data: employeesData, error: employeesError } = await supabase
-        .from('employees')
+      // Consulta a la tabla users con los campos que existen
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
         .select(`
-          *,
-          users (
-            email,
-            first_name,
-            last_name,
-            role,
-            status
-          )
+          id,
+          first_name,
+          last_name,
+          email,
+          role,
+          status,
+          created_at
         `)
-        .eq('organization_id', userData.organization_id);
+        .eq('organization_id', userData.organization_id)
+        .neq('status', 'deleted');
 
-      if (employeesError) {
+      if (usersError) {
         console.error('Error detallado:', {
-          message: employeesError.message,
-          code: employeesError.code,
-          details: employeesError.details,
-          hint: employeesError.hint
+          message: usersError.message,
+          code: usersError.code,
+          details: usersError.details,
+          hint: usersError.hint
         });
-        throw new Error(`Error al cargar empleados: ${employeesError.message}`);
+        throw new Error(`Error al cargar usuarios: ${usersError.message}`);
       }
 
-      // Formatear los datos de empleados
-      const formattedEmployees = (employeesData || []).map(emp => ({
-        id: emp.id,
-        first_name: emp.users?.first_name || emp.first_name,
-        last_name: emp.users?.last_name || emp.last_name,
-        position: emp.position,
-        department: emp.department,
-        work_shift: emp.work_shift_id || 'morning',
-        status: emp.users?.status || emp.status || 'active',
-        hire_date: emp.hire_date,
-        role: emp.users?.role || emp.role,
-        email: emp.users?.email || '',
-        contact_info: emp.contact_info || {
-          email: emp.users?.email || '',
+      // Formatear los datos de usuarios con los campos que existen
+      const formattedEmployees = (usersData || []).map(user => ({
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email || '',
+        role: user.role || '',
+        status: user.status || 'active',
+        hire_date: user.created_at?.split('T')[0] || '',
+        contact_info: {
+          email: user.email || '',
           phone: ''
         }
       }));
@@ -219,7 +216,7 @@ export default function RRHHPage() {
       setStats({
         totalEmployees: formattedEmployees.length || 0,
         activeEmployees: formattedEmployees.filter(e => e.status === 'active').length || 0,
-        shiftsToday: formattedEmployees.filter(e => e.work_shift === 'morning').length || 0
+        shiftsToday: 0
       });
 
     } catch (error) {
@@ -873,6 +870,40 @@ export default function RRHHPage() {
     } catch (error: any) {
       console.error('Error al actualizar horarios:', error);
       toast.error('Error al actualizar los horarios');
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
+
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!userProfile) throw new Error('Perfil no encontrado');
+
+      const { data: users, error } = await supabase
+        .from('users')
+        .select(`
+          *,
+          roles (
+            name,
+            permissions
+          )
+        `)
+        .eq('organization_id', userProfile.organization_id)
+        .neq('status', 'deleted')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setEmployees(users || []);
+    } catch (error) {
+      console.error('Error al cargar usuarios:', error);
+      toast.error('Error al cargar los usuarios');
     }
   };
 
