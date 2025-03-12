@@ -5,8 +5,8 @@ import 'react-toastify/dist/ReactToastify.css'
 import { useEffect } from 'react'
 import Head from 'next/head'
 
-// Importar DisableCSP pero no es esencial ya que estamos cambiando la estrategia
-import DisableCSP from '../app/disable-csp'
+// Eliminar la importación que causa error
+// import DisableCSP from '../app/disable-csp'
 
 export default function MyApp({ Component, pageProps }) {
   // Cargar el script de corrección CSP lo antes posible
@@ -31,7 +31,8 @@ export default function MyApp({ Component, pageProps }) {
         {/* Cargar el script de corrección CSP directamente en el Head */}
         <script src="/csp-fix.js" />
       </Head>
-      <DisableCSP />
+      {/* Eliminar el componente que causa error */}
+      {/* <DisableCSP /> */}
       <Component {...pageProps} />
       <Toaster position="top-center" />
       <ToastContainer 
