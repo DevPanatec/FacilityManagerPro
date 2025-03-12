@@ -139,17 +139,33 @@ export default function EnterpriseSchedulePage() {
 
   const handleTaskSubmit = async (taskData: any) => {
     try {
+      // Obtener el usuario actual para asignar la tarea
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      // Solución definitiva para el problema de zona horaria: 
+      // Agregar un día a la fecha para compensar la conversión a UTC
+      let correctedDate = null;
+      if (taskData.fecha) {
+        const localDate = new Date(taskData.fecha);
+        // Sumamos un día para compensar
+        localDate.setDate(localDate.getDate() + 1);
+        correctedDate = localDate.toISOString().split('T')[0];
+        console.log('Fecha original:', taskData.fecha, 'Fecha corregida:', correctedDate);
+      }
+      
+      // Simplificar la estructura para que coincida con asignaciones
       const { data, error } = await supabase
         .from('tasks')
         .insert([{
           title: taskData.titulo,
-          description: taskData.descripcion,
+          description: taskData.descripcion || '',  // Descripción simple sin texto adicional
           area_id: taskData.area_id,
-          status: taskData.status,
-          priority: taskData.prioridad,
-          assigned_to: taskData.asignado_a?.[0] || null,
-          due_date: taskData.fecha,
-          organization_id: userProfile.organization_id
+          status: 'pending',  // Siempre comienza como pendiente
+          priority: 'medium', // Prioridad media por defecto
+          assigned_to: user?.id, // Siempre asignar al usuario actual
+          due_date: correctedDate,
+          organization_id: userProfile.organization_id,
+          created_by: user?.id
         }])
         .select()
 

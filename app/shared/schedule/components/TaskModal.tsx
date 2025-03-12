@@ -187,16 +187,30 @@ export function TaskModal({ isOpen, onClose, onSave, onDelete, task, organizatio
       return
     }
 
-    const fullDescription = description ? 
-      `${description}\n\nResponsable: ${assignedTo}` : 
-      `Responsable: ${assignedTo}`
+    // Obtener el usuario actual para asignarlo a la tarea
+    const { data: { user } } = await supabase.auth.getUser()
+    const currentUserId = user?.id
+
+    // Estructurar la descripción como se hace en asignaciones
+    const taskDescription = description || ''
+
+    // Solución definitiva para el problema de zona horaria: 
+    // Agregar un día a la fecha para compensar la conversión a UTC
+    let correctedDate = null;
+    if (dueDate) {
+      const localDate = new Date(dueDate);
+      // Sumamos un día para compensar
+      localDate.setDate(localDate.getDate() + 1);
+      correctedDate = localDate.toISOString().split('T')[0];
+      console.log('Fecha original:', dueDate, 'Fecha corregida:', correctedDate);
+    }
 
     const taskData: TaskInput = {
       title,
-      description: fullDescription,
-      due_date: dueDate || null,
-      area_id: isCustomTask ? null : selectedArea || null,
-      assigned_to: null,
+      description: taskDescription,
+      due_date: correctedDate,
+      area_id: isCustomTask ? null : selectedArea || null, 
+      assigned_to: currentUserId, // Asignar al usuario actual
       organization_id: organizationId,
       status: 'pending',
       priority: 'medium'
