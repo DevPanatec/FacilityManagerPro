@@ -751,88 +751,90 @@ export default function ReportsPage() {
     }
 
     return (
-      <div className="divide-y divide-gray-100">
-        <div className="grid grid-cols-4 gap-2 p-3 text-xs font-medium text-gray-500 bg-gray-50 sticky top-0 z-10">
-          <div className="flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            FECHA
+      <div className="max-h-[500px] overflow-y-auto">
+        <div className="divide-y divide-gray-100">
+          <div className="grid grid-cols-4 gap-2 p-3 text-xs font-medium text-gray-500 bg-gray-50 sticky top-0 z-10">
+            <div className="flex items-center gap-1">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              FECHA
+            </div>
+            <div className="flex items-center gap-1">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              SALA
+            </div>
+            <div className="flex items-center gap-1">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              ÁREA
+            </div>
+            <div className="text-center">ACCIONES</div>
           </div>
-          <div className="flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-            </svg>
-            SALA
-          </div>
-          <div className="flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            ÁREA
-          </div>
-          <div className="text-center">ACCIONES</div>
+          {reportes.map((report) => (
+            <div
+              key={report.id}
+              className="grid grid-cols-4 gap-2 p-2 text-sm hover:bg-gray-50 items-center"
+            >
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${
+                  report.status === 'Pendiente' ? 'bg-yellow-400' : 'bg-green-400'
+                }`} />
+                <span className="text-gray-600">{new Date(report.date).toLocaleDateString()}</span>
+              </div>
+              <div className="truncate text-gray-600" title={report.sala}>
+                {report.sala || 'No especificada'}
+              </div>
+              <div className="truncate text-gray-600" title={report.area}>
+                {report.area}
+              </div>
+              <div className="flex justify-center gap-4">
+                {/* Icono de ojo para ver detalles */}
+                <button
+                  onClick={() => {
+                    setSelectedReport(report);
+                    setShowModal(true);
+                  }}
+                  className="text-blue-500 hover:text-blue-600"
+                  title="Ver detalles"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                </button>
+                {/* Icono de check para marcar como completado */}
+                <button
+                  onClick={() => handleUpdateStatus(report.id, report.status === 'Pendiente' ? 'Completada' : 'Pendiente')}
+                  className={`${
+                    report.status === 'Pendiente' 
+                      ? 'text-gray-400 hover:text-green-500' 
+                      : 'text-green-500 hover:text-green-600'
+                  }`}
+                  title={report.status === 'Pendiente' ? 'Marcar como completado' : 'Marcar como pendiente'}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+                {/* Icono de eliminar */}
+                <button
+                  onClick={() => handleDeleteReport(report.id)}
+                  className="text-gray-400 hover:text-red-500"
+                  title="Eliminar reporte"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
-        {reportes.map((report) => (
-          <div
-            key={report.id}
-            className="grid grid-cols-4 gap-2 p-2 text-sm hover:bg-gray-50 items-center"
-          >
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${
-                report.status === 'Pendiente' ? 'bg-yellow-400' : 'bg-green-400'
-              }`} />
-              <span className="text-gray-600">{new Date(report.date).toLocaleDateString()}</span>
-            </div>
-            <div className="truncate text-gray-600" title={report.sala}>
-              {report.sala || 'No especificada'}
-            </div>
-            <div className="truncate text-gray-600" title={report.area}>
-              {report.area}
-            </div>
-            <div className="flex justify-center gap-4">
-              {/* Icono de ojo para ver detalles */}
-              <button
-                onClick={() => {
-                  setSelectedReport(report);
-                  setShowModal(true);
-                }}
-                className="text-blue-500 hover:text-blue-600"
-                title="Ver detalles"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-              </button>
-              {/* Icono de check para marcar como completado */}
-              <button
-                onClick={() => handleUpdateStatus(report.id, report.status === 'Pendiente' ? 'Completada' : 'Pendiente')}
-                className={`${
-                  report.status === 'Pendiente' 
-                    ? 'text-gray-400 hover:text-green-500' 
-                    : 'text-green-500 hover:text-green-600'
-                }`}
-                title={report.status === 'Pendiente' ? 'Marcar como completado' : 'Marcar como pendiente'}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                </svg>
-              </button>
-              {/* Icono de eliminar */}
-              <button
-                onClick={() => handleDeleteReport(report.id)}
-                className="text-gray-400 hover:text-red-500"
-                title="Eliminar reporte"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        ))}
       </div>
     );
   };
@@ -1136,7 +1138,7 @@ export default function ReportsPage() {
               <div className="ml-4">
                 <h3 className="text-lg font-semibold text-gray-900">Total Reportes</h3>
                 <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
-                <p className="text-sm text-blue-500 mt-1">Hoy</p>
+                <p className="text-sm text-blue-500 mt-1">Acumulado</p>
               </div>
             </div>
           </div>
@@ -1179,7 +1181,7 @@ export default function ReportsPage() {
         {/* Contenedor principal */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Lista de Reportes */}
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col h-[700px]">
             <div className="p-4 border-b border-gray-100">
               <div className="flex items-center space-x-2">
                 <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1188,7 +1190,9 @@ export default function ReportsPage() {
                 <h3 className="text-lg font-semibold text-gray-900">Reportes</h3>
               </div>
             </div>
-            {renderReportList()}
+            <div className="flex-1 overflow-hidden">
+              {renderReportList()}
+            </div>
           </div>
 
           {/* Formulario de Nuevo Reporte */}

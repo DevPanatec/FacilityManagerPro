@@ -68,8 +68,158 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAlerts, setShowAlerts] = useState(true)
+  const [diagnosisResult, setDiagnosisResult] = useState<string | null>(null)
 
   const supabase = createClientComponentClient()
+
+  // Función para diagnosticar problemas de conexión con las tablas
+  const runDiagnosis = async () => {
+    try {
+      setDiagnosisResult('Iniciando diagnóstico de tablas de inventario...');
+      console.log('🔍 Diagnóstico de tablas de inventario');
+      
+      // 1. Verificar tabla inventory_items
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('inventory_items')
+        .select('id, name')
+        .limit(1);
+      
+      console.log('Tabla inventory_items:', itemsError ? 'ERROR' : 'OK', itemsData);
+      
+      if (itemsError) {
+        setDiagnosisResult(`Error en tabla inventory_items: ${itemsError.message}`);
+        console.error('Error en tabla inventory_items:', itemsError);
+        return;
+      }
+      
+      // 2. Verificar tabla inventory_usage
+      const { data: usageData, error: usageError } = await supabase
+        .from('inventory_usage')
+        .select('id, inventory_id')
+        .limit(1);
+      
+      console.log('Tabla inventory_usage:', usageError ? 'ERROR' : 'OK', usageData);
+      
+      if (usageError) {
+        setDiagnosisResult(`Error en tabla inventory_usage: ${usageError.message}`);
+        console.error('Error en tabla inventory_usage:', usageError);
+        return;
+      }
+      
+      // 3. Verificar tabla inventory_restock
+      const { data: restockData, error: restockError } = await supabase
+        .from('inventory_restock')
+        .select('id, inventory_id')
+        .limit(1);
+      
+      console.log('Tabla inventory_restock:', restockError ? 'ERROR' : 'OK', restockData);
+      
+      if (restockError) {
+        setDiagnosisResult(`Error en tabla inventory_restock: ${restockError.message}`);
+        console.error('Error en tabla inventory_restock:', restockError);
+        return;
+      }
+      
+      // 4. Intentar insertar y actualizar para probar permisos
+      try {
+        // Obtener ID de organización del usuario
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('No autorizado');
+        
+        const { data: userData } = await supabase
+          .from('users')
+          .select('organization_id')
+          .eq('id', user.id)
+          .single();
+        
+        if (!userData || !userData.organization_id) throw new Error('Sin organización');
+        
+        // Crear item de prueba
+        const testItem = {
+          name: `Test Item ${Date.now()}`,
+          description: 'Item de diagnóstico - borrar',
+          organization_id: userData.organization_id,
+          quantity: 100,
+          unit: 'unidades',
+          min_stock: 10,
+          status: 'available',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        
+        const { data: insertData, error: insertError } = await supabase
+          .from('inventory_items')
+          .insert([testItem])
+          .select();
+        
+        if (insertError) {
+          setDiagnosisResult(`Error al insertar: ${insertError.message}`);
+          console.error('Error al insertar:', insertError);
+          return;
+        }
+        
+        if (!insertData || insertData.length === 0) {
+          setDiagnosisResult('Inserción exitosa pero no se devolvieron datos');
+          return;
+        }
+        
+        const testItemId = insertData[0].id;
+        
+        // Probar actualización
+        const { error: updateError } = await supabase
+          .from('inventory_items')
+          .update({ quantity: 110 })
+          .eq('id', testItemId);
+        
+        if (updateError) {
+          setDiagnosisResult(`Error al actualizar: ${updateError.message}`);
+          console.error('Error al actualizar:', updateError);
+          return;
+        }
+        
+        // Probar reposición
+        const restockTest = {
+          inventory_id: testItemId,
+          quantity: 10,
+          supplier: 'Test Supplier',
+          date: new Date().toISOString().split('T')[0],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          organization_id: userData.organization_id
+        };
+        
+        const { error: restockInsertError } = await supabase
+          .from('inventory_restock')
+          .insert([restockTest]);
+        
+        if (restockInsertError) {
+          setDiagnosisResult(`Error al insertar reposición: ${restockInsertError.message}`);
+          console.error('Error al insertar reposición:', restockInsertError);
+          return;
+        }
+        
+        // Eliminar item de prueba para limpiar
+        await supabase
+          .from('inventory_items')
+          .delete()
+          .eq('id', testItemId);
+      } catch (testError: any) {
+        setDiagnosisResult(`Error en prueba de escritura: ${testError.message}`);
+        console.error('Error en prueba de escritura:', testError);
+        return;
+      }
+      
+      setDiagnosisResult('✅ Todas las verificaciones completadas exitosamente. No se detectaron problemas en las tablas.');
+    } catch (error: any) {
+      setDiagnosisResult(`Error general: ${error.message}`);
+      console.error('Error en diagnóstico:', error);
+    }
+  };
+
+  // Ejecutar diagnóstico al cargar
+  useEffect(() => {
+    runDiagnosis();
+  }, []);
 
   // Definir los handlers aquí, antes de useEffect
   const handleEditClick = (item: InventoryItem) => {
@@ -208,98 +358,249 @@ export default function InventoryPage() {
   // Función para registrar uso de item
   const registerItemUsage = async (itemId: string, data: any) => {
     try {
-      console.log('Iniciando registerItemUsage:', { itemId, data })
+      console.log('🔄 INICIO OPERACIÓN:', { itemId, data });
+      setDiagnosisResult('Procesando operación...');
 
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('No autorizado')
+      // 1. Obtener el usuario actual
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
 
-      const item = items.find(i => i.id === itemId)
-      if (!item) {
-        console.error('Item no encontrado:', itemId)
-        throw new Error('Item no encontrado')
+      // 2. Obtener el item directamente de la base de datos
+      const { data: itemData, error: itemError } = await supabase
+        .from('inventory_items')
+        .select('*')
+        .eq('id', itemId)
+        .single();
+      
+      if (itemError || !itemData) {
+        const errorMsg = 'No se pudo obtener información del item';
+        console.error(errorMsg, itemError);
+        setDiagnosisResult(errorMsg);
+        throw new Error(errorMsg);
       }
-
-      console.log('Item encontrado:', item)
-
-      const now = new Date().toISOString()
-      const isRestock = modalMode === 'restock'
-      const quantity = parseInt(data.operationQuantity)
-
+      
+      // 3. Determinar operación (reposición o uso)
+      const isRestock = data.operation === 'restock';
+      console.log(`Tipo de operación: ${isRestock ? 'REPOSICIÓN' : 'USO'}`);
+      
+      // 4. Procesar cantidad
+      const quantity = Number(data.operationQuantity) || 0;
+      
       if (isNaN(quantity) || quantity <= 0) {
-        throw new Error('La cantidad debe ser mayor a 0')
+        throw new Error('La cantidad debe ser mayor a 0');
       }
-
-      if (!isRestock && quantity > item.quantity) {
-        throw new Error('La cantidad no puede ser mayor al stock disponible')
+      
+      if (!isRestock && quantity > itemData.quantity) {
+        throw new Error('La cantidad no puede ser mayor al stock disponible');
       }
-
-      const newQuantity = isRestock ? item.quantity + quantity : Math.max(0, item.quantity - quantity)
+      
+      // 5. Calcular nueva cantidad
+      const currentQuantity = itemData.quantity;
+      const newQuantity = isRestock 
+        ? currentQuantity + quantity 
+        : Math.max(0, currentQuantity - quantity);
+        
+      console.log(`Actualización de cantidad: ${currentQuantity} ${isRestock ? '+' : '-'} ${quantity} = ${newQuantity}`);
+      
+      // 6. Preparar datos de actualización de inventario
       const updateData = {
         quantity: newQuantity,
         status: newQuantity === 0 ? 'out_of_stock' : 
-                newQuantity <= item.min_stock ? 'low' : 'available',
-        updated_at: now
-      }
-
+               newQuantity <= itemData.min_stock ? 'low' : 'available',
+        updated_at: new Date().toISOString()
+      };
+      
+      let restockId = null;
+      let usageId = null;
+      
+      // Generar timestamp consistente para todas las operaciones
+      const now = new Date().toISOString();
+      const today = now.split('T')[0];
+      
+      // PROCESO PARA REPOSICIÓN
       if (isRestock) {
-        const restockData = {
-          inventory_id: itemId,
-          quantity: quantity,
-          supplier: data.userName || 'Sistema',
-          date: data.date,
-          created_at: now,
-          updated_at: now
+        try {
+          // PASO 1: Registrar operación en tabla inventory_restock
+          // NOTA: La tabla inventory_restock necesita organization_id (not-null constraint)
+          const restockData = {
+            inventory_id: itemId,
+            quantity: quantity,
+            supplier: data.userName || user.email || 'Sistema',
+            date: data.date || today,
+            created_at: now,
+            updated_at: now,
+            organization_id: itemData.organization_id // Incluir el organization_id del item
+          };
+          
+          console.log('📦 Registrando reposición con datos:', restockData);
+          
+          // IMPORTANTE: Asegurar que estamos enviando exactamente los campos que existen en la tabla
+          const { data: insertResult, error: restockError } = await supabase
+            .from('inventory_restock')
+            .insert([restockData])
+            .select('*');
+          
+          if (restockError) {
+            console.error('Error al registrar reposición:', restockError);
+            console.error('Código de error:', restockError.code);
+            console.error('Detalles:', restockError.details);
+            console.error('Mensaje:', restockError.message);
+            setDiagnosisResult(`Error al registrar reposición: ${restockError.message}`);
+            throw restockError;
+          }
+          
+          console.log('✅ Reposición registrada exitosamente:', insertResult);
+          
+          if (insertResult && insertResult.length > 0) {
+            restockId = insertResult[0].id;
+            console.log('ID de reposición generado:', restockId);
+          } else {
+            console.warn('No se recibió ID de reposición después de la inserción');
+          }
+
+          // PASO 2: Actualizar el inventario después de registrar la reposición
+          console.log('Actualizando inventario después de registrar reposición:', updateData);
+          const { error: updateError } = await supabase
+            .from('inventory_items')
+            .update(updateData)
+            .eq('id', itemId);
+            
+          if (updateError) {
+            console.error('Error al actualizar inventario:', updateError);
+            setDiagnosisResult(`Error al actualizar inventario: ${updateError.message}`);
+            throw updateError;
+          }
+          
+          // PASO 3: Verificar que la reposición se haya registrado correctamente
+          console.log('Verificando registro de reposición recién creado...');
+          
+          // Si tenemos un ID, buscamos ese registro específico
+          if (restockId) {
+            const { data: verifyData, error: verifyError } = await supabase
+              .from('inventory_restock')
+              .select('*')
+              .eq('id', restockId)
+              .single();
+              
+            if (verifyError) {
+              console.error('Error al verificar reposición específica:', verifyError);
+            } else {
+              console.log('Registro de reposición verificado por ID:', verifyData);
+            }
+          }
+          
+          // Buscamos también por inventory_id para ver todos los registros
+          const { data: allRecentData, error: recentError } = await supabase
+            .from('inventory_restock')
+            .select('*')
+            .eq('inventory_id', itemId)
+            .order('created_at', { ascending: false })
+            .limit(5);
+            
+          if (recentError) {
+            console.error('Error al verificar reposiciones recientes:', recentError);
+          } else {
+            console.log('Últimos 5 registros de reposición para este item:', allRecentData);
+          }
+          
+        } catch (restockError: any) {
+          console.error('Error durante el proceso de reposición:', restockError);
+          setDiagnosisResult(`Error en reposición: ${restockError.message || 'Error desconocido'}`);
+          throw restockError;
         }
-
-        console.log('Datos de reposición a insertar:', restockData)
-        const { error: restockError } = await supabase
-          .from('inventory_restock')
-          .insert([restockData])
-
-        if (restockError) {
-          console.error('Error en reposición:', restockError)
-          throw restockError
-        }
-      } else {
-        const usageData = {
-          inventory_id: itemId,
-          quantity: quantity,
-          user_id: user.id,
-          date: data.date,
-          created_at: now,
-          updated_at: now
-        }
-
-        console.log('Datos de uso a insertar:', usageData)
-        const { error: usageError } = await supabase
-          .from('inventory_usage')
-          .insert([usageData])
-
-        if (usageError) {
-          console.error('Error en uso:', usageError)
-          throw usageError
+      } 
+      // PROCESO PARA USO
+      else {
+        try {
+          // PASO 1: Actualizar inventario primero (para uso, reducimos stock)
+          console.log('Actualizando inventario para registro de uso:', updateData);
+          const { error: updateError } = await supabase
+            .from('inventory_items')
+            .update(updateData)
+            .eq('id', itemId);
+            
+          if (updateError) {
+            console.error('Error al actualizar inventario:', updateError);
+            setDiagnosisResult(`Error al actualizar inventario: ${updateError.message}`);
+            throw updateError;
+          }
+          
+          // PASO 2: Registrar operación en tabla inventory_usage
+          const usageData = {
+            inventory_id: itemId,
+            quantity: quantity,
+            user_id: user.id,
+            user_name: data.userName || user.email || 'Usuario',
+            date: data.date || today,
+            created_at: now,
+            updated_at: now
+          };
+          
+          console.log('Registrando uso:', usageData);
+          
+          const { data: insertResult, error: usageError } = await supabase
+            .from('inventory_usage')
+            .insert([usageData])
+            .select();
+            
+          console.log('Resultado de inserción de uso:', insertResult);
+          
+          if (usageError) {
+            console.error('Error al registrar uso:', usageError);
+            setDiagnosisResult(`Error al registrar uso: ${usageError.message}`);
+            throw usageError;
+          }
+          
+          console.log('Uso registrado exitosamente:', insertResult);
+          if (insertResult && insertResult.length > 0) {
+            usageId = insertResult[0].id;
+            console.log('ID de uso generado:', usageId);
+          }
+        } catch (usageError: any) {
+          console.error('Error durante el proceso de uso:', usageError);
+          setDiagnosisResult(`Error en uso: ${usageError.message || 'Error desconocido'}`);
+          throw usageError;
         }
       }
-
-      const { error: updateError } = await supabase
+      
+      // 9. Actualizar la interfaz de usuario
+      await loadInventoryItems();
+      
+      // 10. Verificar que el inventario se actualizó correctamente
+      const { data: verifyData } = await supabase
         .from('inventory_items')
-        .update(updateData)
+        .select('quantity')
         .eq('id', itemId)
-
-      if (updateError) {
-        console.error('Error en actualización:', updateError)
-        throw updateError
-      }
-
-      console.log('Operación completada exitosamente')
-      await loadInventoryItems()
-      toast.success(isRestock ? 'Reposición registrada correctamente' : 'Uso registrado correctamente')
+        .single();
+        
+      console.log('Verificación después de la operación:', verifyData);
+      
+      // 11. Informar éxito
+      const successMsg = isRestock 
+        ? `Reposición exitosa: +${quantity} unidades (actual: ${verifyData?.quantity || newQuantity})` 
+        : `Uso registrado: -${quantity} unidades (actual: ${verifyData?.quantity || newQuantity})`;
+        
+      console.log('✅ OPERACIÓN COMPLETA:', successMsg);
+      setDiagnosisResult(successMsg);
+      toast.success(successMsg);
+      
+      // Devolver resultado
+      return {
+        success: true,
+        operation: isRestock ? 'restock' : 'use',
+        previousQuantity: currentQuantity,
+        newQuantity: verifyData?.quantity || newQuantity,
+        timestamp: now,
+        recordId: isRestock ? restockId : usageId
+      };
     } catch (error: any) {
-      console.error('Error detallado en operación de inventario:', error)
-      toast.error(error.message || 'Error al procesar la operación')
-      throw error
+      const errorMsg = error?.message || 'Error al procesar la operación';
+      console.error('❌ ERROR EN OPERACIÓN:', errorMsg, error);
+      setDiagnosisResult(`Error en operación: ${errorMsg}`);
+      toast.error(errorMsg);
+      throw error;
     }
-  }
+  };
 
   // Función para eliminar item
   const deleteInventoryItem = async (itemId: string) => {
@@ -394,23 +695,57 @@ export default function InventoryPage() {
 
   const handleModalSubmit = async (formData: any) => {
     try {
-      if (modalMode === 'use' && selectedItem) {
-        await registerItemUsage(selectedItem.id, formData)
+      console.log('Modal Submit:', { mode: modalMode, item: selectedItem?.id, formType: typeof formData });
+      
+      // Determinar la operación basada en el modo del modal
+      if (modalMode === 'use' || modalMode === 'restock') {
+        if (!selectedItem) {
+          console.error('No hay item seleccionado para la operación');
+          toast.error('Error: No se encontró el item');
+          return;
+        }
+        
+        console.log(`Iniciando operación de ${modalMode === 'restock' ? 'reposición' : 'uso'} para item:`, selectedItem.name);
+        
+        try {
+          // Procesar la operación directamente
+          await registerItemUsage(selectedItem.id, formData);
+          
+          // La actualización de UI se maneja en registerItemUsage
+          // En caso de reposición, el cierre del modal se maneja en el componente InventoryModal
+          return {
+            success: true,
+            itemId: selectedItem.id
+          };
+        } catch (error) {
+          console.error(`Error en operación de ${modalMode}:`, error);
+          throw error;
+        }
       } else if (modalMode === 'edit' && selectedItem) {
+        console.log('Actualizando item existente:', selectedItem.name);
         await updateInventoryItem({
           ...selectedItem,
           ...formData
-        })
+        });
+        
+        // Cerrar modal y mostrar mensaje
+        setIsModalOpen(false);
+        toast.success('Item actualizado correctamente');
       } else if (modalMode === 'create') {
-        await createInventoryItem(formData)
+        console.log('Creando nuevo item');
+        await createInventoryItem(formData);
+        
+        // Cerrar modal y mostrar mensaje
+        setIsModalOpen(false);
+        toast.success('Item creado correctamente');
       }
       
-      setIsModalOpen(false)
-      setModalMode('edit')
-      await loadInventoryItems()
+      // Recargar datos para actualizar la interfaz
+      await loadInventoryItems();
+      
     } catch (error) {
-      console.error('Error in modal submit:', error)
-      toast.error('Error al procesar la operación')
+      console.error('Error en el envío del formulario:', error);
+      toast.error('Error al procesar la operación');
     }
   }
 
@@ -479,6 +814,134 @@ export default function InventoryPage() {
           </div>
         </div>
 
+        {/* Sección de diagnóstico */}
+        {diagnosisResult && (
+          <div className="mb-6 bg-white rounded-xl shadow-sm border border-blue-200 overflow-hidden">
+            <div className="px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-gray-900">Diagnóstico del Sistema</h3>
+                    <p className="text-sm text-gray-500 mt-1">{diagnosisResult}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => runDiagnosis()}
+                  className="p-1 rounded-md hover:bg-gray-100 transition-colors duration-200"
+                  title="Ejecutar diagnóstico otra vez"
+                >
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="border-t border-blue-100 bg-blue-50 px-6 py-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-blue-800">Prueba manual de reposición:</span>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={async () => {
+                      if (items.length === 0) {
+                        toast.error('No hay items para probar');
+                        return;
+                      }
+
+                      // Probar con el primer item
+                      const testItem = items[0];
+                      setDiagnosisResult(`Probando reposición con item: ${testItem.name}`);
+                      
+                      try {
+                        // Usar registerItemUsage directamente para la prueba
+                        const result = await registerItemUsage(testItem.id, {
+                          operationQuantity: 1,
+                          date: new Date().toISOString().split('T')[0],
+                          userName: 'Test User',
+                          operation: 'restock'
+                        });
+                        
+                        setDiagnosisResult(`Reposición exitosa: ${JSON.stringify(result)}`);
+                        await loadInventoryItems(); // Refrescar datos
+                      } catch (error: any) {
+                        setDiagnosisResult(`Error en reposición: ${error.message}`);
+                      }
+                    }}
+                    className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium text-blue-700 
+                             bg-blue-100 hover:bg-blue-200 transition-colors duration-200"
+                  >
+                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Test Reposición
+                  </button>
+                  
+                  <button
+                    onClick={async () => {
+                      if (items.length === 0) {
+                        toast.error('No hay items para probar');
+                        return;
+                      }
+
+                      const testItem = items[0];
+                      setDiagnosisResult(`Probando registro directo en inventory_restock para: ${testItem.name}`);
+                      
+                      try {
+                        // Insertando directamente en la tabla inventory_restock
+                        const now = new Date().toISOString();
+                        const restockData = {
+                          inventory_id: testItem.id,
+                          quantity: 1,
+                          supplier: 'Test Direct',
+                          date: now.split('T')[0],
+                          organization_id: testItem.organization_id,
+                          created_at: now,
+                          updated_at: now
+                        };
+                        
+                        const { data, error } = await supabase
+                          .from('inventory_restock')
+                          .insert([restockData]);
+                          
+                        if (error) {
+                          console.error('Error en inserción directa:', error);
+                          setDiagnosisResult(`Error en inserción directa: ${error.message}`);
+                        } else {
+                          setDiagnosisResult(`Registro directo exitoso en inventory_restock`);
+                          console.log('Registro directo completado');
+                          
+                          // Verificar que se insertó
+                          const { data: checkData } = await supabase
+                            .from('inventory_restock')
+                            .select('*')
+                            .eq('inventory_id', testItem.id)
+                            .order('created_at', { ascending: false })
+                            .limit(5);
+                            
+                          console.log('Últimos registros de reposición:', checkData);
+                        }
+                      } catch (error: any) {
+                        setDiagnosisResult(`Error en inserción directa: ${error.message}`);
+                      }
+                    }}
+                    className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium text-green-700 
+                             bg-green-100 hover:bg-green-200 transition-colors duration-200"
+                  >
+                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Test Directo
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Alertas de stock bajo */}
         {showAlerts && lowStockItems.length > 0 && (
           <div className="mb-6 bg-white rounded-xl shadow-sm border border-yellow-200 overflow-hidden">
@@ -516,10 +979,21 @@ export default function InventoryPage() {
                       <span className="text-sm text-gray-600">{item.name}: {item.quantity} unidades (Mínimo: {item.min_stock})</span>
                     </div>
                     <button
-                      onClick={() => {
-                        setSelectedItem(item)
-                        setModalMode('restock')
-                        setIsModalOpen(true)
+                      onClick={async () => {
+                        setSelectedItem(item);
+                        setModalMode('restock');
+                        console.log('Abriendo modal de reposición para item:', item.name, item.id);
+                        
+                        // Dar tiempo para que se actualice el estado
+                        setTimeout(() => {
+                          setIsModalOpen(true);
+                          
+                          // Mostrar mensaje de confirmación
+                          toast.success(`Modal abierto para reponer ${item.name}`);
+                          
+                          // Registrar la acción para el diagnóstico
+                          setDiagnosisResult(`Abriendo modal para reponer ${item.name}. ID: ${item.id}`);
+                        }, 100);
                       }}
                       className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium text-yellow-700 
                                bg-yellow-100 hover:bg-yellow-200 transition-colors duration-200"
@@ -552,7 +1026,7 @@ export default function InventoryPage() {
                 />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0118 0z" />
                   </svg>
                 </div>
               </div>
@@ -702,8 +1176,18 @@ export default function InventoryPage() {
       <InventoryModal
         isOpen={isModalOpen}
         onClose={() => {
-          setIsModalOpen(false)
-          setModalMode('edit')
+          console.log('Cerrando modal...');
+          setIsModalOpen(false);
+          setModalMode('edit');
+          // Recargar datos al cerrar el modal para asegurar que la UI esté actualizada
+          console.log('Recargando datos del inventario después de cerrar el modal...');
+          setTimeout(() => {
+            loadInventoryItems().then(() => {
+              console.log('Datos recargados exitosamente');
+            }).catch(err => {
+              console.error('Error al recargar datos:', err);
+            });
+          }, 500); // Pequeño retraso para asegurar que todas las operaciones anteriores hayan terminado
         }}
         onSubmit={handleModalSubmit}
         item={selectedItem}

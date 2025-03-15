@@ -48,40 +48,188 @@ export default function InventoryModal({
   const supabase = createClientComponentClient()
 
   // Función para cargar el historial
-  const loadHistory = async () => {
+  const loadHistory = async (forceRefresh = false) => {
     if (!item) return
+  
+    console.log('==================== INICIO CARGA DE HISTORIAL ====================');
+    console.log(`Cargando historial para item ID: ${item.id}, Nombre: ${item.name}`);
+    console.log(`Forzar refresco: ${forceRefresh ? 'SÍ' : 'NO'}`);
     
-    setLoadingHistory(true)
+    setLoadingHistory(true);
+    
     try {
-      // Cargar historial de uso
-      const { data: usageData } = await supabase
+      // Añadir timestamp para evitar caché en caso de forzar refresco
+      const timestamp = new Date().getTime();
+
+      // IMPORTANTE: Primero vaciamos los historiales para evitar datos obsoletos
+      setRestockHistory([]);
+      setUsageHistory([]);
+      
+      // PASO 1: Cargar historial de REPOSICIÓN - USANDO API ENDPOINT PARA EVITAR CACHÉ
+      console.log(`[${timestamp}] Consultando historial de REPOSICIÓN...`);
+      
+      try {
+        // Usar el endpoint API para evitar problemas de caché
+        const response = await fetch(`/api/inventory/restock?id=${item.id}&t=${timestamp}`, {
+          method: 'GET',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Error en la respuesta API: ${response.status}`);
+        }
+        
+        const restockData = await response.json();
+        
+        console.log(`✅ Historial de REPOSICIÓN cargado desde API: ${restockData?.length || 0} registros`);
+        
+        if (restockData && restockData.length > 0) {
+          console.log('DETALLE DE REGISTROS DE REPOSICIÓN:');
+          restockData.forEach((record: any, index: number) => {
+            console.log(`Reposición #${index + 1}:`, {
+              id: record.id,
+              inventory_id: record.inventory_id,
+              quantity: record.quantity,
+              supplier: record.supplier,
+              date: record.date,
+              created_at: record.created_at,
+              updated_at: record.updated_at
+            });
+          });
+          
+          // Actualizar el estado con los datos
+          setRestockHistory(restockData);
+        } else {
+          console.log('No hay registros de reposición para mostrar desde API.');
+          
+          // Fallback a consulta directa si la API no devuelve datos
+          console.log('Intentando consulta directa como fallback...');
+          const { data: fallbackData } = await supabase
+            .from('inventory_restock')
+            .select('*')
+            .eq('inventory_id', item.id)
+            .order('created_at', { ascending: false });
+            
+          if (fallbackData && fallbackData.length > 0) {
+            console.log('Consulta directa encontró registros:', fallbackData.length);
+            setRestockHistory(fallbackData);
+          } else {
+            console.log('No se encontraron registros de reposición en ninguna consulta.');
+          }
+        }
+      } catch (apiError) {
+        console.error('Error al usar API para reposiciones:', apiError);
+        
+        // Fallback a consulta directa si la API falla
+        console.log('API falló, usando consulta directa...');
+        const { data: restockData, error: restockError } = await supabase
+          .from('inventory_restock')
+          .select('*')
+          .eq('inventory_id', item.id)
+          .order('created_at', { ascending: false });
+
+        if (restockError) {
+          console.error('❌ Error al cargar historial de reposición:', restockError);
+          toast.error('Error al cargar historial de reposición');
+        } else if (restockData && restockData.length > 0) {
+          console.log(`Historial de reposición cargado directamente: ${restockData.length} registros`);
+          setRestockHistory(restockData);
+        }
+      }
+
+      // Breve pausa entre consultas
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // PASO 2: Cargar historial de USO
+      console.log(`[${timestamp}] Consultando historial de USO...`);
+      
+      const { data: usageData, error: usageError } = await supabase
         .from('inventory_usage')
-        .select(`
-          quantity,
-          date,
-          user_name
-        `)
+        .select('*')
         .eq('inventory_id', item.id)
-        .order('date', { ascending: false })
+        .order('created_at', { ascending: false });
 
-      // Cargar historial de reposición
-      const { data: restockData } = await supabase
-        .from('inventory_restock')
-        .select(`
-          quantity,
-          date,
-          supplier
-        `)
-        .eq('inventory_id', item.id)
-        .order('date', { ascending: false })
-
-      setUsageHistory(usageData || [])
-      setRestockHistory(restockData || [])
+      if (usageError) {
+        console.error('❌ Error al cargar historial de uso:', usageError);
+        toast.error('Error al cargar historial de uso');
+      } else {
+        console.log(`✅ Historial de USO cargado: ${usageData?.length || 0} registros`);
+        
+        if (usageData && usageData.length > 0) {
+          console.log('DETALLE DE REGISTROS DE USO:');
+          usageData.forEach((record, index) => {
+            console.log(`Uso #${index + 1}:`, {
+              id: record.id,
+              inventory_id: record.inventory_id,
+              quantity: record.quantity,
+              user_name: record.user_name,
+              date: record.date,
+              created_at: record.created_at
+            });
+          });
+          
+          setUsageHistory(usageData);
+        } else {
+          console.log('No hay registros de uso para mostrar.');
+        }
+      }
+      
+      // PASO 3: Verificación adicional directa de la base de datos (para depuración)
+      if (forceRefresh) {
+        console.log('VERIFICACIÓN ADICIONAL de registros para depuración:');
+        
+        // Verificar específicamente registros de reposición para este ítem
+        const { data: directCheckRestock, error: directCheckRestockError } = await supabase
+          .from('inventory_restock')
+          .select('count')
+          .eq('inventory_id', item.id);
+          
+        if (directCheckRestockError) {
+          console.error('Error en verificación directa de reposiciones:', directCheckRestockError);
+        } else {
+          console.log('Conteo directo de reposiciones:', directCheckRestock);
+          
+          // Si el conteo muestra registros pero no se cargaron en el estado, hacer otra consulta
+          if (directCheckRestock[0]?.count > 0 && restockHistory.length === 0) {
+            console.log('⚠️ Detectada discrepancia en reposiciones - intentando recarga forzada');
+            
+            // Consulta con timestamp para evitar caché
+            const { data: retry } = await supabase
+              .from('inventory_restock')
+              .select('*')
+              .eq('inventory_id', item.id)
+              .order('created_at', { ascending: false });
+              
+            if (retry && retry.length > 0) {
+              console.log('Reintento exitoso - actualizando estado con datos recuperados:', retry.length);
+              setRestockHistory(retry);
+            }
+          }
+        }
+        
+        // Verificar específicamente registros de uso para este ítem
+        const { data: directCheckUsage, error: directCheckUsageError } = await supabase
+          .from('inventory_usage')
+          .select('count')
+          .eq('inventory_id', item.id);
+          
+        if (directCheckUsageError) {
+          console.error('Error en verificación directa de usos:', directCheckUsageError);
+        } else {
+          console.log('Conteo directo de usos:', directCheckUsage);
+        }
+      }
+      
+      console.log('==================== FIN CARGA DE HISTORIAL ====================');
     } catch (error) {
-      console.error('Error al cargar historial:', error)
-      toast.error('Error al cargar el historial')
+      console.error('Error general al cargar historial:', error);
+      toast.error('Error al cargar el historial');
     } finally {
-      setLoadingHistory(false)
+      setLoadingHistory(false);
+      console.log('Carga de historial finalizada');
     }
   }
 
@@ -104,7 +252,9 @@ export default function InventoryModal({
           unit: item.unit || 'unidades'
         });
       } else if (mode === 'use' || mode === 'restock') {
+        // Establecer la pestaña activa según el modo
         setActiveTab(mode);
+        // Cargar el historial
         loadHistory();
       }
     }
@@ -112,15 +262,24 @@ export default function InventoryModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('Iniciando handleSubmit:', { mode, activeTab, formData })
+    console.log('Iniciando handleSubmit en InventoryModal:', { mode, activeTab, formData })
     
     try {
+      // El modo (edit, create, use, restock) determina la operación principal
+      // Pero para uso y reposición, la pestaña activa (activeTab) determina el tipo específico
       if (mode === 'use' || mode === 'restock') {
+        // Usamos activeTab en lugar de mode para determinar el tipo de operación
+        // Esto permite que el usuario cambie entre uso y reposición dentro del modal
+        const currentOperation = activeTab === 'use' || activeTab === 'restock' ? activeTab : mode;
+        
         console.log('Validando datos del formulario:', {
           operationQuantity: formData.operationQuantity,
           date: formData.date,
+          userName: formData.userName,
           itemStock: item?.quantity,
-          mode: mode
+          mode: mode,
+          activeTab: activeTab,
+          operation: currentOperation // Operación que realmente se ejecutará
         })
 
         // Validaciones básicas
@@ -131,7 +290,7 @@ export default function InventoryModal({
         }
         
         // Solo validar el stock disponible si es una operación de uso
-        if (activeTab === 'use' && item && formData.operationQuantity > item.quantity) {
+        if (currentOperation === 'use' && item && formData.operationQuantity > item.quantity) {
           console.log('Error: Cantidad excede el stock disponible')
           toast.error('La cantidad no puede ser mayor al stock disponible')
           return
@@ -143,27 +302,84 @@ export default function InventoryModal({
           return
         }
 
+        if (!formData.userName) {
+          console.log('Error: Nombre no especificado')
+          toast.error(`El nombre del ${currentOperation === 'use' ? 'usuario' : 'proveedor'} es requerido`)
+          return
+        }
+
         const dataToSubmit = {
           operationQuantity: formData.operationQuantity,
           date: formData.date,
-          userName: formData.userName || ''
+          userName: formData.userName || '',
+          operation: currentOperation // Añadir el tipo de operación a los datos
         }
 
         console.log('Enviando datos al servidor:', dataToSubmit)
 
         try {
-          await onSubmit(dataToSubmit)
-          console.log('Datos enviados exitosamente')
+          // Mostrar mensaje de procesamiento
+          const loadingToast = toast.loading('Procesando operación...')
           
-          // Limpiar formulario y cerrar modal
+          // Llamar a la función que procesa la operación
+          const result = await onSubmit(dataToSubmit)
+          console.log('Datos enviados exitosamente, resultado:', result)
+          
+          // Cerrar el toast de carga
+          toast.dismiss(loadingToast)
+          toast.success(`Operación completada: ${currentOperation === 'use' ? 'Uso registrado' : 'Reposición completada'}`)
+          
+          // Limpiar formulario
           setFormData({
             operationQuantity: 0,
             date: new Date().toISOString().split('T')[0],
             userName: ''
           })
-          onClose()
-        } catch (submitError) {
+
+          // Sincronizar el comportamiento para AMBAS operaciones (uso y reposición)
+          console.log(`Procesando finalización de operación: ${currentOperation}`);
+          
+          // IMPORTANTE: Para reposiciones, damos un poco más de tiempo para que la BD procese
+          if (currentOperation === 'restock') {
+            toast.loading('Actualizando historial...', { id: 'historyUpdate' });
+            
+            // Esperar un poco más para reposiciones
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Limpiar los historiales antes de recargar
+            setRestockHistory([]);
+            
+            // Intentar cargar el historial varias veces para reposiciones
+            console.log('Cargando historial de reposición (intento 1)...');
+            await loadHistory(true);
+            
+            // Verificar si se cargaron datos
+            if (restockHistory.length === 0) {
+              console.log('No se encontraron registros en el primer intento, reintentando...');
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              // Segundo intento
+              console.log('Cargando historial de reposición (intento 2)...');
+              await loadHistory(true);
+            }
+            
+            toast.dismiss('historyUpdate');
+          } else {
+            // Para uso, el tiempo estándar es suficiente
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await loadHistory(true);
+          }
+          
+          // Mostrar la pestaña de historial en ambos casos
+          setActiveTab('history');
+          
+          // No cerramos el modal automáticamente en ninguno de los dos casos
+          // para que el usuario pueda ver el historial actualizado
+          toast.success('Historial actualizado con la operación', { duration: 3000 });
+        } catch (submitError: any) {
           console.error('Error al enviar datos:', submitError)
+          toast.dismiss() // Cerrar el toast de carga
+          toast.error(`Error: ${submitError?.message || 'Error al procesar operación'}`)
           throw submitError
         }
       } else if (mode === 'edit' || mode === 'create') {
@@ -188,7 +404,12 @@ export default function InventoryModal({
 
         <div className="relative bg-white rounded-lg max-w-md w-full p-6">
           <Dialog.Title className="text-lg font-medium text-gray-900 mb-4">
-            {mode === 'edit' ? 'Editar Item' : mode === 'use' ? 'Registrar Uso' : 'Registrar Reposición'}
+            {mode === 'edit' ? 'Editar Item' : 
+             mode === 'create' ? 'Crear Item' : 
+             activeTab === 'use' ? 'Registrar Uso' : 
+             activeTab === 'restock' ? 'Registrar Reposición' : 
+             activeTab === 'history' ? (item ? `Historial: ${item.name}` : 'Historial de Item') :
+             'Operación de Inventario'}
           </Dialog.Title>
 
           {mode === 'edit' || mode === 'create' ? (
@@ -326,12 +547,12 @@ export default function InventoryModal({
                                   <div key={index} className="bg-gray-50 p-2 rounded-lg text-sm">
                                     <div className="flex justify-between items-center">
                                       <span className="font-medium">
-                                        {record.user_name}
+                                        {record.user_name || record.user_id || 'Usuario'}
                                       </span>
                                       <span className="text-red-600">-{record.quantity} unidades</span>
                                     </div>
                                     <div className="text-gray-500 text-xs mt-1">
-                                      {new Date(record.date).toLocaleDateString()}
+                                      {new Date(record.date).toLocaleDateString()} ({new Date(record.created_at).toLocaleTimeString()})
                                     </div>
                                   </div>
                                 ))}
@@ -343,18 +564,34 @@ export default function InventoryModal({
                         </div>
 
                         <div>
-                          <h3 className="text-sm font-medium text-gray-900 mb-2">Historial de Reposición</h3>
+                          <div className="flex justify-between items-center mb-2">
+                            <h3 className="text-sm font-medium text-gray-900">Historial de Reposición</h3>
+                            <button 
+                              onClick={() => {
+                                console.log('Recargando historial manualmente...');
+                                loadHistory();
+                              }}
+                              className="text-xs text-blue-600 hover:text-blue-800"
+                              type="button"
+                            >
+                              Recargar
+                            </button>
+                          </div>
                           <div className="max-h-48 overflow-y-auto">
                             {restockHistory.length > 0 ? (
                               <div className="space-y-2">
                                 {restockHistory.map((record, index) => (
                                   <div key={index} className="bg-gray-50 p-2 rounded-lg text-sm">
                                     <div className="flex justify-between items-center">
-                                      <span className="font-medium">{record.supplier}</span>
+                                      <span className="font-medium">{record.supplier || 'Proveedor'}</span>
                                       <span className="text-green-600">+{record.quantity} unidades</span>
                                     </div>
                                     <div className="text-gray-500 text-xs mt-1">
-                                      {new Date(record.date).toLocaleDateString()}
+                                      {new Date(record.date).toLocaleDateString()} 
+                                      {record.created_at && ` (${new Date(record.created_at).toLocaleTimeString()})`}
+                                    </div>
+                                    <div className="text-gray-400 text-xs mt-1 truncate">
+                                      ID: {record.id?.substring(0, 8)}...
                                     </div>
                                   </div>
                                 ))}

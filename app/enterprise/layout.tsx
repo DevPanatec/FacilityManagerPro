@@ -16,19 +16,12 @@ export default function EnterpriseLayout({
   const router = useRouter()
   const pathname = usePathname()
   const [isLoading, setIsLoading] = useState(true)
-  const [organizationName, setOrganizationName] = useState('San Miguel Arcángel')
+  const [organizationName, setOrganizationName] = useState('')
   const supabase = createClientComponentClient()
 
   useEffect(() => {
     const checkSession = async () => {
       try {
-        // Verificar si ya hay un rol guardado
-        const storedRole = localStorage.getItem('userRole')
-        if (storedRole === 'enterprise') {
-          setIsLoading(false)
-          return
-        }
-
         // Verificar sesión de Supabase
         const { data: { session } } = await supabase.auth.getSession()
         if (!session) {
@@ -36,36 +29,42 @@ export default function EnterpriseLayout({
           return
         }
 
-        // Obtener datos del usuario
-        const { data: userData, error } = await supabase
+        // Obtener el perfil del usuario
+        const { data: userProfile, error: profileError } = await supabase
           .from('users')
-          .select(`
-            role,
-            organization_id,
-            organizations (
-              id,
-              name
-            )
-          `)
+          .select('organization_id, role')
           .eq('id', session.user.id)
-          .single()
+          .single();
 
-        if (error) {
-          console.error('Error al obtener datos del usuario:', error)
+        if (profileError || !userProfile) {
+          console.error('Error al obtener perfil:', profileError)
           router.push('/auth/login')
           return
         }
 
-        if (!userData || userData.role !== 'enterprise') {
+        if (userProfile.role !== 'enterprise') {
           console.error('Usuario no autorizado')
           router.push('/auth/login')
           return
         }
 
-        // Guardar/actualizar datos importantes en localStorage
-        localStorage.setItem('userRole', userData.role)
-        localStorage.setItem('organizationId', userData.organization_id)
-        localStorage.setItem('organizationName', userData.organizations?.[0]?.name || '')
+        // Guardar datos en localStorage
+        localStorage.setItem('userRole', userProfile.role)
+        localStorage.setItem('organizationId', userProfile.organization_id)
+        
+        // Siempre obtener el nombre de la organización
+        const { data: organizationData } = await supabase
+          .from('organizations')
+          .select('name')
+          .eq('id', userProfile.organization_id)
+          .single();
+
+        if (organizationData && organizationData.name) {
+          // Actualizar el estado y localStorage
+          setOrganizationName(organizationData.name);
+          localStorage.setItem('organizationName', organizationData.name);
+          console.log('Nombre de la organización establecido:', organizationData.name);
+        }
 
         setIsLoading(false)
       } catch (error) {

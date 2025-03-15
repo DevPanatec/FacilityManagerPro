@@ -21,6 +21,9 @@ interface Task {
   organization_id: string
   start_time?: string
   end_time?: string
+  type?: string
+  start_date?: string
+  sala_id?: string
   assignee?: {
     first_name: string
     last_name: string
@@ -31,6 +34,10 @@ interface Task {
       id: string
       nombre: string
     }
+  }
+  sala?: {
+    id: string
+    nombre: string
   }
 }
 
@@ -45,6 +52,8 @@ export default function TasksPage() {
   const [currentTask, setCurrentTask] = useState<Task | null>(null)
   const [startTime, setStartTime] = useState<string>('')
   const [checklist, setChecklist] = useState<{ id: number; text: string; completed: boolean; }[]>([])
+  const [showAllTasks, setShowAllTasks] = useState(false)
+  const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed'>('all')
   const supabase = createClientComponentClient()
   const pathname = usePathname()
   const router = useRouter()
@@ -106,32 +115,175 @@ export default function TasksPage() {
       }
       if (!userProfile) throw new Error('Perfil no encontrado')
 
-      // Simplified query to debug the issue
-      const { data: allTasks, error: tasksError } = await supabase
+      // Construir la consulta básica sin filtros complejos
+      console.log('Iniciando búsqueda de tareas...');
+      
+      // Primero, hacer una consulta específica para las asignaciones
+      console.log('Buscando todas las asignaciones en la base de datos...');
+      const { data: allAssignments, error: assignmentsError } = await supabase
+        .from('tasks')
+        .select('id, title, type, assigned_to')
+        .eq('organization_id', userProfile.organization_id)
+        .eq('type', 'assignment');
+      
+      console.log('Asignaciones encontradas:', allAssignments?.length || 0);
+      if (allAssignments && allAssignments.length > 0) {
+        console.log('Ejemplo de asignación:', allAssignments[0]);
+      }
+      
+      if (assignmentsError) {
+        console.error('Error buscando asignaciones:', assignmentsError);
+      }
+      
+      // Ahora hacer la consulta normal para todas las tareas
+      let query = supabase
         .from('tasks')
         .select(`
-          id,
-          title,
-          description,
-          status,
-          priority,
-          assigned_to,
-          created_at,
-          due_date,
-          area_id,
-          organization_id,
-          start_time,
-          end_time,
+          *,
           assignee:users!tasks_assigned_to_fkey (
             first_name,
             last_name
           ),
           area:areas!tasks_area_id_fkey (
             name
+          ),
+          sala:salas (
+            id,
+            nombre
           )
         `)
-        .eq('organization_id', userProfile.organization_id)
-        .order('created_at', { ascending: false })
+        .eq('organization_id', userProfile.organization_id);
+      
+      // Solo filtrar por usuario actual si el toggle está desactivado
+      if (!showAllTasks) {
+        query = query.eq('assigned_to', user.id);
+        console.log('Filtrando por assigned_to:', user.id);
+      } else {
+        console.log('Mostrando todas las tareas (sin filtro de assigned_to)');
+      }
+      
+      // Ordenar por fecha de creación
+      query = query.order('created_at', { ascending: false });
+      
+      console.log('Ejecutando consulta de tareas...');
+      const { data: tasksData, error: tasksError } = await query;
+      
+      // Usar let para poder modificar allTasks más adelante
+      let allTasks = tasksData || [];
+      
+      console.log('Consulta completada. Tareas encontradas:', allTasks?.length || 0);
+      if (allTasks && allTasks.length > 0) {
+        // Obtener tipos únicos de tareas 
+        const taskTypes = allTasks.map(t => t.type).filter((value, index, self) => self.indexOf(value) === index);
+        console.log('Tipos de tareas encontrados:', taskTypes);
+        
+        console.log('Ejemplo de tarea:', {
+          id: allTasks[0].id,
+          title: allTasks[0].title,
+          type: allTasks[0].type,
+          assigned_to: allTasks[0].assigned_to
+        });
+        
+        // Verificar específicamente las asignaciones
+        const assignments = allTasks.filter(t => t.type === 'assignment');
+        console.log('Número de asignaciones encontradas en tareas:', assignments.length);
+        if (assignments.length > 0) {
+          console.log('Ejemplo de asignación en tareas:', {
+            id: assignments[0].id,
+            title: assignments[0].title,
+            assigned_to: assignments[0].assigned_to,
+            sala: assignments[0].sala
+          });
+        }
+        
+        // Verificar si hay discrepancia entre las asignaciones directas y las encontradas en todas las tareas
+        if (allAssignments && allAssignments.length > assignments.length) {
+          console.log('Hay asignaciones faltantes. Encontradas directamente:', allAssignments.length, 'En tareas:', assignments.length);
+          
+          // Buscar las asignaciones que faltan
+          const assignmentIds = assignments.map(a => a.id);
+          const missingAssignments = allAssignments.filter(a => !assignmentIds.includes(a.id));
+          console.log('Asignaciones faltantes:', missingAssignments);
+          
+          // Agregar información detallada para cada asignación faltante
+          if (missingAssignments.length > 0) {
+            const missingAssignmentPromises = missingAssignments.map(async (assignment) => {
+              const { data: detailedAssignment, error } = await supabase
+                .from('tasks')
+                .select(`
+                  *,
+                  assignee:users!tasks_assigned_to_fkey (
+                    first_name,
+                    last_name
+                  ),
+                  area:areas!tasks_area_id_fkey (
+                    name
+                  ),
+                  sala:salas (
+                    id,
+                    nombre
+                  )
+                `)
+                .eq('id', assignment.id)
+                .single();
+                
+              if (error) {
+                console.error('Error obteniendo detalles de asignación faltante:', error);
+                return null;
+              }
+              
+              return detailedAssignment;
+            });
+            
+            const detailedMissingAssignments = await Promise.all(missingAssignmentPromises);
+            const validMissingAssignments = detailedMissingAssignments.filter(Boolean);
+            
+            console.log('Detalles de asignaciones faltantes:', validMissingAssignments);
+            
+            // Formatear las asignaciones faltantes
+            const formattedMissingAssignments = validMissingAssignments.map(task => {
+              const assignee = task.assignee && Array.isArray(task.assignee) && task.assignee[0] ? {
+                first_name: task.assignee[0].first_name,
+                last_name: task.assignee[0].last_name
+              } : (task.assigned_to ? { first_name: "Sin nombre", last_name: "disponible" } : undefined);
+    
+              const area = task.area && Array.isArray(task.area) && task.area[0] ? {
+                name: task.area[0].name || 'Área sin identificar'
+              } : (task.area_id ? { name: "Limpieza/Mantenimiento" } : undefined);
+              
+              const sala = task.sala && Array.isArray(task.sala) && task.sala[0] ? {
+                id: task.sala[0].id,
+                nombre: task.sala[0].nombre
+              } : undefined;
+    
+              return {
+                id: task.id,
+                title: task.title || 'Sin título',
+                description: task.description || 'Sin descripción',
+                priority: (task.priority || 'low') as 'low' | 'medium' | 'high',
+                status: task.status || 'pending',
+                assigned_to: task.assigned_to,
+                created_at: task.created_at,
+                due_date: task.due_date,
+                area_id: task.area_id,
+                organization_id: task.organization_id,
+                start_time: task.start_time,
+                end_time: task.end_time,
+                type: task.type,
+                start_date: task.start_date,
+                sala_id: task.sala_id,
+                assignee,
+                area,
+                sala
+              } as Task;
+            });
+            
+            // Añadir las asignaciones faltantes a las tareas existentes
+            allTasks = [...allTasks, ...formattedMissingAssignments];
+            console.log('Se agregaron', formattedMissingAssignments.length, 'asignaciones faltantes al conjunto de tareas');
+          }
+        }
+      }
 
       if (tasksError) {
         console.error('Error detallado al obtener tareas:', {
@@ -143,7 +295,7 @@ export default function TasksPage() {
         throw new Error('Error al obtener tareas: ' + tasksError.message)
       }
       
-      console.log('Tareas obtenidas:', allTasks) // Debug
+      console.log('Tareas obtenidas:', allTasks?.length || 0, 'tareas', showAllTasks ? '(todas)' : '(solo asignadas)') // Debug
 
       const formattedTasks = allTasks?.map(task => {
         // Ensure assignee is properly typed
@@ -154,8 +306,14 @@ export default function TasksPage() {
 
         // Ensure area is properly typed
         const area = task.area && Array.isArray(task.area) && task.area[0] ? {
-          name: task.area[0].name
-        } : (task.area_id ? { name: "Área sin nombre" } : undefined);
+          name: task.area[0].name || 'Área sin identificar'
+        } : (task.area_id ? { name: "Limpieza/Mantenimiento" } : undefined);
+        
+        // Ensure sala is properly typed
+        const sala = task.sala && Array.isArray(task.sala) && task.sala[0] ? {
+          id: task.sala[0].id,
+          nombre: task.sala[0].nombre
+        } : undefined;
 
         return {
           id: task.id,
@@ -170,8 +328,12 @@ export default function TasksPage() {
           organization_id: task.organization_id,
           start_time: task.start_time,
           end_time: task.end_time,
+          type: task.type,
+          start_date: task.start_date,
+          sala_id: task.sala_id,
           assignee,
-          area
+          area,
+          sala
         } as Task;
       }) || []
 
@@ -417,6 +579,54 @@ export default function TasksPage() {
     }
   };
 
+  const handleContinueTask = async (task: Task) => {
+    try {
+      // Mostrar indicador de carga
+      const toastId = toast.loading('Cargando tarea...');
+
+      // Obtener datos actualizados de la tarea
+      const { data: taskData, error } = await supabase
+        .from('tasks')
+        .select(`
+          *,
+          assignee:users!tasks_assigned_to_fkey (
+            first_name,
+            last_name
+          ),
+          area:areas!tasks_area_id_fkey (
+            name,
+            sala:salas (
+              id,
+              nombre
+            )
+          )
+        `)
+        .eq('id', task.id)
+        .single();
+
+      if (error) {
+        toast.dismiss(toastId);
+        toast.error('Error al cargar la tarea: ' + error.message);
+        return;
+      }
+
+      if (!taskData) {
+        toast.dismiss(toastId);
+        toast.error('No se encontró la tarea');
+        return;
+      }
+
+      toast.dismiss(toastId);
+      toast.success('Tarea cargada con éxito');
+
+      // Redirigir a la página de tarea actual
+      router.push('/admin/tasks/current');
+    } catch (error: any) {
+      console.error('Error al continuar la tarea:', error);
+      toast.error(error.message || 'Error al continuar la tarea');
+    }
+  };
+
   const handleDeleteTask = async (taskId: string) => {
     try {
       if (!confirm('¿Estás seguro de que deseas eliminar esta tarea?')) {
@@ -601,11 +811,76 @@ export default function TasksPage() {
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-4">
           <h1 className="text-xl font-semibold text-gray-800">Tareas Asignadas</h1>
+          
+          {/* Interruptor para cambiar entre mis tareas y todas las tareas */}
+          <div className="flex items-center ml-4">
+            <button
+              onClick={() => {
+                setShowAllTasks(!showAllTasks);
+                // Recargar tareas cuando cambie el toggle
+                setTimeout(() => fetchTasks(), 100);
+              }}
+              className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                showAllTasks 
+                  ? 'bg-blue-100 text-blue-700' 
+                  : 'bg-gray-100 text-gray-700'
+              }`}
+            >
+              {showAllTasks ? 'Todas las tareas' : 'Solo mis tareas'}
+            </button>
+          </div>
         </div>
         <button className="p-2 hover:bg-gray-100 rounded-full" onClick={fetchTasks}>
           <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
+        </button>
+      </div>
+
+      {/* Filtros de estado */}
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => setActiveFilter('all')}
+          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+            activeFilter === 'all' 
+              ? 'bg-gray-800 text-white' 
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          Todas
+        </button>
+        <button
+          onClick={() => setActiveFilter('pending')}
+          className={`px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-1.5 ${
+            activeFilter === 'pending' 
+              ? 'bg-orange-500 text-white' 
+              : 'bg-orange-50 text-orange-700 hover:bg-orange-100'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+          Pendientes ({taskStats.pending})
+        </button>
+        <button
+          onClick={() => setActiveFilter('in_progress')}
+          className={`px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-1.5 ${
+            activeFilter === 'in_progress' 
+              ? 'bg-blue-500 text-white' 
+              : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+          En Progreso ({taskStats.inProgress})
+        </button>
+        <button
+          onClick={() => setActiveFilter('completed')}
+          className={`px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-1.5 ${
+            activeFilter === 'completed' 
+              ? 'bg-green-500 text-white' 
+              : 'bg-green-50 text-green-700 hover:bg-green-100'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-green-500"></span>
+          Completadas ({taskStats.completed})
         </button>
       </div>
 
@@ -635,126 +910,194 @@ export default function TasksPage() {
             </p>
           </div>
         ) : (
-          tasks.map(task => (
-            <div 
-              key={task.id} 
-              className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
-            >
-              <div className="p-5">
-                {/* Encabezado con área y prioridad */}
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                      </svg>
-                      <h3 className="font-semibold text-gray-800">
-                        {task.area?.name || 'Sin área asignada'}
-                      </h3>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1">{task.title}</p>
-                    
-                    {/* Mostrar asignado a - especialmente útil para tareas del calendario */}
-                    <p className="text-xs text-gray-500 mt-1">
-                      {task.assignee ? 
-                        `Asignado a: ${task.assignee.first_name || ''} ${task.assignee.last_name || ''}`.trim() : 
-                        'Sin asignar'}
-                    </p>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1 ${
-                    task.status === 'completed' ? 'bg-green-100 text-green-700' :
-                    task.status === 'pending' ? 'bg-orange-100 text-orange-700' :
-                    task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                    'bg-red-100 text-red-700'
-                  }`}>
-                    {task.status === 'completed' ? (
-                      <>
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        Completada
-                      </>
-                    ) : task.status === 'pending' ? (
-                      <>
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Pendiente
-                      </>
-                    ) : task.status === 'in_progress' ? (
-                      <>
-                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        En Progreso
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                        Cancelada
-                      </>
-                    )}
-                  </span>
-                </div>
-
-                {/* Información adicional */}
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <span className="text-sm text-gray-600">
-                      Creada: {new Date(task.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  {task.due_date && (
-                    <div className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <span className="text-sm text-gray-600">
-                        Fecha límite: {new Date(task.due_date).toLocaleDateString()}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {task.description && (
-                  <div className="mb-4 text-sm text-gray-600 line-clamp-2">
-                    {task.description}
-                  </div>
-                )}
-
-                {/* Botones de acción */}
-                <div className="flex justify-end">
-                  <button
-                    onClick={() => handleDeleteTask(task.id)}
-                    className="inline-flex items-center px-3 py-2 mr-2 text-sm font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors duration-200"
-                    title="Eliminar tarea"
+          <>
+            {/* Filtrar y renderizar tareas */}
+            {tasks
+              .filter(task => 
+                activeFilter === 'all' ? true : 
+                activeFilter === 'pending' ? task.status === 'pending' : 
+                activeFilter === 'in_progress' ? task.status === 'in_progress' : 
+                activeFilter === 'completed' ? task.status === 'completed' : 
+                true
+              ).length === 0 ? (
+                <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+                  <svg
+                    className="mx-auto h-12 w-12 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                  {task.status === 'pending' && (
-                    <button
-                      data-task-id={task.id}
-                      onClick={() => handleStartTask(task)}
-                      className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Iniciar
-                    </button>
-                  )}
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                    />
+                  </svg>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No hay tareas con el filtro seleccionado</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Intenta con otro filtro o cambia a "Todas" para ver todas las tareas.
+                  </p>
                 </div>
-              </div>
-            </div>
-          ))
+              ) : (
+                tasks
+                  .filter(task => 
+                    activeFilter === 'all' ? true : 
+                    activeFilter === 'pending' ? task.status === 'pending' : 
+                    activeFilter === 'in_progress' ? task.status === 'in_progress' : 
+                    activeFilter === 'completed' ? task.status === 'completed' : 
+                    true
+                  )
+                  .map(task => (
+                    <div 
+                      key={task.id} 
+                      className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+                    >
+                      <div className="p-5">
+                        {/* Encabezado con área y prioridad */}
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                              </svg>
+                              <h3 className="font-semibold text-gray-800">
+                                {task.type === 'assignment' && task.sala 
+                                  ? `${task.sala.nombre} - ${task.area?.name || 'Área sin nombre'}` 
+                                  : (task.area?.name || 'Tarea de mantenimiento')}
+                              </h3>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {task.title || 'Servicio programado'}
+                            </p>
+                            
+                            {/* Mostrar fecha programada para asignaciones */}
+                            {task.type === 'assignment' && task.start_date && (
+                              <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                Programada: {new Date(task.start_date).toLocaleDateString()} 
+                                {task.start_time && ` a las ${task.start_time}`}
+                              </p>
+                            )}
+                            
+                            {/* Mostrar asignado a - especialmente útil para tareas del calendario */}
+                            <p className="text-xs text-gray-500 mt-1">
+                              {task.assignee ? 
+                                `Asignado a: ${task.assignee.first_name || ''} ${task.assignee.last_name || ''}`.trim() : 
+                                'Sin asignar'}
+                            </p>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1 ${
+                            task.status === 'completed' ? 'bg-green-100 text-green-700' :
+                            task.status === 'pending' ? 'bg-orange-100 text-orange-700' :
+                            task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {task.status === 'completed' ? (
+                              <>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Completada
+                              </>
+                            ) : task.status === 'pending' ? (
+                              <>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Pendiente
+                              </>
+                            ) : task.status === 'in_progress' ? (
+                              <>
+                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                En Progreso
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Cancelada
+                              </>
+                            )}
+                          </span>
+                        </div>
+
+                        {/* Información adicional */}
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div className="flex items-center gap-2">
+                            <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span className="text-sm text-gray-600">
+                              Creada: {new Date(task.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                          {task.due_date && (
+                            <div className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              <span className="text-sm text-gray-600">
+                                Fecha límite: {new Date(task.due_date).toLocaleDateString()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {task.description && (
+                          <div className="mb-4 text-sm text-gray-600 line-clamp-2">
+                            {task.description}
+                          </div>
+                        )}
+
+                        {/* Botones de acción */}
+                        <div className="flex justify-end">
+                          <button
+                            onClick={() => handleDeleteTask(task.id)}
+                            className="inline-flex items-center px-3 py-2 mr-2 text-sm font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors duration-200"
+                            title="Eliminar tarea"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                          {task.status === 'pending' && (
+                            <button
+                              data-task-id={task.id}
+                              onClick={() => handleStartTask(task)}
+                              className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Iniciar
+                            </button>
+                          )}
+                          {task.status === 'in_progress' && (
+                            <button
+                              data-task-id={task.id}
+                              onClick={() => handleContinueTask(task)}
+                              className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-sm hover:shadow"
+                            >
+                              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Continuar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+              )}
+          </>
         )}
       </div>
     </main>

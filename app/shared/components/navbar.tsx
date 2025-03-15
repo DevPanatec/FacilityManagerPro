@@ -96,11 +96,6 @@ const NAV_ITEMS: NavItems = {
       icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'
     },
     { 
-      label: 'Recursos Humanos',
-      href: '/shared/rrhh',
-      icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z'
-    },
-    { 
       label: 'Inventario',
       href: '/shared/inventory',
       icon: 'M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4'
@@ -136,19 +131,22 @@ interface NavbarProps {
   organizationName?: string;
 }
 
-export default function Navbar({ role = '', isEnterprise = false, organizationName }: NavbarProps) {
+export default function Navbar({ role = '', isEnterprise = false, organizationName = '' }: NavbarProps) {
   const router = useRouter()
   const pathname = usePathname();
   const [userRole, setUserRole] = useState<UserRole>((role || 'enterprise') as UserRole);
 
   useEffect(() => {
+    // Log para depuración
+    console.log('Navbar recibió organizationName:', organizationName);
+    
     const storedRole = localStorage.getItem('userRole');
     if (storedRole) {
       setUserRole(storedRole.toLowerCase() as UserRole);
     } else if (isEnterprise) {
       setUserRole('enterprise');
     }
-  }, [role, isEnterprise]);
+  }, [role, isEnterprise, organizationName]);
 
   // Si isEnterprise es true, forzamos el rol enterprise
   const effectiveRole = (isEnterprise ? 'enterprise' : userRole) as UserRole;
@@ -167,7 +165,7 @@ export default function Navbar({ role = '', isEnterprise = false, organizationNa
         <div className="flex items-center space-x-3">
           {effectiveRole === 'enterprise' ? (
             <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">
-              San Miguel Arcángel
+              {organizationName || localStorage.getItem('organizationName') || ''}
             </h1>
           ) : (
             <>

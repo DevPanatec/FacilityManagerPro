@@ -11,20 +11,17 @@ const generateNonce = () => {
 
 // Content Security Policy
 const getCSP = (nonce: string) => {
-  const isDevelopment = process.env.NODE_ENV === 'development'
-  
-  const scriptSrc = isDevelopment
-    ? "'self' 'unsafe-eval' 'unsafe-inline'"
-    : `'self' 'nonce-${nonce}' 'strict-dynamic' https:`
-
+  // Política más permisiva sin nonce para evitar conflictos
+  // El nonce se genera pero no se usa en la directiva script-src
   return `
     default-src 'self';
-    script-src ${scriptSrc};
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' https:;
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     img-src 'self' blob: data: https://*.supabase.co https://*.githubusercontent.com;
     font-src 'self' https://fonts.gstatic.com;
-    connect-src 'self' https://*.supabase.co wss://*.supabase.co;
-    frame-ancestors 'none';
+    connect-src 'self' https://*.supabase.co wss://*.supabase.co https:;
+    frame-src 'self' https://vercel.live https: data:;
+    frame-ancestors 'self';
     base-uri 'self';
     form-action 'self';
     upgrade-insecure-requests;

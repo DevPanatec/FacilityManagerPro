@@ -162,31 +162,156 @@ export default function EnterpriseOverviewPage() {
   const [selectedInventoryItem, setSelectedInventoryItem] = useState<InventoryItem | null>(null);
   const [showInventoryModal, setShowInventoryModal] = useState(false);
   const [inventoryModalMode, setInventoryModalMode] = useState<'edit' | 'use' | 'restock'>('use');
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [organizationName, setOrganizationName] = useState<string>('Enterprise Dashboard');
+  const [organizationId, setOrganizationId] = useState<string>('');
+  const [orgConfig, setOrgConfig] = useState<any>(null);
 
   const supabase = createClientComponentClient();
 
+  // Función para obtener configuraciones específicas según la organización
+  const getOrganizationConfig = (orgId: string) => {
+    // Mapa de configuraciones por ID de organización
+    const configs: Record<string, any> = {
+      'org-id-1': {
+        title: organizationName,
+        primaryColor: 'blue',
+        secondaryColor: 'green',
+        accentColor: 'purple'
+      },
+      'org-id-2': {
+        title: organizationName,
+        primaryColor: 'green',
+        secondaryColor: 'teal',
+        accentColor: 'indigo'
+      },
+      // Puedes agregar más organizaciones según sea necesario
+    };
+    
+    // Devolver la configuración para el ID proporcionado o una configuración por defecto
+    return configs[orgId] || { 
+      title: organizationName,
+      primaryColor: 'blue', 
+      secondaryColor: 'indigo', 
+      accentColor: 'purple' 
+    };
+  };
+
   const getSalaColor = (salaName: string): string => {
+    // Colores específicos para el Instituto de Salud Mental Matías Hernández
+    if (organizationName.includes('Instituto de Salud Mental Matías Hernández')) {
+      const mentalHealthColors: { [key: string]: string } = {
+        'MEDICINA DE VARONES': '#4F46E5',      // Índigo intenso
+        'MEDICINA DE MUJERES': '#EC4899',      // Rosa intenso
+        'SALA DE PARTOS': '#F59E0B',           // Ámbar brillante
+        'SALÓN DE OPERACIONES': '#059669',     // Verde esmeralda
+        'SALA DE EMERGENCIAS': '#EF4444',      // Rojo brillante
+        'NUTRICION Y DIETETICA': '#06B6D4',    // Cyan brillante
+        'RADIOLOGIA / USG': '#F97316',         // Naranja vibrante
+        'PSIQUIATRÍA': '#8B5CF6',              // Púrpura vibrante
+        'PATOLOGÍA': '#8B5CF6',                // Púrpura vibrante
+        'AREAS ADMINISTRATIVAS': '#059669',    // Verde esmeralda
+        'CLÍNICA DE HERIDAS': '#F97316',       // Naranja vibrante
+        'FARMACIA': '#10B981',                 // Verde esmeralda claro
+      };
+      return mentalHealthColors[salaName] || '#4F46E5'; // Color por defecto
+    }
+    
+    // Colores originales para otras organizaciones (Hospital San Miguel Arcángel)
     const colors: { [key: string]: string } = {
-      'Baños': '#4F46E5',         // Índigo intenso
-      'Cocina': '#059669',        // Verde esmeralda
-      'Oficinas': '#F59E0B',      // Ámbar brillante
-      'Recepción': '#EC4899',     // Rosa intenso
-      'Sala de Reuniones': '#8B5CF6', // Violeta vibrante
-      'Almacén': '#06B6D4',       // Cyan brillante
-      'Laboratorio': '#F97316',   // Naranja vibrante
-      'Aula': '#10B981',          // Verde esmeralda claro
-      'Sala de Espera': '#6366F1', // Índigo claro
-      'Cafetería': '#EF4444',     // Rojo brillante
-      'Biblioteca': '#8B5CF6',    // Púrpura vibrante
-      'Gimnasio': '#F43F5E'       // Rosa rojizo
+      'MEDICINA DE VARONES': '#4F46E5',      // Índigo intenso
+      'MEDICINA DE MUJERES': '#EC4899',      // Rosa intenso
+      'SALA DE PARTOS': '#F59E0B',           // Ámbar brillante
+      'SALÓN DE OPERACIONES': '#059669',     // Verde esmeralda
+      'SALA DE EMERGENCIAS': '#EF4444',      // Rojo brillante
+      'NUTRICION Y DIETETICA': '#06B6D4',    // Cyan brillante
+      'RADIOLOGIA / USG': '#F97316',         // Naranja vibrante
+      'OBSTETRICIA A': '#10B981',            // Verde esmeralda claro
+      'PEDIATRÍA': '#6366F1',                // Índigo claro
+      'PSIQUIATRÍA': '#8B5CF6',              // Púrpura vibrante
+      'UCI': '#F43F5E',                      // Rosa rojizo
+      'PATOLOGÍA': '#8B5CF6',                // Púrpura vibrante
+      'AREAS ADMINISTRATIVAS': '#059669',    // Verde esmeralda
+      'CLÍNICA DE HERIDAS': '#F97316',       // Naranja vibrante
+      'NEONATOLOGÍA': '#4F46E5',             // Índigo intenso
+      'FARMACIA': '#10B981',                 // Verde esmeralda claro
+      'CENTRAL DE EQUIPOS': '#F59E0B',       // Ámbar brillante
+      'OBSTETRICIA B': '#EC4899'             // Rosa intenso
     };
     return colors[salaName] || '#4F46E5'; // Color por defecto
   };
 
-  // Cargar datos del dashboard
+  const getActiveShift = () => {
+    const hour = currentTime.getHours();
+    
+    if (hour >= 6 && hour < 14) {
+      return 'morning';
+    } else if (hour >= 14 && hour < 22) {
+      return 'afternoon';
+    } else {
+      return 'night';
+    }
+  };
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
+    
+    return () => clearInterval(timer);
+  }, []);
+
+  const activeShift = getActiveShift();
+
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  // Pesos de distribución por sala según la organización
+  const getSalaWeights = () => {
+    // Pesos específicos para el Instituto de Salud Mental Matías Hernández
+    if (organizationName.includes('Instituto de Salud Mental Matías Hernández')) {
+      return {
+        'MEDICINA DE VARONES': 0.20,        // Mayor peso para salas principales
+        'MEDICINA DE MUJERES': 0.05,
+        'SALA DE PARTOS': 0.05,
+        'SALÓN DE OPERACIONES': 0.05,
+        'SALA DE EMERGENCIAS': 0.05,
+        'NUTRICION Y DIETETICA': 0.05,
+        'RADIOLOGIA / USG': 0.05,
+        'PSIQUIATRÍA': 0.20,                // Mayor peso para psiquiatría en instituto mental
+        'PATOLOGÍA': 0.10,
+        'AREAS ADMINISTRATIVAS': 0.05,
+        'CLÍNICA DE HERIDAS': 0.05,
+        'FARMACIA': 0.10
+      };
+    }
+    
+    // Pesos originales para otras organizaciones (Hospital San Miguel Arcángel)
+    return {
+      'MEDICINA DE VARONES': 0.17,
+      'MEDICINA DE MUJERES': 0.05,
+      'SALA DE PARTOS': 0.05,
+      'SALÓN DE OPERACIONES': 0.05,
+      'SALA DE EMERGENCIAS': 0.05,
+      'NUTRICION Y DIETETICA': 0.02,
+      'RADIOLOGIA / USG': 0.08,
+      'OBSTETRICIA A': 0.05,
+      'PEDIATRÍA': 0.10,
+      'PSIQUIATRÍA': 0.05, 
+      'UCI': 0.10,
+      'PATOLOGÍA': 0.04,
+      'AREAS ADMINISTRATIVAS': 0.05,
+      'CLÍNICA DE HERIDAS': 0.04,
+      'NEONATOLOGÍA': 0.05,
+      'FARMACIA': 0.05,
+      'CENTRAL DE EQUIPOS': 0.02,
+      'OBSTETRICIA B': 0.05
+    };
+  };
+
+  // Obtener los pesos según la organización actual
+  const salaWeights = getSalaWeights();
 
   const loadDashboardData = async () => {
     try {
@@ -205,7 +330,25 @@ export default function EnterpriseOverviewPage() {
       if (!userProfile) throw new Error('Usuario no encontrado');
       if (!userProfile.organization_id) throw new Error('Usuario no tiene organización asignada');
 
-      // Cargar datos del inventario
+      // Guardar el ID de la organización
+      setOrganizationId(userProfile.organization_id);
+      
+      // Establecer la configuración de la organización
+      setOrgConfig(getOrganizationConfig(userProfile.organization_id));
+
+      // Obtener el nombre de la organización
+      const { data: organizationData, error: organizationError } = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', userProfile.organization_id)
+        .single();
+
+      if (organizationError) {
+        console.error('Error al cargar la organización:', organizationError);
+      } else if (organizationData) {
+        setOrganizationName(organizationData.name);
+      }
+
       const { data: inventoryData, error: inventoryError } = await supabase
         .from('inventory_items')
         .select('*')
@@ -219,7 +362,6 @@ export default function EnterpriseOverviewPage() {
       setInventory(inventoryData || []);
       console.log('Datos de inventario cargados:', inventoryData);
 
-      // 2. Obtener perfil del usuario
       const { data: userProfileData, error: profileError } = await supabase
         .from('users')
         .select('*')
@@ -234,7 +376,6 @@ export default function EnterpriseOverviewPage() {
         throw new Error('Perfil no encontrado');
       }
 
-      // 3. Consulta simple a salas
       const { data: salasData, error: salasError } = await supabase
         .from('salas')
         .select('*')
@@ -248,7 +389,6 @@ export default function EnterpriseOverviewPage() {
         throw new Error(`Error al cargar salas: ${salasError.message}`);
       }
 
-      // 4. Cargar áreas para cada sala
       const { data: areasData, error: areasError } = await supabase
         .from('areas')
         .select('*')
@@ -260,7 +400,6 @@ export default function EnterpriseOverviewPage() {
         throw new Error(`Error al cargar áreas: ${areasError.message}`);
       }
 
-      // 5. Cargar tareas
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
         .select(`
@@ -268,7 +407,7 @@ export default function EnterpriseOverviewPage() {
           assignee:assigned_to(id, first_name, last_name)
         `)
         .eq('organization_id', userProfileData.organization_id)
-        .not('assigned_to', 'is', null); // Solo tareas asignadas
+        .not('assigned_to', 'is', null);
 
       if (tasksError) {
         console.error('Error al cargar tareas:', tasksError);
@@ -280,7 +419,6 @@ export default function EnterpriseOverviewPage() {
         setAreas([]);
         setAreasTasks([]);
       } else {
-        // 6. Formatear y establecer datos de salas con sus áreas y tareas
         const formattedSalas = salasData.map(sala => {
           const salaAreas = areasData?.filter(area => area.sala_id === sala.id) || [];
           const salaTasks = tasksData?.filter(task => 
@@ -313,7 +451,6 @@ export default function EnterpriseOverviewPage() {
     }
   };
 
-  // Estadísticas generales
   const stats = useMemo(() => {
     const totalStaff = staff.length;
     const activeStaff = staff.filter(member => member.status === 'active').length;
@@ -324,15 +461,118 @@ export default function EnterpriseOverviewPage() {
 
   const handleInventoryModalSubmit = async (formData: any) => {
     try {
-      // Aquí irá la lógica para manejar el submit del modal
       console.log('Form data submitted:', formData);
       setShowInventoryModal(false);
-      await loadDashboardData(); // Recargar los datos después de la operación
+      await loadDashboardData();
     } catch (error) {
       console.error('Error al procesar la operación:', error);
       toast.error('Error al procesar la operación');
     }
   };
+
+  // Definir la cantidad de personal por turno según la organización
+  const getStaffCountsByOrganization = () => {
+    // Verificar si es el Instituto de Salud Mental Matías Hernández - verifica por nombre
+    if (organizationName.includes('Instituto de Salud Mental Matías Hernández')) {
+      console.log('Usando cantidades de personal para Instituto de Salud Mental');
+      return {
+        morning: 25,
+        afternoon: 11,
+        night: 6
+      };
+    }
+    // Valores por defecto (Hospital San Miguel Arcángel)
+    return {
+      morning: 41,
+      afternoon: 18,
+      night: 16
+    };
+  };
+
+  // Obtener los conteos según la organización actual
+  const staffCounts = getStaffCountsByOrganization();
+  const morningStaffCount = staffCounts.morning;
+  const afternoonStaffCount = staffCounts.afternoon;
+  const nightStaffCount = staffCounts.night;
+
+  // Obtener la cantidad de personal según el turno activo
+  const getActiveStaffCount = () => {
+    switch (activeShift) {
+      case 'morning':
+        return morningStaffCount;
+      case 'afternoon':
+        return afternoonStaffCount;
+      case 'night':
+        return nightStaffCount;
+      default:
+        return 0;
+    }
+  };
+
+  // Función separada para distribuir personal a áreas
+  const distributeStaffToAreas = (
+    areaList: Sala[], 
+    activeCount: number, 
+    weights: { [key: string]: number }
+  ): Sala[] => {
+    let remainingStaff = activeCount;
+    
+    const distributedAreas = areaList.map(area => {
+      const salaName = area.name || '';
+      const weight = weights[salaName] || (1 / areaList.length); // Peso por defecto si no está definido
+      
+      // Calcular el número de personal para esta sala
+      let staffCount = Math.floor(activeCount * weight);
+      
+      // Ajustar el conteo para asegurar que sumamos exactamente al total
+      if (remainingStaff < staffCount) {
+        staffCount = remainingStaff;
+      }
+      
+      remainingStaff -= staffCount;
+      
+      return {
+        ...area,
+        staff_count: staffCount
+      };
+    });
+    
+    // Si queda personal sin asignar, asignarlo a la primera sala
+    if (remainingStaff > 0 && distributedAreas.length > 0) {
+      distributedAreas[0].staff_count += remainingStaff;
+    }
+    
+    return distributedAreas;
+  };
+
+  // Función para distribuir el personal por sala según el turno activo
+  const distributeStaffBySala = (): Sala[] => {
+    const activeCount = getActiveStaffCount();
+    const totalSalas = areas.length;
+    
+    // Si no hay salas o personal, no hacer nada
+    if (totalSalas === 0 || activeCount === 0) {
+      // Crear áreas médicas por defecto si no hay datos
+      const defaultAreas: Sala[] = Object.keys(salaWeights).map((name, index) => ({
+        id: `default-area-${index}`,
+        name,
+        color: getSalaColor(name),
+        staff_count: 0,
+        // Añadir propiedades requeridas para Sala
+        organization_id: ''
+      }));
+      
+      return distributeStaffToAreas(defaultAreas, activeCount, salaWeights);
+    }
+    
+    return distributeStaffToAreas(areas, activeCount, salaWeights);
+  };
+  
+  // Distribuir el personal según el turno activo
+  const distributedAreas = distributeStaffBySala();
+  
+  // Calcular el total de personal distribuido para los porcentajes
+  const totalDistributedStaff = distributedAreas.reduce((total: number, area: Sala) => total + area.staff_count, 0);
 
   if (loading) {
     return (
@@ -358,6 +598,26 @@ export default function EnterpriseOverviewPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      <div className="mb-6">
+        <h1 className={`text-3xl font-bold text-${orgConfig?.primaryColor || 'blue'}-800 mb-2`}>
+          {organizationName}
+        </h1>
+        <div className={`h-1 w-32 bg-${orgConfig?.primaryColor || 'blue'}-500 rounded`}></div>
+        
+        {/* Elementos específicos según la organización */}
+        {orgConfig && organizationId === 'org-id-1' && (
+          <div className="mt-2 text-sm text-gray-600">
+            {organizationName} - Centro de excelencia en salud
+          </div>
+        )}
+        
+        {orgConfig && organizationId === 'org-id-2' && (
+          <div className="mt-2 text-sm text-gray-600">
+            {organizationName} - Especialistas en salud mental
+          </div>
+        )}
+      </div>
+      
       <div className="flex justify-between items-center mb-6">
         <button className="text-blue-600 hover:text-blue-700 flex items-center gap-2">
           <span>Ver Todo el Personal ({staff.length})</span>
@@ -367,106 +627,111 @@ export default function EnterpriseOverviewPage() {
         </button>
       </div>
 
-      {/* Grid Principal */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Columna Izquierda y Central - Turnos y Salas */}
         <div className="lg:col-span-2 space-y-6">
           <h2 className="text-2xl font-bold text-gray-800">Turnos Activos</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Turno Mañana */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'morning' ? 'ring-2 ring-blue-500' : ''}`}>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold text-gray-800">Mañana</h3>
                 <p className="text-sm text-gray-500">6:00 - 14:00</p>
               </div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
-                  {shifts.filter(s => s.shift_type === 'morning' && s.status === 'in_progress').length} activos
+                  {activeShift === 'morning' ? morningStaffCount : shifts.filter(s => s.shift_type === 'morning' && s.status === 'in_progress').length} activos
                 </span>
+                {activeShift === 'morning' && (
+                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                    Activo ahora
+                  </span>
+                )}
               </div>
               <div className="mt-2">
                 <div className="flex justify-between text-sm mb-1">
                   <span className="text-gray-500">Capacidad</span>
                   <span className="font-medium">
-                    {shifts.filter(s => s.shift_type === 'morning' && s.status === 'in_progress').length}/15
+                    {activeShift === 'morning' ? `${morningStaffCount}/${morningStaffCount}` : `0/${morningStaffCount}`}
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
                     className="h-2 rounded-full bg-blue-500" 
-                    style={{ 
-                      width: `${(shifts.filter(s => s.shift_type === 'morning' && s.status === 'in_progress').length / 15) * 100}%` 
-                    }} 
+                    style={{ width: activeShift === 'morning' ? '100%' : '0%' }} 
                   />
                 </div>
               </div>
             </div>
 
-            {/* Turno Tarde */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'afternoon' ? 'ring-2 ring-green-500' : ''}`}>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold text-gray-800">Tarde</h3>
                 <p className="text-sm text-gray-500">14:00 - 22:00</p>
               </div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-green-600 bg-green-50 px-2 py-1 rounded-full">
-                  {shifts.filter(s => s.shift_type === 'afternoon' && s.status === 'in_progress').length} activos
+                  {activeShift === 'afternoon' ? afternoonStaffCount : shifts.filter(s => s.shift_type === 'afternoon' && s.status === 'in_progress').length} activos
                 </span>
+                {activeShift === 'afternoon' && (
+                  <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                    Activo ahora
+                  </span>
+                )}
               </div>
               <div className="mt-2">
                 <div className="flex justify-between text-sm mb-1">
                   <span className="text-gray-500">Capacidad</span>
                   <span className="font-medium">
-                    {shifts.filter(s => s.shift_type === 'afternoon' && s.status === 'in_progress').length}/12
+                    {activeShift === 'afternoon' ? `${afternoonStaffCount}/${afternoonStaffCount}` : `0/${afternoonStaffCount}`}
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
                     className="h-2 rounded-full bg-green-500" 
-                    style={{ 
-                      width: `${(shifts.filter(s => s.shift_type === 'afternoon' && s.status === 'in_progress').length / 12) * 100}%` 
-                    }} 
+                    style={{ width: activeShift === 'afternoon' ? '100%' : '0%' }} 
                   />
                 </div>
               </div>
             </div>
 
-            {/* Turno Noche */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'night' ? 'ring-2 ring-purple-500' : ''}`}>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold text-gray-800">Noche</h3>
                 <p className="text-sm text-gray-500">22:00 - 6:00</p>
               </div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
-                  {shifts.filter(s => s.shift_type === 'night' && s.status === 'in_progress').length} activos
+                  {activeShift === 'night' ? nightStaffCount : shifts.filter(s => s.shift_type === 'night' && s.status === 'in_progress').length} activos
                 </span>
+                {activeShift === 'night' && (
+                  <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                    Activo ahora
+                  </span>
+                )}
               </div>
               <div className="mt-2">
                 <div className="flex justify-between text-sm mb-1">
                   <span className="text-gray-500">Capacidad</span>
                   <span className="font-medium">
-                    {shifts.filter(s => s.shift_type === 'night' && s.status === 'in_progress').length}/8
+                    {activeShift === 'night' ? `${nightStaffCount}/${nightStaffCount}` : `0/${nightStaffCount}`}
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
                     className="h-2 rounded-full bg-purple-500" 
-                    style={{ 
-                      width: `${(shifts.filter(s => s.shift_type === 'night' && s.status === 'in_progress').length / 8) * 100}%` 
-                    }} 
+                    style={{ width: activeShift === 'night' ? '100%' : '0%' }} 
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Distribución por Salas */}
           <div className="bg-white rounded-xl shadow-lg p-6">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-semibold text-gray-800">
-                Distribución por Salas
+                {organizationName.includes('Instituto de Salud Mental Matías Hernández') 
+                  ? 'Distribución por Áreas Psiquiátricas' 
+                  : 'Distribución por Salas'}
               </h3>
               <div className="flex gap-2">
                 <button className="p-2 rounded hover:bg-gray-100">
@@ -483,28 +748,15 @@ export default function EnterpriseOverviewPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Gráfico de Dona */}
               <div className="h-64 bg-gray-50 rounded-lg p-4">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={[
-                        {
-                          name: 'Turno Mañana',
-                          value: shifts.filter(s => s.shift_type === 'morning' && s.status === 'in_progress').length || 1,
-                          color: '#EAB308' // yellow-500
-                        },
-                        {
-                          name: 'Turno Tarde',
-                          value: shifts.filter(s => s.shift_type === 'afternoon' && s.status === 'in_progress').length || 1,
-                          color: '#F97316' // orange-500
-                        },
-                        {
-                          name: 'Turno Noche',
-                          value: shifts.filter(s => s.shift_type === 'night' && s.status === 'in_progress').length || 1,
-                          color: '#6366F1' // indigo-500
-                        }
-                      ]}
+                      data={distributedAreas.map(area => ({
+                        name: area.name,
+                        value: area.staff_count,
+                        color: getSalaColor(area.name || '')
+                      }))}
                       cx="50%"
                       cy="50%"
                       innerRadius={60}
@@ -512,12 +764,8 @@ export default function EnterpriseOverviewPage() {
                       paddingAngle={5}
                       dataKey="value"
                     >
-                      {[
-                        '#EAB308', // yellow-500 para mañana
-                        '#F97316', // orange-500 para tarde
-                        '#6366F1'  // indigo-500 para noche
-                      ].map((color, index) => (
-                        <Cell key={`cell-${index}`} fill={color} />
+                      {distributedAreas.map((area, index) => (
+                        <Cell key={`cell-${index}`} fill={getSalaColor(area.name || '')} />
                       ))}
                     </Pie>
                     <Tooltip 
@@ -529,29 +777,16 @@ export default function EnterpriseOverviewPage() {
                       }}
                       itemStyle={{ color: '#374151' }}
                     />
-                    <Legend 
-                      verticalAlign="middle" 
-                      align="right"
-                      layout="vertical"
-                      formatter={(value, entry: any) => (
-                        <span style={{ 
-                          color: entry.color,
-                          fontWeight: 500
-                        }}>
-                          {value}
-                        </span>
-                      )}
-                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
 
-              {/* Lista de Salas */}
               <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-                {areas.map(area => {
-                  const areaStaff = staff.filter(s => s.area_name === area.name).length;
-                  const percentage = Math.round((areaStaff / staff.length) * 100);
-                  const areaColor = getSalaColor(area.name);
+                {distributedAreas.map(area => {
+                  const areaColor = getSalaColor(area.name || '');
+                  const percentage = totalDistributedStaff > 0 
+                    ? Math.round((area.staff_count / totalDistributedStaff) * 100) 
+                    : 0;
                   
                   return (
                     <div key={area.id} className="flex items-center justify-between py-2 px-4 hover:bg-gray-50 rounded-lg transition-colors duration-150">
@@ -560,7 +795,7 @@ export default function EnterpriseOverviewPage() {
                         <span className="text-gray-700">{area.name}</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-gray-500">{areaStaff} personal</span>
+                        <span className="text-gray-500">{area.staff_count} personal</span>
                         <span 
                           className="text-sm font-medium px-2 py-0.5 rounded" 
                           style={{ 
@@ -579,7 +814,6 @@ export default function EnterpriseOverviewPage() {
           </div>
         </div>
 
-        {/* Columna Derecha - Inventario */}
         <div className="lg:col-span-1">
           <div className="sticky top-6">
             <div className="flex justify-between items-center mb-6">
@@ -661,7 +895,6 @@ export default function EnterpriseOverviewPage() {
         </div>
       </div>
 
-      {/* Tareas por Sala - ahora fuera del grid principal */}
       <div className="mt-8">
         <h2 className="text-2xl font-bold text-gray-800 mb-6">Tareas por Sala</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -671,7 +904,6 @@ export default function EnterpriseOverviewPage() {
             const progressPercentage = sala.tasks.length > 0 ? (completedTasks / sala.tasks.length) * 100 : 0;
             const salaColor = getSalaColor(sala.name);
 
-            // Filtrar solo las áreas que tienen tareas asignadas
             const areasWithTasks = sala.areas.filter(area => 
               sala.tasks.some(task => task.area_id === area.id)
             );
@@ -679,13 +911,11 @@ export default function EnterpriseOverviewPage() {
             return (
               <div key={sala.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
                 <div className="p-6 border-l-4" style={{ borderColor: salaColor }}>
-                  {/* Encabezado de la Sala */}
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold" style={{ color: salaColor }}>{sala.name}</h3>
                     <span className="text-sm text-gray-500">{sala.tasks.length} tareas</span>
                   </div>
 
-                  {/* Lista de Áreas y sus Tareas */}
                   <div className="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
                     {areasWithTasks.map(area => {
                       const areaTasks = sala.tasks.filter(task => task.area_id === area.id);
@@ -725,7 +955,6 @@ export default function EnterpriseOverviewPage() {
                     })}
                   </div>
 
-                  {/* Barra de Progreso */}
                   <div className="mt-4 flex items-center justify-between">
                     <span className="text-sm text-gray-500">Progreso General</span>
                     <span className="text-sm" style={{ color: salaColor }}>{progress}</span>
@@ -746,7 +975,6 @@ export default function EnterpriseOverviewPage() {
         </div>
       </div>
 
-      {/* Modal de Inventario */}
       {showInventoryModal && selectedInventoryItem && (
         <InventoryModal
           isOpen={showInventoryModal}
