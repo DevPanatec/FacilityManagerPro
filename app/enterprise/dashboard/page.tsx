@@ -9,6 +9,8 @@ import {
 import { FaClock, FaRegCalendarCheck } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 import InventoryModal from '@/app/shared/inventory/components/InventoryModal';
+import { motion, AnimatePresence } from 'framer-motion';
+import CountUp from 'react-countup';
 
 interface User {
   first_name: string
@@ -268,7 +270,7 @@ export default function EnterpriseOverviewPage() {
   }, []);
 
   // Pesos de distribución por sala según la organización
-  const getSalaWeights = () => {
+  const getSalaWeights = (): { [key: string]: number } => {
     // Pesos específicos para el Instituto de Salud Mental Matías Hernández
     if (organizationName.includes('Instituto de Salud Mental Matías Hernández')) {
       return {
@@ -509,7 +511,7 @@ export default function EnterpriseOverviewPage() {
     }
   };
 
-  // Función separada para distribuir personal a áreas
+  // Función separada para distribuir personal a áreas con seguridad de tipos
   const distributeStaffToAreas = (
     areaList: Sala[], 
     activeCount: number, 
@@ -519,7 +521,8 @@ export default function EnterpriseOverviewPage() {
     
     const distributedAreas = areaList.map(area => {
       const salaName = area.name || '';
-      const weight = weights[salaName] || (1 / areaList.length); // Peso por defecto si no está definido
+      // Asegurarnos de que el peso existe, si no, usamos un valor por defecto
+      const weight = weights[salaName] || (1 / areaList.length); 
       
       // Calcular el número de personal para esta sala
       let staffCount = Math.floor(activeCount * weight);
@@ -543,6 +546,49 @@ export default function EnterpriseOverviewPage() {
     }
     
     return distributedAreas;
+  };
+
+  // Definir las animaciones para los efectos de pulsación con tipos correctos
+  const pulseVariants = {
+    pulse: {
+      scale: [1, 1.1, 1],
+      opacity: [0.7, 1, 0.7],
+      transition: {
+        duration: 2,
+        repeat: Infinity,
+        repeatType: "loop" as const
+      }
+    }
+  };
+
+  // Añadir un efecto de pulsación al estado activo con colores específicos
+  const getActiveStatusIndicator = (shiftType: 'morning' | 'afternoon' | 'night') => {
+    if (activeShift === shiftType) {
+      const colors = {
+        morning: 'blue',
+        afternoon: 'green',
+        night: 'purple'
+      };
+      
+      const color = colors[shiftType];
+      
+      return (
+        <motion.span 
+          className={`text-xs bg-${color}-100 text-${color}-800 px-2 py-1 rounded-full flex items-center`}
+          initial={{ opacity: 0 }}
+          animate="pulse"
+          variants={pulseVariants}
+        >
+          <motion.div 
+            className={`w-2 h-2 rounded-full bg-${color}-500 mr-1`}
+            animate={{ scale: [1, 1.2, 1] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          />
+          Activo ahora
+        </motion.span>
+      );
+    }
+    return null;
   };
 
   // Función para distribuir el personal por sala según el turno activo
@@ -577,7 +623,11 @@ export default function EnterpriseOverviewPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+        <motion.div 
+          className="rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+        ></motion.div>
       </div>
     );
   }
@@ -585,36 +635,70 @@ export default function EnterpriseOverviewPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center justify-center">
-        <div className="text-red-500 text-xl font-semibold mb-4">{error}</div>
-        <button
+        <motion.div 
+          className="text-red-500 text-xl font-semibold mb-4"
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+        >
+          {error}
+        </motion.div>
+        <motion.button
           onClick={loadDashboardData}
           className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
           Reintentar
-        </button>
+        </motion.button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <motion.div 
+      className="min-h-screen bg-gray-50 p-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
       <div className="mb-6">
-        <h1 className={`text-3xl font-bold text-${orgConfig?.primaryColor || 'blue'}-800 mb-2`}>
+        <motion.h1 
+          className={`text-3xl font-bold text-${orgConfig?.primaryColor || 'blue'}-800 mb-2`}
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
           {organizationName}
-        </h1>
-        <div className={`h-1 w-32 bg-${orgConfig?.primaryColor || 'blue'}-500 rounded`}></div>
+        </motion.h1>
+        <motion.div 
+          className={`h-1 w-32 bg-${orgConfig?.primaryColor || 'blue'}-500 rounded`}
+          initial={{ width: 0 }}
+          animate={{ width: "8rem" }}
+          transition={{ duration: 0.8, delay: 0.3 }}
+        ></motion.div>
         
         {/* Elementos específicos según la organización */}
         {orgConfig && organizationId === 'org-id-1' && (
-          <div className="mt-2 text-sm text-gray-600">
+          <motion.div 
+            className="mt-2 text-sm text-gray-600"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6 }}
+          >
             {organizationName} - Centro de excelencia en salud
-          </div>
+          </motion.div>
         )}
         
         {orgConfig && organizationId === 'org-id-2' && (
-          <div className="mt-2 text-sm text-gray-600">
+          <motion.div 
+            className="mt-2 text-sm text-gray-600"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6 }}
+          >
             {organizationName} - Especialistas en salud mental
-          </div>
+          </motion.div>
         )}
       </div>
       
@@ -632,20 +716,29 @@ export default function EnterpriseOverviewPage() {
           <h2 className="text-2xl font-bold text-gray-800">Turnos Activos</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'morning' ? 'ring-2 ring-blue-500' : ''}`}>
+            <motion.div 
+              className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'morning' ? 'ring-2 ring-blue-500' : ''}`}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              whileHover={{ scale: 1.02 }}
+            >
               <div className="mb-4">
                 <h3 className="text-xl font-semibold text-gray-800">Mañana</h3>
                 <p className="text-sm text-gray-500">6:00 - 14:00</p>
               </div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
-                  {activeShift === 'morning' ? morningStaffCount : shifts.filter(s => s.shift_type === 'morning' && s.status === 'in_progress').length} activos
-                </span>
-                {activeShift === 'morning' && (
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                    Activo ahora
-                  </span>
-                )}
+                <motion.span 
+                  className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded-full"
+                  initial={{ scale: 0.8 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {activeShift === 'morning' ? 
+                    <CountUp end={morningStaffCount} duration={2} /> : 
+                    shifts.filter(s => s.shift_type === 'morning' && s.status === 'in_progress').length} activos
+                </motion.span>
+                {getActiveStatusIndicator('morning')}
               </div>
               <div className="mt-2">
                 <div className="flex justify-between text-sm mb-1">
@@ -654,29 +747,40 @@ export default function EnterpriseOverviewPage() {
                     {activeShift === 'morning' ? `${morningStaffCount}/${morningStaffCount}` : `0/${morningStaffCount}`}
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
+                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <motion.div 
                     className="h-2 rounded-full bg-blue-500" 
-                    style={{ width: activeShift === 'morning' ? '100%' : '0%' }} 
+                    initial={{ width: "0%" }}
+                    animate={{ width: activeShift === 'morning' ? '100%' : '0%' }}
+                    transition={{ duration: 1, ease: "easeOut" }}
                   />
                 </div>
               </div>
-            </div>
+            </motion.div>
 
-            <div className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'afternoon' ? 'ring-2 ring-green-500' : ''}`}>
+            <motion.div 
+              className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'afternoon' ? 'ring-2 ring-green-500' : ''}`}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              whileHover={{ scale: 1.02 }}
+            >
               <div className="mb-4">
                 <h3 className="text-xl font-semibold text-gray-800">Tarde</h3>
                 <p className="text-sm text-gray-500">14:00 - 22:00</p>
               </div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-green-600 bg-green-50 px-2 py-1 rounded-full">
-                  {activeShift === 'afternoon' ? afternoonStaffCount : shifts.filter(s => s.shift_type === 'afternoon' && s.status === 'in_progress').length} activos
-                </span>
-                {activeShift === 'afternoon' && (
-                  <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                    Activo ahora
-                  </span>
-                )}
+                <motion.span 
+                  className="text-sm text-green-600 bg-green-50 px-2 py-1 rounded-full"
+                  initial={{ scale: 0.8 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {activeShift === 'afternoon' ? 
+                    <CountUp end={afternoonStaffCount} duration={2} /> : 
+                    shifts.filter(s => s.shift_type === 'afternoon' && s.status === 'in_progress').length} activos
+                </motion.span>
+                {getActiveStatusIndicator('afternoon')}
               </div>
               <div className="mt-2">
                 <div className="flex justify-between text-sm mb-1">
@@ -685,29 +789,40 @@ export default function EnterpriseOverviewPage() {
                     {activeShift === 'afternoon' ? `${afternoonStaffCount}/${afternoonStaffCount}` : `0/${afternoonStaffCount}`}
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
+                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <motion.div 
                     className="h-2 rounded-full bg-green-500" 
-                    style={{ width: activeShift === 'afternoon' ? '100%' : '0%' }} 
+                    initial={{ width: "0%" }}
+                    animate={{ width: activeShift === 'afternoon' ? '100%' : '0%' }}
+                    transition={{ duration: 1, ease: "easeOut" }}
                   />
                 </div>
               </div>
-            </div>
+            </motion.div>
 
-            <div className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'night' ? 'ring-2 ring-purple-500' : ''}`}>
+            <motion.div 
+              className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'night' ? 'ring-2 ring-purple-500' : ''}`}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              whileHover={{ scale: 1.02 }}
+            >
               <div className="mb-4">
                 <h3 className="text-xl font-semibold text-gray-800">Noche</h3>
                 <p className="text-sm text-gray-500">22:00 - 6:00</p>
               </div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
-                  {activeShift === 'night' ? nightStaffCount : shifts.filter(s => s.shift_type === 'night' && s.status === 'in_progress').length} activos
-                </span>
-                {activeShift === 'night' && (
-                  <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
-                    Activo ahora
-                  </span>
-                )}
+                <motion.span 
+                  className="text-sm text-purple-600 bg-purple-50 px-2 py-1 rounded-full"
+                  initial={{ scale: 0.8 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {activeShift === 'night' ? 
+                    <CountUp end={nightStaffCount} duration={2} /> : 
+                    shifts.filter(s => s.shift_type === 'night' && s.status === 'in_progress').length} activos
+                </motion.span>
+                {getActiveStatusIndicator('night')}
               </div>
               <div className="mt-2">
                 <div className="flex justify-between text-sm mb-1">
@@ -716,14 +831,16 @@ export default function EnterpriseOverviewPage() {
                     {activeShift === 'night' ? `${nightStaffCount}/${nightStaffCount}` : `0/${nightStaffCount}`}
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
+                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <motion.div 
                     className="h-2 rounded-full bg-purple-500" 
-                    style={{ width: activeShift === 'night' ? '100%' : '0%' }} 
+                    initial={{ width: "0%" }}
+                    animate={{ width: activeShift === 'night' ? '100%' : '0%' }}
+                    transition={{ duration: 1, ease: "easeOut" }}
                   />
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
 
           <div className="bg-white rounded-xl shadow-lg p-6">
@@ -749,66 +866,63 @@ export default function EnterpriseOverviewPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="h-64 bg-gray-50 rounded-lg p-4">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height={200}>
                   <PieChart>
                     <Pie
-                      data={distributedAreas.map(area => ({
+                      data={distributedAreas.map((area) => ({
                         name: area.name,
-                        value: area.staff_count,
-                        color: getSalaColor(area.name || '')
+                        value: area.staff_count
                       }))}
                       cx="50%"
                       cy="50%"
-                      innerRadius={60}
+                      labelLine={false}
                       outerRadius={80}
-                      paddingAngle={5}
+                      innerRadius={30}
+                      fill="#8884d8"
                       dataKey="value"
+                      animationBegin={0}
+                      animationDuration={1500}
+                      animationEasing="ease-out"
                     >
                       {distributedAreas.map((area, index) => (
-                        <Cell key={`cell-${index}`} fill={getSalaColor(area.name || '')} />
+                        <Cell key={`cell-${index}`} fill={area.color} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'white',
-                        border: 'none',
-                        borderRadius: '8px',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-                      }}
-                      itemStyle={{ color: '#374151' }}
-                    />
+                    <Tooltip />
+                    <Legend />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
 
               <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-                {distributedAreas.map(area => {
-                  const areaColor = getSalaColor(area.name || '');
-                  const percentage = totalDistributedStaff > 0 
-                    ? Math.round((area.staff_count / totalDistributedStaff) * 100) 
-                    : 0;
-                  
-                  return (
-                    <div key={area.id} className="flex items-center justify-between py-2 px-4 hover:bg-gray-50 rounded-lg transition-colors duration-150">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: areaColor }} />
-                        <span className="text-gray-700">{area.name}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-gray-500">{area.staff_count} personal</span>
-                        <span 
-                          className="text-sm font-medium px-2 py-0.5 rounded" 
-                          style={{ 
-                            backgroundColor: `${areaColor}15`,
-                            color: areaColor 
-                          }}
-                        >
-                          {percentage}%
-                        </span>
-                      </div>
+                {distributedAreas.slice(0, 6).map((area, index) => (
+                  <motion.div
+                    key={area.id}
+                    className="flex items-center justify-between py-2 px-4 hover:bg-gray-50 rounded-lg transition-colors duration-150"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.1 }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: area.color }} />
+                      <span className="text-gray-700">{area.name}</span>
                     </div>
-                  );
-                })}
+                    <div className="flex items-center gap-3">
+                      <span className="text-gray-500">{area.staff_count} personal</span>
+                      <span 
+                        className="text-sm font-medium px-2 py-0.5 rounded" 
+                        style={{ 
+                          backgroundColor: `${area.color}15`,
+                          color: area.color 
+                        }}
+                      >
+                        {totalDistributedStaff > 0
+                          ? `${Math.round((area.staff_count / totalDistributedStaff) * 100)}%`
+                          : '0%'}
+                      </span>
+                    </div>
+                  </motion.div>
+                ))}
               </div>
             </div>
           </div>
@@ -984,6 +1098,6 @@ export default function EnterpriseOverviewPage() {
           mode={inventoryModalMode}
         />
       )}
-    </div>
+    </motion.div>
   );
 }
