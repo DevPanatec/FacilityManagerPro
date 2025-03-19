@@ -7,6 +7,7 @@ import { User } from '@supabase/supabase-js';
 import SalaAreaSelector from '@/app/shared/components/componentes/SalaAreaSelector';
 import { toast } from 'react-hot-toast';
 import { errorHandler } from '@/app/utils/errorHandler';
+import { taskService, TaskWithRelations, configureTaskService } from '@/app/lib/services/task.service';
 
 interface WorkShiftData {
   id: string;
@@ -39,6 +40,7 @@ interface Task {
   priority: string;
   created_at: string;
   assigned_to?: string;
+  metadata?: { [key: string]: any } | null;
   assignee?: {
     first_name: string;
     last_name: string;
@@ -56,7 +58,10 @@ interface Sala {
   nombre: string;
   color: string;
   tareas: Task[];
-  areas: Area[];
+  areas: {
+    id: string;
+    name: string;
+  }[];
 }
 
 interface WorkShiftWithUsers {
@@ -141,7 +146,7 @@ export default function AssignmentsPage() {
   const [selectedDate, setSelectedDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [selectedTurno, setSelectedTurno] = useState('');
+  const [selectedTurno, setSelectedTurno] = useState<Turno | null>(null);
   const [selectedShiftUser, setSelectedShiftUser] = useState('');
   const [userMap, setUserMap] = useState<Record<string, string>>({});
   const [showTaskDetailsModal, setShowTaskDetailsModal] = useState(false);
@@ -151,6 +156,7 @@ export default function AssignmentsPage() {
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isDeepTasks, setIsDeepTasks] = useState(false);
+  const [userProfile, setUserProfile] = useState<{ organization_id: string, role: string } | null>(null);
 
   // Update the state definition with the proper type
   const [shiftHours, setShiftHours] = useState<ShiftHoursState>({
@@ -170,21 +176,42 @@ export default function AssignmentsPage() {
   // Update the loadShiftHours function with proper types
   const loadShiftHours = async () => {
     try {
+      console.log("Cargando horarios de turnos...");
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log("No hay usuario autenticado");
+        return;
+      }
 
-      const { data: userProfile } = await supabase
+      const { data: userProfile, error: profileError } = await supabase
         .from('users')
         .select('organization_id')
         .eq('id', user.id)
         .single();
 
-      if (!userProfile) return;
+      if (profileError) {
+        console.error("Error al obtener perfil:", profileError);
+        return;
+      }
 
-      const { data: shiftHoursData } = await supabase
+      if (!userProfile) {
+        console.log("No se encontró el perfil del usuario");
+        return;
+      }
+
+      console.log("Consultando horarios para organización:", userProfile.organization_id);
+      
+      const { data: shiftHoursData, error: shiftError } = await supabase
         .from('shift_hours')
         .select('*')
         .eq('organization_id', userProfile.organization_id);
+
+      if (shiftError) {
+        console.error("Error al cargar horarios:", shiftError);
+        return;
+      }
+
+      console.log("Datos de horarios obtenidos:", shiftHoursData);
 
       if (shiftHoursData && shiftHoursData.length > 0) {
         const formattedHours: ShiftHoursState = {
@@ -201,7 +228,9 @@ export default function AssignmentsPage() {
           };
         });
 
+        console.log("Horarios formateados:", formattedHours);
         setShiftHours(formattedHours);
+        setTempShiftHours(JSON.parse(JSON.stringify(formattedHours)));
       }
     } catch (error) {
       console.error('Error loading shift hours:', error);
@@ -210,27 +239,134 @@ export default function AssignmentsPage() {
 
   useEffect(() => {
     loadData();
-    loadShiftHours(); // Add this line to load shift hours
-  }, []);
+    loadShiftHours(); // Cargar los horarios de turnos
+    
+    // Configurar suscripción al servicio de tareas para actualizaciones automáticas
+    if (userProfile?.organization_id) {
+      console.log("Configurando servicio de tareas para la organización:", userProfile.organization_id);
+      configureTaskService(userProfile.organization_id);
+    }
+    
+    // Realizar un diagnóstico para verificar que se están cargando correctamente las tareas
+    const diagnóstico = async () => {
+      try {
+        if (!userProfile?.organization_id) return;
+        
+        console.log("Realizando diagnóstico de tareas...");
+        // Obtener TODAS las tareas para diagnóstico
+        const allTasks = await taskService.getAllTasks(userProfile.organization_id, true);
+        
+        // Contar tareas por tipo para diagnosticar
+        const tasksByType: Record<string, number> = {};
+        allTasks.forEach(task => {
+          const type = task.type || 'unknown';
+          tasksByType[type] = (tasksByType[type] || 0) + 1;
+        });
+        
+        console.log("Distribución total de tareas por tipo:", tasksByType);
+        
+        // Verificar tareas de tipo 'assignment'
+        const assignmentTasks = allTasks.filter(task => task.type === 'assignment');
+        console.log(`Hay ${assignmentTasks.length} tareas de tipo 'assignment' en total`);
+        
+        if (assignmentTasks.length > 0) {
+          console.log("Ejemplo de tarea de tipo 'assignment':", assignmentTasks[0]);
+        }
+      } catch (error) {
+        console.error("Error en diagnóstico:", error);
+      }
+    };
+    
+    // Ejecutar diagnóstico después de cargar datos
+    setTimeout(diagnóstico, 2000);
+    
+    // Limpiar suscripciones al desmontar
+    return () => {
+      // Cualquier limpieza necesaria
+    };
+  }, [userProfile]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const supabase = createClientComponentClient();
+      console.log("Iniciando carga de datos...");
       
+      // 1. Obtener usuario y perfil para determinar la organización
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No autorizado');
+      if (!user) {
+        throw new Error('No autorizado');
+      }
 
-      const { data: userProfile } = await supabase
+      const { data: userProfile, error: profileError } = await supabase
         .from('users')
-        .select('organization_id')
+        .select('organization_id, role')
         .eq('id', user.id)
         .single();
 
-      if (!userProfile) throw new Error('Perfil no encontrado');
+      if (profileError) {
+        throw profileError;
+      }
 
-      // Primero cargar los horarios de los turnos
-      const { data: shiftHoursData } = await supabase
+      setUserProfile(userProfile);
+
+      // Configurar el servicio de tareas para escuchar cambios en tiempo real
+      configureTaskService(userProfile.organization_id);
+
+      // 2. Obtener áreas y salas
+      const { data: areasData, error: areasError } = await supabase
+        .from('areas')
+        .select(`
+          id, 
+          name, 
+          description,
+          status,
+          sala_id,
+          salas (
+            id, 
+            nombre,
+            areas (
+              id, 
+              name,
+              status
+            )
+          )
+        `)
+        .eq('organization_id', userProfile.organization_id)
+        .eq('status', 'active');
+
+      if (areasError) {
+        throw areasError;
+      }
+      
+      // 3. Cargar los turnos programados
+      console.log("Consultando turnos programados...");
+      const { data: turnosData, error: turnosError } = await supabase
+        .from('work_shifts')
+        .select(`
+          id,
+          shift_type,
+          start_time,
+          end_time,
+          user_id,
+          users (
+            id,
+            first_name,
+            last_name,
+            avatar_url
+          )
+        `)
+        .eq('organization_id', userProfile.organization_id)
+        .eq('status', 'scheduled');
+
+      if (turnosError) {
+        console.error("Error al cargar turnos:", turnosError);
+      }
+
+      console.log("Turnos obtenidos:", turnosData);
+      
+      // Procesamiento de turnos y horarios
+      // Primero cargar los horarios
+      const { data: shiftHoursData, error: shiftHoursError } = await supabase
         .from('shift_hours')
         .select('*')
         .eq('organization_id', userProfile.organization_id);
@@ -242,9 +378,8 @@ export default function AssignmentsPage() {
         night: { start: '22:00', end: '06:00' }
       };
 
-      if (shiftHoursData) {
+      if (shiftHoursData && !shiftHoursError) {
         shiftHoursData.forEach((shift: ShiftHourData) => {
-          // Usar type assertion para indicar que shift.shift_type es una clave válida
           const shiftType = shift.shift_type as keyof ShiftHoursState;
           shiftHoursByType[shiftType] = {
             start: shift.start_time,
@@ -253,46 +388,68 @@ export default function AssignmentsPage() {
         });
       }
 
-      // Cargar turnos con usuarios
-      const { data: turnosData } = await supabase
-        .from('work_shifts')
-        .select(`
-          id,
-          shift_type,
-          start_time,
-          end_time,
-          user_id,
-          users!work_shifts_user_id_fkey (
-            id,
-            first_name,
-            last_name,
-            avatar_url
-          )
-        `)
-        .eq('organization_id', userProfile.organization_id)
-        .eq('status', 'scheduled');
+      // Almacenar los horarios de los turnos en el estado
+      setShiftHours(shiftHoursByType);
+      setTempShiftHours(JSON.parse(JSON.stringify(shiftHoursByType)));
 
+      // Crear un mapa para agrupar usuarios únicos por tipo de turno
+      const turnoUsuarios: { [key: string]: Map<string, any> } = {
+        morning: new Map(),
+        afternoon: new Map(),
+        night: new Map()
+      };
+
+      // Procesar cada turno para extraer sus usuarios
       if (turnosData) {
-        // Crear un mapa para agrupar usuarios únicos por tipo de turno
-        const turnoUsuarios = turnosData.reduce((acc: { [key: string]: Map<string, any> }, turno) => {
-          if (!acc[turno.shift_type]) {
-            acc[turno.shift_type] = new Map();
-          }
-          if (turno.users && Array.isArray(turno.users) && turno.users.length > 0) {
-            // Iteramos sobre cada usuario en el array
-            turno.users.forEach(user => {
-              if (user && user.id) {
-                acc[turno.shift_type].set(user.id, user);
+        console.log('Procesando datos de turnos:', turnosData);
+        
+        turnosData.forEach(turno => {
+          if (!turno.shift_type || !turnoUsuarios[turno.shift_type]) return;
+          
+          // Si el usuario existe directamente como campo user_id
+          if (turno.user_id) {
+            // Inicializar un objeto para los datos del usuario
+            let userData = null;
+            
+            // Manejar diferentes estructuras del campo users
+          if (turno.users) {
+              if (Array.isArray(turno.users) && turno.users.length > 0) {
+                // Si es un array, tomamos el primer usuario
+                userData = turno.users[0]; 
+              } else if (typeof turno.users === 'object' && turno.users !== null) {
+                // Si es un objeto, lo usamos directamente
+                userData = turno.users;
               }
-            });
+            }
+            
+            // Verificar si tenemos datos completos
+            if (userData && typeof userData === 'object') {
+              // Manejar caso donde userData es un objeto
+              if ('id' in userData && 'first_name' in userData) {
+                turnoUsuarios[turno.shift_type].set(turno.user_id, {
+                  id: userData.id,
+                  first_name: userData.first_name || '',
+                  last_name: userData.last_name || '',
+                  avatar_url: userData.avatar_url || null
+                });
+              }
+            } else {
+              // Si no tenemos datos completos, usar el ID como referencia
+              turnoUsuarios[turno.shift_type].set(turno.user_id, {
+                id: turno.user_id,
+                first_name: 'Usuario',
+                last_name: turno.user_id.substring(0, 5),
+                avatar_url: null
+              });
+            }
           }
-          return acc;
-        }, {});
+        });
+      }
 
         // Formatear los turnos con usuarios únicos y horarios dinámicos
         const turnosFormatted = [
           {
-            id: turnosData.find(t => t.shift_type === 'morning')?.id || '',
+          id: turnosData?.find((t: any) => t.shift_type === 'morning')?.id || 'morning',
             nombre: 'Turno A',
             horario: `${formatTime(shiftHoursByType.morning.start)} - ${formatTime(shiftHoursByType.morning.end)}`,
             shift_type: 'morning' as const,
@@ -301,7 +458,7 @@ export default function AssignmentsPage() {
             usuarios: turnoUsuarios['morning'] ? Array.from(turnoUsuarios['morning'].values()) : []
           },
           {
-            id: turnosData.find(t => t.shift_type === 'afternoon')?.id || '',
+          id: turnosData?.find((t: any) => t.shift_type === 'afternoon')?.id || 'afternoon',
             nombre: 'Turno B',
             horario: `${formatTime(shiftHoursByType.afternoon.start)} - ${formatTime(shiftHoursByType.afternoon.end)}`,
             shift_type: 'afternoon' as const,
@@ -310,7 +467,7 @@ export default function AssignmentsPage() {
             usuarios: turnoUsuarios['afternoon'] ? Array.from(turnoUsuarios['afternoon'].values()) : []
           },
           {
-            id: turnosData.find(t => t.shift_type === 'night')?.id || '',
+          id: turnosData?.find((t: any) => t.shift_type === 'night')?.id || 'night',
             nombre: 'Turno C',
             horario: `${formatTime(shiftHoursByType.night.start)} - ${formatTime(shiftHoursByType.night.end)}`,
             shift_type: 'night' as const,
@@ -322,9 +479,8 @@ export default function AssignmentsPage() {
 
         console.log('Turnos procesados:', turnosFormatted);
         setTurnos(turnosFormatted);
-      }
 
-      // Cargar usuarios
+      // 4. Cargar usuarios
       const { data: usersData } = await supabase
         .from('users')
         .select('id, first_name, last_name')
@@ -344,78 +500,86 @@ export default function AssignmentsPage() {
         setUserMap(newUserMap);
       }
 
-      // Cargar TODAS las salas sin ningún filtro
+      // 6. Obtener todas las salas...
+      // ... resto del código existente para cargar salas y tareas
+      
+      // 3. Obtener todas las salas de la organización con sus áreas
       const { data: salasData, error: salasError } = await supabase
         .from('salas')
         .select(`
-          *,
-          areas:areas (
+          id,
+          nombre,
+          areas (
             id,
             name,
+            description,
+            parent_id,
             status
           )
         `)
         .eq('organization_id', userProfile.organization_id);
 
       if (salasError) throw salasError;
+      console.log('Salas cargadas:', salasData);
 
-      if (salasData) {
-        // Cargar las tareas para cada sala
+      // Procesar las salas con sus áreas y obtener las tareas
         const salasWithTasks = await Promise.all(salasData.map(async (sala) => {
-          const { data: tasksData, error: tasksError } = await supabase
-            .from('tasks')
-            .select(`
-              id,
-              title,
-              description,
-              status,
-              priority,
-              created_at,
-              start_date,
-              end_time,
-              start_time,
-              assigned_to,
-              users!tasks_assigned_to_fkey (
-                id,
-                first_name,
-                last_name
-              )
-            `)
-            .eq('sala_id', sala.id)
-            .eq('type', 'assignment')  // Solo tareas normales
-            .eq('organization_id', userProfile.organization_id)
-            .not('status', 'eq', 'cancelled')
-            .order('created_at', { ascending: false });
-
-          if (tasksError) {
-            console.error('Error loading tasks for sala:', tasksError);
-            return {
-              id: sala.id,
-              nombre: sala.nombre,
-              color: getSalaColor(sala.nombre),
-              tareas: [],
-              areas: (sala.areas || [])
-                .filter((area: Area) => area.status === 'active')
-                .map((area: Area) => ({
-                  id: area.id,
-                  name: area.name
-                }))
-            };
-          }
-
-          // Formatear las tareas
-          const formattedTasks: Task[] = (tasksData || []).map(task => ({
+        try {
+          console.log(`Obteniendo tareas para sala ${sala.nombre}`);
+          
+          // Obtener TODAS las tareas primero para hacer un análisis detallado
+          const allTasks = await taskService.getAllTasks(userProfile.organization_id, true);
+          
+          // Filtrar tareas con lógica específica para la página de asignaciones
+          // 1. Debe ser de tipo "assignment"
+          // 2. Debe estar asociada a la sala actual
+          // 3. Debe tener el metadata que indica que fue creada desde esta página
+          const relevantTasks = allTasks.filter(task => {
+            const isAssignment = task.type === 'assignment';
+            const hasCorrectSala = task.sala_id === sala.id;
+            
+            // Verificar si tiene el metadata que identifica su origen
+            const hasAssignmentSource = 
+              task.metadata && 
+              typeof task.metadata === 'object' && 
+              task.metadata.source === 'assignments_page';
+            
+            // Para compatibilidad con tareas anteriores, también verificamos el patrón en el título
+            const titlePattern = sala.nombre;
+            const hasTitlePattern = task.title ? task.title.includes(titlePattern) : false;
+            
+            return isAssignment && hasCorrectSala && (hasAssignmentSource || hasTitlePattern);
+          });
+          
+          console.log(`Sala ${sala.nombre}: Encontradas ${relevantTasks.length} tareas específicas de asignaciones`);
+          
+          // Formatear las tareas para esta sala
+          const formattedTasks = relevantTasks.map(task => ({
             id: task.id,
-            title: task.title,
+            title: task.title || '',
             description: task.description || '',
             status: task.status || 'pending',
             priority: task.priority || 'medium',
-            created_at: new Date(task.created_at).toLocaleDateString(),
-            assigned_to: task.assigned_to,
-            assignee: task.users ? {
-              first_name: task.users[0]?.first_name,
-              last_name: task.users[0]?.last_name
+            created_at: task.created_at ? new Date(task.created_at).toLocaleDateString() : '',
+            assigned_to: task.assigned_to || undefined,
+            assignee: task.assignee ? {
+              first_name: task.assignee.first_name || '',
+              last_name: task.assignee.last_name || ''
             } : undefined
+          } as Task));
+          
+          // Procesar áreas de manera segura para el tipo
+          const safeAreas = (sala.areas || []).map(area => ({
+            id: area.id,
+            name: area.name,
+            status: area.status || 'active'
+          }));
+          
+          const activeAreas = safeAreas
+            .filter(area => area.status === 'active')
+            .map(area => ({
+              id: area.id,
+              name: area.name
           }));
 
           return {
@@ -423,24 +587,44 @@ export default function AssignmentsPage() {
             nombre: sala.nombre,
             color: getSalaColor(sala.nombre),
             tareas: formattedTasks,
-            areas: (sala.areas || [])
-              .filter((area: Area) => area.status === 'active')
-              .map((area: Area) => ({
+            areas: activeAreas
+          } as Sala;
+        } catch (error) {
+          console.error(`Error cargando tareas para sala ${sala.nombre}:`, error);
+          
+          // Procesar áreas de manera segura para el tipo (caso de error)
+          const safeAreas = (sala.areas || []).map(area => ({
+            id: area.id,
+            name: area.name,
+            status: area.status || 'active'
+          }));
+          
+          const activeAreas = safeAreas
+            .filter(area => area.status === 'active')
+            .map(area => ({
                 id: area.id,
                 name: area.name
-              }))
-          };
-        }));
+            }));
+          
+          return {
+            id: sala.id,
+            nombre: sala.nombre,
+            color: getSalaColor(sala.nombre),
+            tareas: [],
+            areas: activeAreas
+          } as Sala;
+        }
+      }));
 
-        console.log('Salas con tareas:', salasWithTasks);
-        setSalas(salasWithTasks);
-      }
-
-    } catch (error: any) {
-      console.error('Error loading data:', error);
-      errorHandler.logError('loadData', error);
-      toast.error(error.message || 'Error al cargar los datos');
-    } finally {
+      // Corregir el error de tipo filtrando los undefined
+      const validSalasWithTasks = salasWithTasks.filter(sala => sala !== undefined) as Sala[];
+      
+      console.log('Salas con tareas:', validSalasWithTasks);
+      setSalas(validSalasWithTasks);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error cargando datos:', error);
+      toast.error('Error al cargar los datos');
       setLoading(false);
     }
   };
@@ -471,139 +655,249 @@ export default function AssignmentsPage() {
   const handleCreateAssignment = async () => {
     try {
       // Validación inicial
-      if (isDeepTasks) {
-        if (selectedUsers.length === 0 || !selectedSala || !selectedArea || !selectedDate || !startTime) {
-          toast.error('Por favor complete todos los campos y seleccione al menos un usuario');
+      if (selectedDeepTasks) {
+        if (!selectedUsers || selectedUsers.length === 0) {
+          toast.error('Selecciona al menos un usuario para asignar tareas profundas');
           return;
         }
       } else {
-        if (!selectedUser || !selectedSala || !selectedArea || !selectedDate || !startTime) {
-          toast.error('Por favor complete todos los campos');
+        // Validación para tareas normales
+        if (!selectedStartTime || !selectedUsers || selectedUsers.length === 0 || !selectedRoom || !selectedArea) {
+          toast.error('Todos los campos son obligatorios');
           return;
         }
       }
 
-      setIsCreating(true);
-
+      // Obtener usuario actual y perfil
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No autorizado');
+      if (!user) {
+        throw new Error('No autorizado');
+      }
 
-      const { data: userProfile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('users')
-        .select('organization_id')
+        .select('organization_id, role')
         .eq('id', user.id)
         .single();
 
-      if (!userProfile) throw new Error('Error al obtener el perfil del usuario');
+      if (profileError) {
+        throw profileError;
+      }
 
-      // Formatear la fecha y hora correctamente
-      const [hours, minutes] = startTime.split(':');
-      const formattedTime = `${hours}:${minutes}`;
+      setSubmitting(true);
 
-      // Obtener información de sala y área
-      const { data: salaInfo } = await supabase
-        .from('salas')
-        .select('nombre')
-        .eq('id', selectedSala)
-        .single();
+      // Formato estándar para la hora de inicio
+      const formattedStartTime = selectedStartTime ? formatTime(selectedStartTime) : '';
 
-      const { data: areaInfo } = await supabase
-        .from('areas')
-        .select('name')
-        .eq('id', selectedArea)
-        .single();
+      // Obtener información de la sala seleccionada
+      const selectedRoomData = salas.find(sala => sala.id === selectedRoom);
+      if (!selectedRoomData) {
+        throw new Error('Sala no encontrada');
+      }
 
-      if (isDeepTasks) {
+      const selectedAreaData = selectedRoomData.areas.find(area => area.id === selectedArea);
+      if (!selectedAreaData) {
+        throw new Error('Área no encontrada');
+      }
+
+      // Tener un formato consistente para titular las tareas que creamos desde esta página
+      // Este formato nos permitirá identificar las tareas creadas desde aquí
+      const titlePrefix = `${selectedRoomData.nombre} - ${selectedAreaData.name}: `;
+
+      if (selectedDeepTasks) {
+        // Flujo para tareas profundas
+        console.log('Creando tareas de limpieza profunda para los usuarios seleccionados...');
+
         // Obtener las tareas profundas activas
         const { data: deepTasks, error: deepTasksError } = await supabase
           .from('deep_tasks')
           .select('*')
-          .eq('active', true)
-          .order('created_at', { ascending: true });
+          .eq('status', 'active')
+          .order('created_at', { ascending: false });
 
-        if (deepTasksError) throw deepTasksError;
+        if (deepTasksError) {
+          throw deepTasksError;
+        }
 
         if (!deepTasks || deepTasks.length === 0) {
-          toast.error('No hay tareas profundas configuradas');
+          toast.error('No hay tareas profundas configuradas en el sistema');
+          setSubmitting(false);
           return;
         }
 
-        // Crear una asignación por cada usuario seleccionado
-        for (const userName of selectedUsers) {
+        let tasksCreated = 0;
+        const tasksWithErrors = [];
+
+        // Crear una tarea por cada usuario seleccionado
+        for (const userId of selectedUsers) {
+          try {
+            if (!userId) continue;
+
+            // Validar que el ID de usuario es válido
+            const { data: userData } = await supabase
+              .from('users')
+              .select('first_name, last_name')
+              .eq('id', userId)
+              .single();
+
+            if (!userData) {
+              console.error(`Usuario no encontrado para ID: ${userId}`);
+              continue;
+            }
+
+            // Construir los datos de la tarea
+            const userName = `${userData.first_name} ${userData.last_name}`;
+            
           const taskData = {
-            title: `Limpieza Profunda - ${salaInfo?.nombre || ''} - ${areaInfo?.name || ''}`,
-            description: `Tarea de limpieza profunda asignada a ${userName}`,
-            organization_id: userProfile.organization_id,
-            assigned_to: userMap[userName],
-            sala_id: selectedSala,
-            area_id: selectedArea,
-            start_date: selectedDate,
-            start_time: formattedTime,
+              title: titlePrefix + `Limpieza profunda asignada a ${userName}`,
+              description: `Tarea de limpieza profunda para el área ${selectedAreaData.name} en ${selectedRoomData.nombre}`,
+              organization_id: profile.organization_id,
             status: 'pending',
-            type: 'deep_cleaning',
+              priority: 'high',
+              assigned_to: userId,
+              sala_id: selectedRoom,
+              area_id: selectedArea,
+              type: 'deep_cleaning',  // Tipo específico para tareas profundas
+              start_date: new Date().toISOString().split('T')[0],
             created_by: user.id,
-            priority: 'medium',
-            deep_tasks: deepTasks.map((task, index) => ({
-              id: task.id,
-              name: task.name,
-              description: task.description,
-              step: index + 1,
-              status: 'pending',
-              completed_at: null
-            }))
-          };
+              metadata: { source: 'assignments_page', creator: 'assignments_module' }  // Identificador único
+            };
 
-          const { error: insertError } = await supabase
+            console.log('Insertando tarea profunda:', taskData);
+
+            // Insertar la tarea
+            const { data: insertedTask, error: insertError } = await supabase
             .from('tasks')
-            .insert([taskData]);
+              .insert(taskData)
+              .select()
+              .single();
 
-          if (insertError) throw insertError;
+            if (insertError) {
+              console.error('Error al insertar tarea profunda:', insertError);
+              tasksWithErrors.push(userId);
+              continue;
+            }
+
+            console.log('Tarea profunda creada con éxito:', insertedTask);
+            // Verificar que el tipo se guardó correctamente
+            if (insertedTask.type !== 'deep_cleaning') {
+              console.warn(`La tarea se creó, pero el tipo guardado es '${insertedTask.type}' en lugar de 'deep_cleaning'`);
+            }
+
+            tasksCreated++;
+          } catch (error) {
+            console.error('Error procesando usuario:', error);
+            tasksWithErrors.push(userId);
+          }
         }
 
-        toast.success(`Se crearon ${selectedUsers.length} asignaciones de limpieza profunda`);
+        // Invalidar caché para refrescar datos
+        taskService.invalidateCache();
+
+        // Mensaje de éxito o error basado en resultados
+        if (tasksCreated > 0) {
+          toast.success(`${tasksCreated} tareas profundas creadas con éxito`);
+          if (tasksWithErrors.length > 0) {
+            toast.error(`No se pudieron crear tareas para ${tasksWithErrors.length} usuarios`);
+          }
       } else {
-        // Insertar una única asignación normal
-        const { error: insertError } = await supabase
-          .from('tasks')
-          .insert({
-            title: `${salaInfo?.nombre || ''} - ${areaInfo?.name || ''}`,
-            description: `Tarea asignada para ${selectedUser}`,
-            organization_id: userProfile.organization_id,
-            assigned_to: userMap[selectedUser],
-            sala_id: selectedSala,
-            area_id: selectedArea,
-            start_date: selectedDate,
-            start_time: formattedTime,
+          toast.error('No se pudo crear ninguna tarea profunda');
+        }
+      } else {
+        // Flujo para tareas normales de asignación
+        console.log('Creando tarea de asignación normal...');
+
+        // Crear una tarea con información detallada
+        for (const userId of selectedUsers) {
+          try {
+            if (!userId) continue;
+
+            // Obtener datos del usuario
+            const { data: userData } = await supabase
+              .from('users')
+              .select('first_name, last_name')
+              .eq('id', userId)
+              .single();
+
+            if (!userData) {
+              console.error(`Usuario no encontrado para ID: ${userId}`);
+              continue;
+            }
+
+            const userName = `${userData.first_name} ${userData.last_name}`;
+            
+            const taskData = {
+              title: titlePrefix + `Asignación regular para ${userName}`,
+              description: formattedStartTime 
+                ? `Tarea de mantenimiento programada para ${formattedStartTime} en el área ${selectedAreaData.name}`
+                : `Tarea de mantenimiento en el área ${selectedAreaData.name}`,
+              organization_id: userProfile?.organization_id || profile.organization_id,
             status: 'pending',
-            type: 'assignment',  // Asegurarnos de que es una tarea normal
+              priority: assignmentPriority || 'medium',
+              assigned_to: userId,
+              sala_id: selectedRoom,
+              area_id: selectedArea,
+              type: 'assignment',  // Este es el tipo estándar para asignaciones
+              deep_task: null,  // Sin tarea profunda asociada
+              start_time: formattedStartTime,
+              start_date: new Date().toISOString().split('T')[0],
             created_by: user.id,
-            priority: 'medium',
-            deep_tasks: null  // Explícitamente establecer deep_tasks como null para tareas normales
-          });
+              metadata: { source: 'assignments_page', creator: 'assignments_module' }  // Identificador único
+            };
 
-        if (insertError) throw insertError;
-        toast.success('Asignación creada exitosamente');
-      }
+            console.log('Insertando tarea de asignación:', taskData);
 
-      // Mostrar animación y resetear el formulario
-      setShowSuccessAnimation(true);
+            // Insertar la tarea
+            const { data: insertedTask, error: insertError } = await supabase
+              .from('tasks')
+              .insert(taskData)
+              .select()
+              .single();
+
+            if (insertError) {
+              throw insertError;
+            }
+
+            console.log('Tarea creada con éxito:', insertedTask);
+            // Verificar que el tipo se guardó correctamente
+            if (insertedTask.type !== 'assignment') {
+              console.warn(`La tarea se creó, pero el tipo guardado es '${insertedTask.type}' en lugar de 'assignment'`);
+            }
+          } catch (error) {
+            console.error('Error al crear tarea:', error);
+            toast.error('Error al crear tarea');
+            setSubmitting(false);
+            return;
+          }
+        }
+
+        // Invalidar caché para refrescar los datos
+        taskService.invalidateCache();
+
+        // Esperar un momento para que el caché se refresque
       setTimeout(() => {
-        setShowSuccessAnimation(false);
-        setSelectedUser('');
+          // Actualizar la vista
+          loadData();
+          
+          // Restablecer formulario
         setSelectedUsers([]);
-        setSelectedSala(null);
+          setSelectedRoom('');
         setSelectedArea('');
-        setSelectedDate('');
-        setStartTime('');
-        setIsDeepTasks(false);
-        loadData();
-      }, 2000);
-
+          setSelectedStartTime('');
+          setSelectedDeepTasks(false);
+          setAssignmentPriority('medium');
+          
+          // Mostrar animación de éxito
+          toast.success('Asignaciones creadas con éxito');
+          setShowSuccessAnimation(true);
+          setTimeout(() => setShowSuccessAnimation(false), 3000);
+        }, 1000);
+      }
     } catch (error) {
-      console.error('Error al crear la asignación:', error);
+      console.error('Error en handleCreateAssignment:', error);
       toast.error('Error al crear la asignación');
     } finally {
-      setIsCreating(false);
+      setSubmitting(false);
     }
   };
 
@@ -614,9 +908,15 @@ export default function AssignmentsPage() {
         return;
       }
 
+      console.log('Añadiendo usuario al turno:', {
+        usuario: selectedShiftUser,
+        turno: selectedTurno
+      });
+
       const userId = userMap[selectedShiftUser];
       
       if (!userId) {
+        console.error('Usuario no encontrado en el mapa:', selectedShiftUser);
         toast.error('Usuario no encontrado');
         return;
       }
@@ -633,46 +933,12 @@ export default function AssignmentsPage() {
 
       if (!userProfile) throw new Error('Perfil no encontrado');
 
-      // Obtener el turno seleccionado
-      const selectedTurnoData = turnos.find(t => t.id === selectedTurno);
-      if (!selectedTurnoData) {
-        toast.error('Turno no encontrado');
-        return;
-      }
-
-      // Obtener la fecha actual
-      const today = new Date();
-      today.setHours(0, 0, 0, 0); // Resetear la hora a medianoche
-
-      // Definir los horarios según el tipo de turno
-      let startDateTime = new Date(today);
-      let endDateTime = new Date(today);
-
-      switch (selectedTurnoData.shift_type) {
-        case 'morning':
-          startDateTime.setHours(6, 0, 0);
-          endDateTime.setHours(14, 0, 0);
-          break;
-        case 'afternoon':
-          startDateTime.setHours(14, 0, 0);
-          endDateTime.setHours(22, 0, 0);
-          break;
-        case 'night':
-          startDateTime.setHours(22, 0, 0);
-          endDateTime.setHours(6, 0, 0);
-          endDateTime.setDate(endDateTime.getDate() + 1); // Añadir un día para el turno nocturno
-          break;
-        default:
-          toast.error('Tipo de turno no válido');
-          return;
-      }
-
       // Verificar si el usuario ya está asignado a este tipo de turno
       const { data: existingAssignment } = await supabase
         .from('work_shifts')
         .select('*')
         .eq('user_id', userId)
-        .eq('shift_type', selectedTurnoData.shift_type)
+        .eq('shift_type', selectedTurno.shift_type)
         .eq('status', 'scheduled')
         .single();
 
@@ -687,16 +953,16 @@ export default function AssignmentsPage() {
         .insert([{
           organization_id: userProfile.organization_id,
           user_id: userId,
-          shift_type: selectedTurnoData.shift_type,
-          start_time: startDateTime.toISOString(),
-          end_time: endDateTime.toISOString(),
+          shift_type: selectedTurno.shift_type,
+          start_time: shiftHours[selectedTurno.shift_type].start,
+          end_time: shiftHours[selectedTurno.shift_type].end,
           status: 'scheduled'
         }]);
 
       if (insertError) throw insertError;
 
       toast.success('Usuario asignado al turno correctamente');
-      setSelectedTurno('');
+      setSelectedTurno(null);
       setSelectedShiftUser('');
       setShowAddUserModal(false);
       await loadData();
@@ -713,69 +979,49 @@ export default function AssignmentsPage() {
 
   const handleTurnoClick = async (turno: Turno) => {
     try {
-      // Primero obtener el usuario actual
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      console.log('Turno seleccionado:', turno);
+      console.log('Usuarios en el turno:', turno.usuarios);
       
-      if (!currentUser) {
-        throw new Error('No se encontró el usuario actual');
-      }
-
-      // Obtener los usuarios asignados al turno específico desde work_shifts
-      const { data: shiftData, error: shiftError } = await supabase
-        .from('work_shifts')
-        .select(`
-          id,
-          shift_type,
-          main_user:users!work_shifts_user_id_fkey (
-            id,
-            first_name,
-            last_name,
-            avatar_url
-          )
-        `)
-        .eq('shift_type', turno.shift_type)
-        .eq('status', 'scheduled')
-        .not('main_user', 'is', null)
-        .neq('user_id', currentUser.id); // Excluir al usuario actual
-
-      if (shiftError) {
-        console.error('Error detallado:', shiftError);
-        throw shiftError;
-      }
-
-      if (!shiftData || shiftData.length === 0) {
+      // Establecer el turno seleccionado en el estado
+      setSelectedTurno(turno);
+      
+      // Mostrar los detalles del turno y sus usuarios en el modal
         setSelectedShiftDetails({
           id: turno.id,
           nombre: turno.nombre,
           horario: turno.horario,
-          usuarios: []
+        usuarios: Array.isArray(turno.usuarios) ? turno.usuarios : []
         });
+      
+      // Abrir el modal de detalles del turno
         setShowShiftDetailsModal(true);
-        return;
-      }
-
-      console.log('Datos de usuarios por turno (excluyendo usuario actual):', shiftData);
-
-      // Filtrar usuarios únicos y válidos
-      const usuariosUnicos = shiftData
-        .filter(shift => shift.main_user) // Solo incluir registros con usuarios válidos
-        .map(shift => shift.main_user)
-        .filter((user, index, self) => 
-          index === self.findIndex(u => u.id === user.id)
-        );
-
-      console.log('Usuarios únicos filtrados:', usuariosUnicos);
-
-      setSelectedShiftDetails({
-        id: turno.id,
-        nombre: turno.nombre,
-        horario: turno.horario,
-        usuarios: usuariosUnicos
-      });
-      setShowShiftDetailsModal(true);
     } catch (error) {
-      console.error('Error al cargar usuarios del turno:', error);
-      toast.error('Error al cargar los usuarios del turno');
+      console.error('Error al mostrar detalles del turno:', error);
+      toast.error('Error al cargar los detalles del turno');
+    }
+  };
+
+  const handleAddTask = () => {
+    if (selectedShiftDetails && selectedTurno) {
+      // Asegurar la compatibilidad de tipos al transferir usuarios
+      setSelectedTurno({
+        id: selectedShiftDetails.id,
+        nombre: selectedShiftDetails.nombre,
+        horario: selectedShiftDetails.horario,
+        shift_type: selectedShiftDetails.id === 'morning' || selectedShiftDetails.id.includes('morning') ? 'morning' :
+                   selectedShiftDetails.id === 'afternoon' || selectedShiftDetails.id.includes('afternoon') ? 'afternoon' : 'night',
+        personasAsignadas: selectedShiftDetails.usuarios?.length || 0,
+        enLinea: 0,
+        usuarios: selectedShiftDetails.usuarios.map(user => ({
+          id: user.id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          avatar_url: user.avatar_url === null ? undefined : user.avatar_url
+        }))
+      });
+      
+      setShowShiftDetailsModal(false);
+      setShowAddUserModal(true);
     }
   };
 
@@ -874,7 +1120,15 @@ export default function AssignmentsPage() {
     }
   };
 
+  // Nueva interfaz para la asignación
+  const [selectedRoom, setSelectedRoom] = useState<string>('');
+  const [selectedStartTime, setSelectedStartTime] = useState<string>('');
+  const [selectedDeepTasks, setSelectedDeepTasks] = useState<boolean>(false);
+  const [assignmentPriority, setAssignmentPriority] = useState<string>('medium');
+  const [submitting, setSubmitting] = useState<boolean>(false);
+
   return (
+    <>
     <div className="space-y-8">
       <div className="px-6 -mx-6 py-6">
         <h1 className="text-2xl font-bold text-gray-800">Gestión de Asignaciones</h1>
@@ -975,10 +1229,10 @@ export default function AssignmentsPage() {
                 <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
-                {isDeepTasks ? 'Usuarios' : 'Usuario'}
+                  {selectedDeepTasks ? 'Usuarios' : 'Usuario'}
               </label>
               
-              {isDeepTasks ? (
+                {selectedDeepTasks ? (
                 // Selector múltiple mejorado para tareas profundas
                 <div className="space-y-2">
                   <div className="max-h-[200px] overflow-y-auto border border-blue-100 rounded-lg bg-white divide-y">
@@ -1050,7 +1304,7 @@ export default function AssignmentsPage() {
             {/* Sala y Área */}
             <SalaAreaSelector
               onSalaChange={(sala) => {
-                setSelectedSala(sala?.id || null);
+                  setSelectedRoom(sala?.id || '');
               }}
               onAreaChange={(area) => {
                 setSelectedArea(area?.id || '');
@@ -1094,16 +1348,16 @@ export default function AssignmentsPage() {
               <button
                 type="button"
                 role="switch"
-                aria-checked={isDeepTasks}
+                  aria-checked={selectedDeepTasks}
                 className={`${
-                  isDeepTasks ? 'bg-blue-600' : 'bg-gray-200'
+                    selectedDeepTasks ? 'bg-blue-600' : 'bg-gray-200'
                 } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
-                onClick={() => setIsDeepTasks(!isDeepTasks)}
+                  onClick={() => setSelectedDeepTasks(!selectedDeepTasks)}
               >
                 <span
                   aria-hidden="true"
                   className={`${
-                    isDeepTasks ? 'translate-x-5' : 'translate-x-0'
+                      selectedDeepTasks ? 'translate-x-5' : 'translate-x-0'
                   } pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
                 />
               </button>
@@ -1194,5 +1448,315 @@ export default function AssignmentsPage() {
         </div>
       </div>
     </div>
+
+      {/* Modal para detalles del turno */}
+      {showShiftDetailsModal && selectedShiftDetails && (
+        <Dialog 
+          open={showShiftDetailsModal} 
+          onClose={() => setShowShiftDetailsModal(false)}
+          className="fixed inset-0 z-50 overflow-y-auto"
+        >
+          <div className="flex items-center justify-center min-h-screen p-4">
+            <Dialog.Overlay className="fixed inset-0 bg-black opacity-30" />
+            
+            <div className="relative bg-white rounded-lg max-w-lg w-full mx-auto shadow-xl p-6">
+              <div className="flex justify-between items-center mb-4">
+                <Dialog.Title className="text-xl font-bold text-gray-800">
+                  {selectedShiftDetails.nombre} ({selectedShiftDetails.horario})
+                </Dialog.Title>
+                <button
+                  onClick={() => setShowShiftDetailsModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-medium text-gray-800 mb-2">Personal Asignado</h3>
+                  {selectedShiftDetails.usuarios && selectedShiftDetails.usuarios.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedShiftDetails.usuarios.map(usuario => (
+                        <div key={usuario.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-500">
+                            {usuario.avatar_url ? (
+                              <img src={usuario.avatar_url} alt={usuario.first_name} className="h-10 w-10 rounded-full" />
+                            ) : (
+                              <span className="font-medium text-sm">
+                                {usuario.first_name.charAt(0)}{usuario.last_name.charAt(0)}
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-800">{usuario.first_name} {usuario.last_name}</p>
+                            <p className="text-sm text-gray-500">ID: {usuario.id.substring(0, 8)}...</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 italic">No hay personal asignado a este turno</p>
+                  )}
+                </div>
+                
+                <div className="pt-4 border-t border-gray-200">
+                  <button
+                    onClick={handleAddTask}
+                    className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Añadir Usuario a este Turno
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Dialog>
+      )}
+
+      {/* Modal para añadir usuario a turno */}
+      {showAddUserModal && (
+        <Dialog 
+          open={showAddUserModal} 
+          onClose={() => setShowAddUserModal(false)}
+          className="fixed inset-0 z-50 overflow-y-auto"
+        >
+          <div className="flex items-center justify-center min-h-screen p-4">
+            <Dialog.Overlay className="fixed inset-0 bg-black opacity-30" />
+            
+            <div className="relative bg-white rounded-lg max-w-lg w-full mx-auto shadow-xl p-6">
+              <div className="flex justify-between items-center mb-4">
+                <Dialog.Title className="text-xl font-bold text-gray-800">
+                  {selectedTurno ? `Añadir Usuario a ${selectedTurno.nombre}` : 'Configurar Horarios de Turnos'}
+                </Dialog.Title>
+                <button
+                  onClick={() => setShowAddUserModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              {selectedTurno ? (
+                // Formulario para añadir usuario a turno
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Seleccionar Usuario
+                    </label>
+                    <select 
+                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      value={selectedShiftUser}
+                      onChange={(e) => setSelectedShiftUser(e.target.value)}
+                    >
+                      <option value="">Seleccionar un usuario</option>
+                      {usuarios.map(usuario => (
+                        <option key={usuario} value={usuario}>{usuario}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="pt-4">
+                    <button
+                      onClick={addUserToShift}
+                      className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      disabled={!selectedShiftUser}
+                    >
+                      Añadir Usuario
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // Formulario para configurar horarios
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-medium text-gray-800 mb-2">Turno A (Mañana)</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500 mb-1">
+                          Hora de inicio
+                        </label>
+                        <input 
+                          type="time" 
+                          value={tempShiftHours.morning.start}
+                          onChange={(e) => setTempShiftHours({
+                            ...tempShiftHours,
+                            morning: { ...tempShiftHours.morning, start: e.target.value }
+                          })}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500 mb-1">
+                          Hora de fin
+                        </label>
+                        <input 
+                          type="time" 
+                          value={tempShiftHours.morning.end}
+                          onChange={(e) => setTempShiftHours({
+                            ...tempShiftHours,
+                            morning: { ...tempShiftHours.morning, end: e.target.value }
+                          })}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h3 className="font-medium text-gray-800 mb-2">Turno B (Tarde)</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500 mb-1">
+                          Hora de inicio
+                        </label>
+                        <input 
+                          type="time" 
+                          value={tempShiftHours.afternoon.start}
+                          onChange={(e) => setTempShiftHours({
+                            ...tempShiftHours,
+                            afternoon: { ...tempShiftHours.afternoon, start: e.target.value }
+                          })}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500 mb-1">
+                          Hora de fin
+                        </label>
+                        <input 
+                          type="time" 
+                          value={tempShiftHours.afternoon.end}
+                          onChange={(e) => setTempShiftHours({
+                            ...tempShiftHours,
+                            afternoon: { ...tempShiftHours.afternoon, end: e.target.value }
+                          })}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h3 className="font-medium text-gray-800 mb-2">Turno C (Noche)</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500 mb-1">
+                          Hora de inicio
+                        </label>
+                        <input 
+                          type="time" 
+                          value={tempShiftHours.night.start}
+                          onChange={(e) => setTempShiftHours({
+                            ...tempShiftHours,
+                            night: { ...tempShiftHours.night, start: e.target.value }
+                          })}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-500 mb-1">
+                          Hora de fin
+                        </label>
+                        <input 
+                          type="time" 
+                          value={tempShiftHours.night.end}
+                          onChange={(e) => setTempShiftHours({
+                            ...tempShiftHours,
+                            night: { ...tempShiftHours.night, end: e.target.value }
+                          })}
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="pt-4">
+                    <button
+                      onClick={handleShiftHoursUpdate}
+                      className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Guardar Configuración
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </Dialog>
+      )}
+
+      {/* Modal para detalles de tarea */}
+      {showTaskDetailsModal && selectedTask && (
+        <Dialog 
+          open={showTaskDetailsModal} 
+          onClose={() => setShowTaskDetailsModal(false)}
+          className="fixed inset-0 z-50 overflow-y-auto"
+        >
+          <div className="flex items-center justify-center min-h-screen p-4">
+            <Dialog.Overlay className="fixed inset-0 bg-black opacity-30" />
+            
+            <div className="relative bg-white rounded-lg max-w-lg w-full mx-auto shadow-xl p-6">
+              <div className="flex justify-between items-center mb-4">
+                <Dialog.Title className="text-xl font-bold text-gray-800">
+                  Detalles de la Tarea
+                </Dialog.Title>
+                <button
+                  onClick={() => setShowTaskDetailsModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-800">{selectedTask.title}</h3>
+                  <span className={`inline-block mt-2 px-2 py-1 rounded-full text-xs ${
+                    selectedTask.priority === 'high' ? 'bg-red-100 text-red-700' :
+                    selectedTask.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {selectedTask.priority === 'high' ? 'Prioridad Alta' :
+                     selectedTask.priority === 'medium' ? 'Prioridad Media' : 'Prioridad Baja'}
+                  </span>
+                </div>
+                
+                <div>
+                  <p className="text-gray-600">{selectedTask.description}</p>
+                </div>
+                
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex justify-between">
+                    <div>
+                      <p className="text-sm text-gray-500">Estado</p>
+                      <p className="font-medium">{selectedTask.status === 'pending' ? 'Pendiente' : 
+                                                 selectedTask.status === 'in_progress' ? 'En Progreso' : 
+                                                 selectedTask.status === 'completed' ? 'Completada' : selectedTask.status}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Fecha de Creación</p>
+                      <p className="font-medium">{selectedTask.created_at}</p>
+                    </div>
+                  </div>
+                  {selectedTask.assignee && (
+                    <div className="mt-3">
+                      <p className="text-sm text-gray-500">Asignado a</p>
+                      <p className="font-medium">{selectedTask.assignee.first_name} {selectedTask.assignee.last_name}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </Dialog>
+      )}
+    </>
   );
 }
