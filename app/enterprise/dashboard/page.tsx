@@ -9,6 +9,8 @@ import {
 import { FaClock, FaRegCalendarCheck } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
 import InventoryModal from '@/app/shared/inventory/components/InventoryModal';
+import CleaningManagerModal from './components/CleaningManagerModal';
+import { motion } from 'framer-motion';
 
 interface User {
   first_name: string
@@ -145,6 +147,35 @@ interface Staff extends Employee {
   area_name: string | null
 }
 
+// Interfaz para las jefas de limpieza
+interface CleaningManager {
+  name: string;
+  shift: 'morning' | 'afternoon' | 'night';
+  staff?: number;
+  areas?: number;
+  tasks?: number;
+}
+
+// Definir un tipo para los manager de limpieza
+type CleaningManagerInfo = {
+  name: string;
+  staff: number;
+  areas: number;
+  tasks: number;
+  shift: 'morning' | 'afternoon' | 'night';
+};
+
+type CleaningManagersShifts = {
+  morning: CleaningManagerInfo;
+  afternoon: CleaningManagerInfo;
+  night: CleaningManagerInfo;
+};
+
+// Modificar el tipo CleaningManagersOrgs para que acepte cualquier string como clave
+type CleaningManagersOrgs = {
+  [key: string]: CleaningManagersShifts;
+};
+
 export default function EnterpriseOverviewPage() {
   const router = useRouter();
   const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
@@ -166,8 +197,27 @@ export default function EnterpriseOverviewPage() {
   const [organizationName, setOrganizationName] = useState<string>('Enterprise Dashboard');
   const [organizationId, setOrganizationId] = useState<string>('');
   const [orgConfig, setOrgConfig] = useState<any>(null);
+  const [showCleaningManagerModal, setShowCleaningManagerModal] = useState(false);
+  const [selectedCleaningManager, setSelectedCleaningManager] = useState<CleaningManagerInfo | null>(null);
 
   const supabase = createClientComponentClient();
+
+  const pulseVariants = {
+    pulse: {
+      scale: [1, 1.15, 1],
+      opacity: [0.7, 1, 0.7],
+      boxShadow: [
+        '0 0 0 0 rgba(239, 68, 68, 0.7)',
+        '0 0 0 10px rgba(239, 68, 68, 0)',
+        '0 0 0 0 rgba(239, 68, 68, 0)'
+      ],
+      transition: {
+        duration: 2,
+        repeat: Infinity,
+        repeatType: 'loop' as const
+      }
+    }
+  };
 
   // Función para obtener configuraciones específicas según la organización
   const getOrganizationConfig = (orgId: string) => {
@@ -268,7 +318,7 @@ export default function EnterpriseOverviewPage() {
   }, []);
 
   // Pesos de distribución por sala según la organización
-  const getSalaWeights = () => {
+  const getSalaWeights = (): { [key: string]: number } => {
     // Pesos específicos para el Instituto de Salud Mental Matías Hernández
     if (organizationName.includes('Instituto de Salud Mental Matías Hernández')) {
       return {
@@ -574,6 +624,253 @@ export default function EnterpriseOverviewPage() {
   // Calcular el total de personal distribuido para los porcentajes
   const totalDistributedStaff = distributedAreas.reduce((total: number, area: Sala) => total + area.staff_count, 0);
 
+  // Función para obtener los gerentes de limpieza según la organización
+  const getCleaningManagers = (): CleaningManagersOrgs => {
+    return {
+      'instituto-matias-hernandez': {
+        morning: {
+          name: 'Ana María Rodríguez',
+          staff: 7,
+          areas: 10,
+          tasks: 22,
+          shift: 'morning'
+        },
+        afternoon: {
+          name: 'Luis Carlos Vega',
+          staff: 8,
+          areas: 12,
+          tasks: 24,
+          shift: 'afternoon'
+        },
+        night: {
+          name: 'María Elena Torres',
+          staff: 5,
+          areas: 8,
+          tasks: 18,
+          shift: 'night'
+        }
+      },
+      'hospital-san-miguel': {
+        morning: {
+          name: 'Carmen Judith Pérez',
+          staff: 9,
+          areas: 14,
+          tasks: 28,
+          shift: 'morning'
+        },
+        afternoon: {
+          name: 'José Antonio Ramos',
+          staff: 8,
+          areas: 12,
+          tasks: 25,
+          shift: 'afternoon'
+        },
+        night: {
+          name: 'Gabriela Sofía Mendoza',
+          staff: 6,
+          areas: 10,
+          tasks: 20,
+          shift: 'night'
+        }
+      }
+    };
+  };
+
+  // Mapeo de IDs de organización a claves en el objeto de gerentes
+  const getOrgMappingKey = (orgId: string): string => {
+    // Este mapeo debe ser actualizado con los IDs reales de la base de datos
+    const orgMapping: Record<string, string> = {
+      // Suponiendo que estos son los IDs reales
+      '123456': 'instituto-matias-hernandez',
+      '789012': 'hospital-san-miguel'
+      // Añadir más mapeos según sea necesario
+    };
+    
+    // Si el ID está en el mapeo, usar esa clave, de lo contrario verificar si contiene palabras clave
+    if (orgMapping[orgId]) {
+      return orgMapping[orgId];
+    }
+    
+    // Intentar determinar la organización basado en el nombre
+    if (organizationName.toLowerCase().includes('instituto') || 
+        organizationName.toLowerCase().includes('matías') || 
+        organizationName.toLowerCase().includes('hernandez')) {
+      return 'instituto-matias-hernandez';
+    }
+    
+    // Por defecto, usar Hospital San Miguel
+    return 'hospital-san-miguel';
+  };
+
+  // Función para obtener el gerente de limpieza del turno actual
+  const getCurrentShiftManager = (): CleaningManagerInfo => {
+    const managers = getCleaningManagers();
+    const mappedOrgKey = getOrgMappingKey(organizationId);
+    const shiftKey = activeShift as keyof CleaningManagersShifts;
+    
+    return managers[mappedOrgKey][shiftKey];
+  };
+
+  // Determinar si el turno está a punto de cambiar (dentro de los próximos 30 minutos)
+  const isShiftChangingSoon = () => {
+    const now = new Date();
+    const hour = now.getHours();
+    const minutes = now.getMinutes();
+    
+    // Turno de mañana termina a las 14:00
+    if (hour === 13 && minutes >= 30 && activeShift === 'morning') {
+      return true;
+    }
+    
+    // Turno de tarde termina a las 22:00
+    if (hour === 21 && minutes >= 30 && activeShift === 'afternoon') {
+      return true;
+    }
+    
+    // Turno de noche termina a las 6:00
+    if (hour === 5 && minutes >= 30 && activeShift === 'night') {
+      return true;
+    }
+    
+    return false;
+  };
+
+  // Definir variantes de animación para tarjetas de turnos
+  const cardVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: (custom: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: {
+        delay: custom * 0.2,
+        duration: 0.5,
+        type: "spring",
+        stiffness: 100
+      }
+    }),
+    hover: {
+      scale: 1.03,
+      boxShadow: "0px 10px 20px rgba(0,0,0,0.1)",
+      transition: { duration: 0.3 }
+    },
+    tap: { scale: 0.98 }
+  };
+
+  // Añadir variantes para el contenedor de áreas
+  const areaContainerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        delayChildren: 0.3,
+        staggerChildren: 0.1
+      }
+    }
+  };
+
+  const areaItemVariants = {
+    hidden: { opacity: 0, x: -20 },
+    visible: { 
+      opacity: 1, 
+      x: 0,
+      transition: {
+        type: "spring",
+        stiffness: 100
+      }
+    },
+    hover: {
+      scale: 1.02,
+      backgroundColor: "rgba(243, 244, 246, 0.7)",
+      boxShadow: "0px 3px 8px rgba(0,0,0,0.05)",
+      transition: { duration: 0.2 }
+    }
+  };
+
+  // Añadir variantes de animación para las tarjetas de salas
+  const salaCardVariants = {
+    hidden: { opacity: 0, y: 50 },
+    visible: (custom: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: {
+        delay: 0.1 * custom,
+        type: "spring",
+        stiffness: 70,
+        damping: 15
+      }
+    }),
+    hover: {
+      y: -5,
+      boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+      transition: { duration: 0.3 }
+    }
+  };
+
+  const taskVariants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: (custom: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: {
+        delay: 0.05 * custom,
+        duration: 0.3
+      }
+    }),
+    hover: {
+      scale: 1.02,
+      backgroundColor: "rgba(249, 250, 251, 0.8)",
+      transition: { duration: 0.2 }
+    },
+    completed: {
+      backgroundColor: "rgba(209, 250, 229, 0.4)",
+      transition: { duration: 0.5 }
+    }
+  };
+
+  // Definir variantes para los items de inventario
+  const inventoryItemVariants = {
+    hidden: {
+      opacity: 0,
+      y: 20,
+    },
+    visible: (i: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: {
+        delay: 0.2 + i * 0.1,
+        duration: 0.5,
+        ease: "easeOut"
+      }
+    }),
+    hover: {
+      y: -5,
+      boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+      transition: {
+        duration: 0.3
+      }
+    },
+    low: {
+      boxShadow: "0 0 0 2px rgba(239, 68, 68, 0.3)",
+      transition: {
+        duration: 1.5,
+        repeat: Infinity,
+        repeatType: "reverse" as const
+      }
+    },
+    restocked: {
+      backgroundColor: ["rgba(209, 250, 229, 0)", "rgba(209, 250, 229, 1)", "rgba(209, 250, 229, 0)"],
+      transition: {
+        duration: 2
+      }
+    },
+    used: {
+      backgroundColor: ["rgba(254, 226, 226, 0)", "rgba(254, 226, 226, 1)", "rgba(254, 226, 226, 0)"],
+      transition: {
+        duration: 2
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
@@ -619,136 +916,289 @@ export default function EnterpriseOverviewPage() {
       </div>
       
       <div className="flex justify-between items-center mb-6">
-        <button className="text-blue-600 hover:text-blue-700 flex items-center gap-2">
-          <span>Ver Todo el Personal ({staff.length})</span>
-        </button>
-        <button className="text-blue-600 hover:text-blue-700 flex items-center gap-2">
-          <span>Exportar Datos</span>
-        </button>
+        {/* Eliminando los botones innecesarios */}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+      <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-gray-800">Turnos Activos</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'morning' ? 'ring-2 ring-blue-500' : ''}`}>
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold text-gray-800">Mañana</h3>
-                <p className="text-sm text-gray-500">6:00 - 14:00</p>
-              </div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
-                  {activeShift === 'morning' ? morningStaffCount : shifts.filter(s => s.shift_type === 'morning' && s.status === 'in_progress').length} activos
-                </span>
-                {activeShift === 'morning' && (
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                    Activo ahora
-                  </span>
-                )}
-              </div>
-              <div className="mt-2">
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-500">Capacidad</span>
-                  <span className="font-medium">
-                    {activeShift === 'morning' ? `${morningStaffCount}/${morningStaffCount}` : `0/${morningStaffCount}`}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="h-2 rounded-full bg-blue-500" 
-                    style={{ width: activeShift === 'morning' ? '100%' : '0%' }} 
-                  />
-                </div>
-              </div>
-            </div>
+        <motion.div 
+          onClick={() => {
+            const currentManager = getCurrentShiftManager();
+            setSelectedCleaningManager(currentManager);
+            setShowCleaningManagerModal(true);
+          }}
+          className={`relative flex items-center gap-3 shadow-md rounded-lg p-2.5 pr-3.5 cursor-pointer ${
+            activeShift === 'morning' ? 'bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200' : 
+            activeShift === 'afternoon' ? 'bg-gradient-to-br from-green-50 to-green-100 border border-green-200' : 
+            'bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200'
+          }`}
+          whileHover={{ 
+            scale: 1.03, 
+            boxShadow: "0 6px 16px rgba(0,0,0,0.12)" 
+          }}
+          whileTap={{ scale: 0.98 }}
+        >
+          <div className={`relative w-9 h-9 rounded-full flex items-center justify-center ${
+            activeShift === 'morning' ? 'bg-blue-200 text-blue-700' : 
+            activeShift === 'afternoon' ? 'bg-green-200 text-green-700' : 
+            'bg-purple-200 text-purple-700'
+          }`}>
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              viewBox="0 0 24 24" 
+              fill="currentColor" 
+              className="w-4 h-4"
+            >
+              <path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM17.25 19.128l-.001.144a2.25 2.25 0 01-.233.96 10.088 10.088 0 005.06-1.01.75.75 0 00.42-.643 4.875 4.875 0 00-6.957-4.611 8.586 8.586 0 011.71 5.157v.003z" />
+            </svg>
 
-            <div className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'afternoon' ? 'ring-2 ring-green-500' : ''}`}>
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold text-gray-800">Tarde</h3>
-                <p className="text-sm text-gray-500">14:00 - 22:00</p>
-              </div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-green-600 bg-green-50 px-2 py-1 rounded-full">
-                  {activeShift === 'afternoon' ? afternoonStaffCount : shifts.filter(s => s.shift_type === 'afternoon' && s.status === 'in_progress').length} activos
-                </span>
-                {activeShift === 'afternoon' && (
-                  <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                    Activo ahora
-                  </span>
-                )}
-              </div>
-              <div className="mt-2">
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-500">Capacidad</span>
-                  <span className="font-medium">
-                    {activeShift === 'afternoon' ? `${afternoonStaffCount}/${afternoonStaffCount}` : `0/${afternoonStaffCount}`}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="h-2 rounded-full bg-green-500" 
-                    style={{ width: activeShift === 'afternoon' ? '100%' : '0%' }} 
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'night' ? 'ring-2 ring-purple-500' : ''}`}>
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold text-gray-800">Noche</h3>
-                <p className="text-sm text-gray-500">22:00 - 6:00</p>
-              </div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
-                  {activeShift === 'night' ? nightStaffCount : shifts.filter(s => s.shift_type === 'night' && s.status === 'in_progress').length} activos
-                </span>
-                {activeShift === 'night' && (
-                  <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
-                    Activo ahora
-                  </span>
-                )}
-              </div>
-              <div className="mt-2">
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-500">Capacidad</span>
-                  <span className="font-medium">
-                    {activeShift === 'night' ? `${nightStaffCount}/${nightStaffCount}` : `0/${nightStaffCount}`}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="h-2 rounded-full bg-purple-500" 
-                    style={{ width: activeShift === 'night' ? '100%' : '0%' }} 
-                  />
-                </div>
-              </div>
+            {/* Mini-badge de turno */}
+            <div className={`absolute -bottom-1 -right-1 rounded-full w-3.5 h-3.5 flex items-center justify-center ${
+              activeShift === 'morning' ? 'bg-blue-700' : 
+              activeShift === 'afternoon' ? 'bg-green-700' : 
+              'bg-purple-700'
+            } border border-white`}>
+              <span className="text-white text-[7px] font-bold">
+                {activeShift === 'morning' ? 'M' : activeShift === 'afternoon' ? 'T' : 'N'}
+              </span>
             </div>
           </div>
+          
+          <div className="flex flex-col">
+            <div className="flex items-center gap-1.5">
+              <p className={`text-xs font-medium ${
+                activeShift === 'morning' ? 'text-blue-700' : 
+                activeShift === 'afternoon' ? 'text-green-700' : 
+                'text-purple-700'
+              }`}>
+                Commander
+              </p>
+              <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full ${
+                activeShift === 'morning' ? 'bg-blue-100 text-blue-700' : 
+                activeShift === 'afternoon' ? 'bg-green-100 text-green-700' : 
+                'bg-purple-100 text-purple-700'
+              }`}>
+                {activeShift === 'morning' ? 'Mañana' : activeShift === 'afternoon' ? 'Tarde' : 'Noche'}
+              </span>
+            </div>
+            <p className="text-sm font-bold text-gray-800 mt-0.5">{getCurrentShiftManager().name}</p>
+          </div>
+          
+          {isShiftChangingSoon() && (
+            <motion.div
+              className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border border-white"
+              variants={pulseVariants}
+              animate="pulse"
+            />
+          )}
+        </motion.div>
+      </div>
 
+      {/* Agregar cards de turnos */}
+      <div className="mt-6 mb-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <motion.div 
+          className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'morning' ? 'ring-2 ring-blue-500' : ''}`}
+          variants={cardVariants}
+          initial="hidden"
+          animate="visible"
+          whileHover="hover"
+          whileTap="tap"
+          custom={0}
+        >
+          <div className="mb-4">
+            <h3 className="text-xl font-semibold text-gray-800">Mañana</h3>
+            <p className="text-sm text-gray-500">6:00 - 14:00</p>
+          </div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+              {activeShift === 'morning' ? morningStaffCount : shifts.filter(s => s.shift_type === 'morning' && s.status === 'in_progress').length} activos
+            </span>
+            {activeShift === 'morning' && (
+              <motion.span 
+                className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full"
+                animate={{
+                  scale: [1, 1.05, 1],
+                  opacity: [0.9, 1, 0.9]
+                }}
+                transition={{ 
+                  duration: 2, 
+                  repeat: Infinity,
+                  repeatType: "reverse" 
+                }}
+              >
+                Activo ahora
+              </motion.span>
+            )}
+          </div>
+          <div className="mt-2">
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-gray-500">Capacidad</span>
+              <span className="font-medium">
+                {activeShift === 'morning' ? `${morningStaffCount}/${morningStaffCount}` : `0/${morningStaffCount}`}
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <motion.div 
+                className="h-2 rounded-full bg-blue-500" 
+                style={{ width: activeShift === 'morning' ? '100%' : '0%' }}
+                initial={{ width: '0%' }}
+                animate={{ width: activeShift === 'morning' ? '100%' : '0%' }}
+                transition={{ duration: 1, ease: "easeOut" }}
+              />
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div 
+          className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'afternoon' ? 'ring-2 ring-green-500' : ''}`}
+          variants={cardVariants}
+          initial="hidden"
+          animate="visible"
+          whileHover="hover"
+          whileTap="tap"
+          custom={1}
+        >
+          <div className="mb-4">
+            <h3 className="text-xl font-semibold text-gray-800">Tarde</h3>
+            <p className="text-sm text-gray-500">14:00 - 22:00</p>
+          </div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-green-600 bg-green-50 px-2 py-1 rounded-full">
+              {activeShift === 'afternoon' ? afternoonStaffCount : shifts.filter(s => s.shift_type === 'afternoon' && s.status === 'in_progress').length} activos
+            </span>
+            {activeShift === 'afternoon' && (
+              <motion.span 
+                className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full"
+                animate={{
+                  scale: [1, 1.05, 1],
+                  opacity: [0.9, 1, 0.9]
+                }}
+                transition={{ 
+                  duration: 2, 
+                  repeat: Infinity,
+                  repeatType: "reverse" 
+                }}
+              >
+                Activo ahora
+              </motion.span>
+            )}
+          </div>
+          <div className="mt-2">
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-gray-500">Capacidad</span>
+              <span className="font-medium">
+                {activeShift === 'afternoon' ? `${afternoonStaffCount}/${afternoonStaffCount}` : `0/${afternoonStaffCount}`}
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <motion.div 
+                className="h-2 rounded-full bg-green-500" 
+                style={{ width: activeShift === 'afternoon' ? '100%' : '0%' }}
+                initial={{ width: '0%' }}
+                animate={{ width: activeShift === 'afternoon' ? '100%' : '0%' }}
+                transition={{ duration: 1, ease: "easeOut" }}
+              />
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div 
+          className={`bg-white rounded-xl shadow-lg p-6 ${activeShift === 'night' ? 'ring-2 ring-purple-500' : ''}`}
+          variants={cardVariants}
+          initial="hidden"
+          animate="visible"
+          whileHover="hover"
+          whileTap="tap"
+          custom={2}
+        >
+          <div className="mb-4">
+            <h3 className="text-xl font-semibold text-gray-800">Noche</h3>
+            <p className="text-sm text-gray-500">22:00 - 6:00</p>
+          </div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
+              {activeShift === 'night' ? nightStaffCount : shifts.filter(s => s.shift_type === 'night' && s.status === 'in_progress').length} activos
+            </span>
+            {activeShift === 'night' && (
+              <motion.span 
+                className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full"
+                animate={{
+                  scale: [1, 1.05, 1],
+                  opacity: [0.9, 1, 0.9]
+                }}
+                transition={{ 
+                  duration: 2, 
+                  repeat: Infinity,
+                  repeatType: "reverse" 
+                }}
+              >
+                Activo ahora
+              </motion.span>
+            )}
+          </div>
+          <div className="mt-2">
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-gray-500">Capacidad</span>
+              <span className="font-medium">
+                {activeShift === 'night' ? `${nightStaffCount}/${nightStaffCount}` : `0/${nightStaffCount}`}
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <motion.div 
+                className="h-2 rounded-full bg-purple-500" 
+                style={{ width: activeShift === 'night' ? '100%' : '0%' }}
+                initial={{ width: '0%' }}
+                animate={{ width: activeShift === 'night' ? '100%' : '0%' }}
+                transition={{ duration: 1, ease: "easeOut" }}
+              />
+            </div>
+          </div>
+        </motion.div>
+      </div>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
           <div className="bg-white rounded-xl shadow-lg p-6">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-semibold text-gray-800">
+              <motion.h3 
+                className="text-xl font-semibold text-gray-800"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.5, delay: 0.3 }}
+              >
                 {organizationName.includes('Instituto de Salud Mental Matías Hernández') 
                   ? 'Distribución por Áreas Psiquiátricas' 
                   : 'Distribución por Salas'}
-              </h3>
+              </motion.h3>
               <div className="flex gap-2">
-                <button className="p-2 rounded hover:bg-gray-100">
+                <motion.button 
+                  className="p-2 rounded hover:bg-gray-100"
+                  whileHover={{ scale: 1.1, backgroundColor: "rgba(243, 244, 246, 0.8)" }}
+                  whileTap={{ scale: 0.95 }}
+                >
                   <svg className="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-2V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                   </svg>
-                </button>
-                <button className="p-2 rounded hover:bg-gray-100">
+                </motion.button>
+                <motion.button 
+                  className="p-2 rounded hover:bg-gray-100"
+                  whileHover={{ scale: 1.1, backgroundColor: "rgba(243, 244, 246, 0.8)" }}
+                  whileTap={{ scale: 0.95 }}
+                >
                   <svg className="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
-                </button>
+                </motion.button>
               </div>
             </div>
-
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="h-64 bg-gray-50 rounded-lg p-4">
+              <motion.div 
+                className="h-64 bg-gray-50 rounded-lg p-4 overflow-hidden"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.6, delay: 0.4 }}
+              >
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -763,9 +1213,14 @@ export default function EnterpriseOverviewPage() {
                       outerRadius={80}
                       paddingAngle={5}
                       dataKey="value"
+                      animationDuration={1500}
+                      animationBegin={300}
                     >
                       {distributedAreas.map((area, index) => (
-                        <Cell key={`cell-${index}`} fill={getSalaColor(area.name || '')} />
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={getSalaColor(area.name || '')} 
+                        />
                       ))}
                     </Pie>
                     <Tooltip 
@@ -776,40 +1231,62 @@ export default function EnterpriseOverviewPage() {
                         boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
                       }}
                       itemStyle={{ color: '#374151' }}
+                      animationDuration={300}
+                      animationEasing="ease-out"
                     />
                   </PieChart>
                 </ResponsiveContainer>
-              </div>
+              </motion.div>
 
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-                {distributedAreas.map(area => {
+              <motion.div 
+                className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar"
+                variants={areaContainerVariants}
+                initial="hidden"
+                animate="visible"
+              >
+                {distributedAreas.map((area, index) => {
                   const areaColor = getSalaColor(area.name || '');
                   const percentage = totalDistributedStaff > 0 
                     ? Math.round((area.staff_count / totalDistributedStaff) * 100) 
                     : 0;
                   
                   return (
-                    <div key={area.id} className="flex items-center justify-between py-2 px-4 hover:bg-gray-50 rounded-lg transition-colors duration-150">
+                    <motion.div 
+                      key={area.id} 
+                      className="flex items-center justify-between py-2 px-4 hover:bg-gray-50 rounded-lg transition-colors duration-150"
+                      variants={areaItemVariants}
+                      whileHover="hover"
+                      custom={index}
+                    >
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: areaColor }} />
+                        <motion.div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: areaColor }}
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ delay: 0.5 + (index * 0.05), duration: 0.3 }}
+                        />
                         <span className="text-gray-700">{area.name}</span>
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-gray-500">{area.staff_count} personal</span>
-                        <span 
+                        <motion.span 
                           className="text-sm font-medium px-2 py-0.5 rounded" 
                           style={{ 
                             backgroundColor: `${areaColor}15`,
                             color: areaColor 
                           }}
+                          initial={{ opacity: 0, scale: 0.5 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.6 + (index * 0.05), duration: 0.3 }}
                         >
                           {percentage}%
-                        </span>
+                        </motion.span>
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
-              </div>
+              </motion.div>
             </div>
           </div>
         </div>
@@ -817,62 +1294,135 @@ export default function EnterpriseOverviewPage() {
         <div className="lg:col-span-1">
           <div className="sticky top-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Inventario</h2>
-              <button 
+              <motion.h2 
+                className="text-2xl font-bold text-gray-800"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.5 }}
+              >Inventario</motion.h2>
+              <motion.button 
                 onClick={() => router.push('/shared/inventory')}
                 className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-2"
+                whileHover={{ scale: 1.05, x: 3 }}
+                whileTap={{ scale: 0.95 }}
               >
                 Ver Todo
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
-              </button>
+              </motion.button>
             </div>
-            <div className="bg-white rounded-xl shadow-lg p-4">
+            <motion.div 
+              className="bg-white rounded-xl shadow-lg p-4"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+            >
               <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
                 {inventory.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center min-h-[400px] text-center p-6">
-                    <svg className="w-12 h-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <motion.div 
+                    className="flex flex-col items-center justify-center min-h-[400px] text-center p-6"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.6, delay: 0.3 }}
+                  >
+                    <motion.svg 
+                      className="w-12 h-12 text-gray-400 mb-4" 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1, rotateZ: 360 }}
+                      transition={{ duration: 0.8, delay: 0.4, type: "spring" }}
+                    >
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No hay items en el inventario</h3>
-                    <p className="text-sm text-gray-500">Comienza agregando algunos items al inventario.</p>
-                  </div>
+                    </motion.svg>
+                    <motion.h3 
+                      className="text-lg font-medium text-gray-900 mb-2"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5, delay: 0.5 }}
+                    >No hay items en el inventario</motion.h3>
+                    <motion.p 
+                      className="text-sm text-gray-500"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5, delay: 0.6 }}
+                    >Comienza agregando algunos items al inventario.</motion.p>
+                  </motion.div>
                 ) : (
-                  <div className="space-y-4 pr-2">
-                    {inventory.map(item => {
+                  <motion.div 
+                    className="space-y-4 pr-2"
+                    variants={areaContainerVariants}
+                    initial="hidden"
+                    animate="visible"
+                  >
+                    {inventory.map((item, index) => {
                       const stockPercentage = (item.quantity / item.min_stock) * 100;
+                      const isLowStock = stockPercentage <= 50;
+                      
+                      // Determinar la animación inicial basada en el stock
+                      let initialAnimation = isLowStock ? ["visible", "low"] : "visible";
+                      
                       return (
-                        <div 
+                        <motion.div 
                           key={item.id}
                           onClick={() => {
                             setSelectedInventoryItem(item);
                             setShowInventoryModal(true);
                           }}
                           className="p-4 border border-gray-100 rounded-lg hover:border-gray-200 cursor-pointer transition-all"
+                          variants={inventoryItemVariants}
+                          initial="hidden"
+                          animate={initialAnimation}
+                          whileHover="hover"
+                          custom={index}
                         >
                           <div className="flex justify-between items-start mb-2">
                             <div>
-                              <h4 className="font-medium text-gray-900">{item.name}</h4>
-                              <p className="text-sm text-gray-500">{item.description || 'Sin descripción'}</p>
+                              <motion.h4 
+                                className="font-medium text-gray-900"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.3 + (0.05 * index) }}
+                              >{item.name}</motion.h4>
+                              <motion.p 
+                                className="text-sm text-gray-500"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.4 + (0.05 * index) }}
+                              >{item.description || 'Sin descripción'}</motion.p>
                             </div>
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            <motion.span 
+                              className={`px-2 py-1 rounded-full text-xs font-medium ${
                               stockPercentage > 100 
                                 ? 'bg-green-100 text-green-800'
                                 : stockPercentage > 50
                                 ? 'bg-yellow-100 text-yellow-800'
                                 : 'bg-red-100 text-red-800'
-                            }`}>
+                              }`}
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              transition={{ delay: 0.3 + (0.05 * index), type: "spring" }}
+                              whileHover={{ scale: 1.1 }}
+                            >
                               {item.quantity} {item.unit}
-                            </span>
+                            </motion.span>
                           </div>
                           <div className="space-y-1">
                             <div className="flex justify-between text-xs text-gray-500">
                               <span>Stock mínimo: {item.min_stock}</span>
-                              <span>{Math.round(stockPercentage)}%</span>
+                              <motion.span 
+                                animate={
+                                  stockPercentage <= 30 
+                                    ? { color: ["#EF4444", "#F87171", "#EF4444"] } 
+                                    : {}
+                                }
+                                transition={{ duration: 1.5, repeat: stockPercentage <= 30 ? Infinity : 0 }}
+                              >{Math.round(stockPercentage)}%</motion.span>
                             </div>
                             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                              <div 
+                              <motion.div 
                                 className={`h-full transition-all ${
                                   stockPercentage > 100 
                                     ? 'bg-green-500'
@@ -881,24 +1431,36 @@ export default function EnterpriseOverviewPage() {
                                     : 'bg-red-500'
                                 }`}
                                 style={{ width: `${Math.min(stockPercentage, 100)}%` }}
+                                initial={{ width: '0%' }}
+                                animate={{ width: `${Math.min(stockPercentage, 100)}%` }}
+                                transition={{ 
+                                  duration: 1, 
+                                  delay: 0.5 + (0.05 * index), 
+                                  ease: "easeOut" 
+                                }}
                               />
                             </div>
                           </div>
-                        </div>
+                        </motion.div>
                       );
                     })}
-                  </div>
+                  </motion.div>
                 )}
               </div>
-            </div>
+            </motion.div>
           </div>
         </div>
       </div>
 
       <div className="mt-8">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">Tareas por Sala</h2>
+        <motion.h2 
+          className="text-2xl font-bold text-gray-800 mb-6"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >Tareas por Sala</motion.h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {areasTasks.map(sala => {
+          {areasTasks.map((sala, index) => {
             const completedTasks = sala.tasks.filter(t => t.status === 'completed').length;
             const progress = `${completedTasks}/${sala.tasks.length}`;
             const progressPercentage = sala.tasks.length > 0 ? (completedTasks / sala.tasks.length) * 100 : 0;
@@ -909,37 +1471,78 @@ export default function EnterpriseOverviewPage() {
             );
 
             return (
-              <div key={sala.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
+              <motion.div 
+                key={sala.id} 
+                className="bg-white rounded-xl shadow-lg overflow-hidden"
+                variants={salaCardVariants}
+                initial="hidden"
+                animate="visible"
+                whileHover="hover"
+                custom={index}
+              >
                 <div className="p-6 border-l-4" style={{ borderColor: salaColor }}>
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold" style={{ color: salaColor }}>{sala.name}</h3>
-                    <span className="text-sm text-gray-500">{sala.tasks.length} tareas</span>
+                    <motion.h3 
+                      className="text-lg font-semibold" 
+                      style={{ color: salaColor }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.3 + (0.1 * index), duration: 0.5 }}
+                    >{sala.name}</motion.h3>
+                    <motion.span 
+                      className="text-sm text-gray-500"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.4 + (0.1 * index), duration: 0.5 }}
+                    >{sala.tasks.length} tareas</motion.span>
                   </div>
 
                   <div className="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
-                    {areasWithTasks.map(area => {
+                    {areasWithTasks.map((area, areaIndex) => {
                       const areaTasks = sala.tasks.filter(task => task.area_id === area.id);
                       
                       return (
-                        <div key={area.id} className="border-t pt-4 first:border-t-0 first:pt-0">
+                        <motion.div 
+                          key={area.id} 
+                          className="border-t pt-4 first:border-t-0 first:pt-0"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: 0.5 + (0.05 * areaIndex), duration: 0.3 }}
+                        >
                           <div className="flex justify-between items-center mb-2">
                             <h4 className="font-medium text-gray-700">{area.name}</h4>
                             <span className="text-xs text-gray-500">{areaTasks.length} tareas</span>
                           </div>
                           <div className="space-y-3">
-                            {areaTasks.map(task => (
-                              <div key={task.id} className="p-3 bg-gray-50 rounded-lg">
+                            {areaTasks.map((task, taskIndex) => (
+                              <motion.div 
+                                key={task.id} 
+                                className="p-3 bg-gray-50 rounded-lg"
+                                variants={taskVariants}
+                                initial="hidden"
+                                animate={task.status === 'completed' ? ["visible", "completed"] : "visible"}
+                                whileHover="hover"
+                                custom={taskIndex}
+                              >
                                 <div className="flex justify-between items-start">
                                   <h5 className="font-medium text-gray-900">{task.title}</h5>
-                                  <span className={`text-xs px-2 py-1 rounded-full ${
+                                  <motion.span 
+                                    className={`text-xs px-2 py-1 rounded-full ${
                                     task.status === 'completed' ? 'bg-green-100 text-green-800' :
                                     task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
                                     'bg-gray-100 text-gray-800'
-                                  }`}>
+                                    }`}
+                                    animate={
+                                      task.status === 'completed' 
+                                        ? { scale: [1, 1.2, 1], backgroundColor: ["#E1EFFE", "#D1FAE5", "#D1FAE5"] } 
+                                        : {}
+                                    }
+                                    transition={{ duration: 0.5 }}
+                                  >
                                     {task.status === 'completed' ? 'Completado' :
                                      task.status === 'in_progress' ? 'En progreso' :
                                      'Pendiente'}
-                                  </span>
+                                  </motion.span>
                                 </div>
                                 <div className="mt-2 space-y-1">
                                   <p className="text-sm text-gray-600">{task.description}</p>
@@ -947,29 +1550,47 @@ export default function EnterpriseOverviewPage() {
                                     <span>Asignado a: {task.assigned_name}</span>
                                   </div>
                                 </div>
-                              </div>
+                              </motion.div>
                             ))}
                           </div>
-                        </div>
+                        </motion.div>
                       );
                     })}
                   </div>
 
                   <div className="mt-4 flex items-center justify-between">
                     <span className="text-sm text-gray-500">Progreso General</span>
-                    <span className="text-sm" style={{ color: salaColor }}>{progress}</span>
+                    <motion.span 
+                      className="text-sm" 
+                      style={{ color: salaColor }}
+                      animate={{ 
+                        scale: progressPercentage === 100 ? [1, 1.2, 1] : 1,
+                        color: progressPercentage === 100 ? [salaColor, "#047857", salaColor] : salaColor 
+                      }}
+                      transition={{ duration: 1, repeat: progressPercentage === 100 ? 2 : 0 }}
+                    >{progress}</motion.span>
                   </div>
                   <div className="mt-2 h-1 bg-gray-200 rounded-full">
-                    <div 
+                    <motion.div 
                       className="h-1 rounded-full" 
                       style={{ 
                         width: `${progressPercentage}%`,
                         backgroundColor: salaColor
                       }}
-                    ></div>
+                      initial={{ width: '0%' }}
+                      animate={{ 
+                        width: `${progressPercentage}%`,
+                        backgroundColor: progressPercentage === 100 ? [salaColor, "#047857", salaColor] : salaColor 
+                      }}
+                      transition={{ 
+                        duration: 1, 
+                        ease: "easeOut", 
+                        delay: 0.6 + (0.1 * index) 
+                      }}
+                    ></motion.div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -982,6 +1603,20 @@ export default function EnterpriseOverviewPage() {
           onSubmit={handleInventoryModalSubmit}
           item={selectedInventoryItem}
           mode={inventoryModalMode}
+          hidePercentage={true}
+        />
+      )}
+
+      {showCleaningManagerModal && selectedCleaningManager && (
+        <CleaningManagerModal
+          isOpen={showCleaningManagerModal}
+          onClose={() => setShowCleaningManagerModal(false)}
+          managerName={selectedCleaningManager.name}
+          shift={selectedCleaningManager.shift}
+          staffCount={selectedCleaningManager.staff}
+          areasCount={selectedCleaningManager.areas}
+          tasksCount={selectedCleaningManager.tasks}
+          isShiftChangingSoon={isShiftChangingSoon()}
         />
       )}
     </div>

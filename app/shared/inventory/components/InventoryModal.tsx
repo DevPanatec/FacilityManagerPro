@@ -12,6 +12,7 @@ interface InventoryModalProps {
   onSubmit: (data: any) => void
   item?: InventoryItem
   mode: 'edit' | 'use' | 'restock' | 'create'
+  hidePercentage?: boolean
 }
 
 interface FormData {
@@ -25,7 +26,8 @@ export default function InventoryModal({
   onClose,
   onSubmit,
   item,
-  mode
+  mode = 'edit',
+  hidePercentage = false
 }: InventoryModalProps) {
   const [formData, setFormData] = useState<FormData>({
     operationQuantity: 0,
