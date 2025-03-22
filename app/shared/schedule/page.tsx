@@ -6,6 +6,7 @@ import { toast } from 'react-hot-toast'
 import Calendar from './components/Calendar'
 import { TaskModal } from './components/TaskModal'
 import { Database } from '@/lib/types/database'
+import { taskService } from '@/app/services/taskService'
 
 type TaskInput = {
   id?: string
@@ -99,60 +100,25 @@ export default function SchedulePage() {
       setLoading(true)
       setError(null)
 
-      // 1. Verificar autenticación
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
-      if (authError) {
-        console.error('Error de autenticación:', authError)
-        throw new Error('Error de autenticación')
-      }
-      if (!user) throw new Error('No autorizado')
-
-      // 2. Obtener perfil del usuario
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('role, organization_id')
-        .eq('id', user.id)
-        .single()
-
-      if (userError) {
-        console.error('Error al obtener usuario:', userError)
-        throw new Error('Error al obtener información del usuario')
-      }
-      if (!userData) throw new Error('Usuario no encontrado')
-
-      // 3. Consulta base de tareas
-      let query = supabase
-        .from('tasks')
-        .select(`
-          *,
-          assignee:assigned_to(
-            first_name,
-            last_name
-          )
-        `)
-        .order('due_date', { ascending: true })
-
-      // 4. Aplicar filtros según el rol
-      if (userData.role !== 'superadmin') {
-        if (!userData.organization_id) {
-          throw new Error('Usuario no tiene organización asignada')
-        }
-        query = query.eq('organization_id', userData.organization_id)
-      }
-
-      // 5. Ejecutar la consulta
-      const { data: tasks, error: tasksError } = await query
+      // Usar el servicio compartido para cargar todas las tareas
+      const allTasks = await taskService.loadAllTasks();
+      console.log('Tareas cargadas con servicio compartido para el Calendario:', allTasks);
       
-      if (tasksError) {
-        console.error('Error al cargar tareas:', tasksError)
-        throw new Error('Error al cargar las tareas')
-      }
+      // Formatear las tareas para incluir assignee en el formato esperado por el calendario
+      const formattedTasks = allTasks.map(task => ({
+        ...task,
+        assignee: task.users ? {
+          first_name: task.users.first_name,
+          last_name: task.users.last_name
+        } : undefined
+      }));
       
-      setTasks(tasks || [])
+      setTasks(formattedTasks);
     } catch (error) {
       console.error('Error detallado al cargar tareas:', {
+        error,
         message: error instanceof Error ? error.message : 'Error desconocido',
-        error
+        stack: error instanceof Error ? error.stack : undefined
       })
       setError('Error al cargar las tareas')
       toast.error('Error al cargar las tareas. Por favor, intenta de nuevo.')
@@ -179,12 +145,34 @@ export default function SchedulePage() {
         throw new Error('El título es requerido')
       }
 
+      // Asegurarse de que due_date esté presente como un campo ISO string (YYYY-MM-DD)
+      let dueDate = taskData.due_date;
+      
+      // Si no se proporcionó una fecha, usar la fecha seleccionada o la actual
+      if (!dueDate && selectedDate) {
+        dueDate = new Date(selectedDate).toISOString().split('T')[0];
+      } else if (!dueDate) {
+        dueDate = new Date().toISOString().split('T')[0];
+      }
+
+      // Asegurar que la fecha sea un string en formato ISO
+      if (dueDate instanceof Date) {
+        dueDate = dueDate.toISOString().split('T')[0];
+      }
+      
+      // Actualizar taskData con la fecha ajustada
+      const updatedTaskData = {
+        ...taskData,
+        due_date: dueDate,
+        type: taskData.type || 'calendar', // Establecer tipo por defecto para que aparezca en el calendario
+      };
+
       if (selectedTask) {
         // Actualizar tarea existente
         const { error: updateError } = await supabase
           .from('tasks')
           .update({
-            ...taskData,
+            ...updatedTaskData,
             updated_at: new Date().toISOString()
           })
           .eq('id', selectedTask.id)
@@ -194,11 +182,11 @@ export default function SchedulePage() {
       } else {
         // Crear nueva tarea
         const newTask = {
-          ...taskData,
+          ...updatedTaskData,
           organization_id: userProfile.organization_id,
           created_by: user.id,
-          status: taskData.status || 'pending',
-          priority: taskData.priority || 'medium',
+          status: updatedTaskData.status || 'pending',
+          priority: updatedTaskData.priority || 'medium',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }

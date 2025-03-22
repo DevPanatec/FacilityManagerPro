@@ -212,12 +212,12 @@ export default function TasksPage() {
                 .from('tasks')
                 .select(`
                   *,
-                  assignee:users!tasks_assigned_to_fkey (
-                    first_name,
-                    last_name
-                  ),
-                  area:areas!tasks_area_id_fkey (
-                    name
+          assignee:users!tasks_assigned_to_fkey (
+            first_name,
+            last_name
+          ),
+          area:areas!tasks_area_id_fkey (
+            name
                   ),
                   sala:salas (
                     id,
@@ -828,7 +828,7 @@ export default function TasksPage() {
             >
               {showAllTasks ? 'Todas las tareas' : 'Solo mis tareas'}
             </button>
-          </div>
+        </div>
         </div>
         <button className="p-2 hover:bg-gray-100 rounded-full" onClick={fetchTasks}>
           <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -949,24 +949,24 @@ export default function TasksPage() {
                     true
                   )
                   .map(task => (
-                    <div 
-                      key={task.id} 
-                      className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
-                    >
-                      <div className="p-5">
-                        {/* Encabezado con área y prioridad */}
-                        <div className="flex justify-between items-start mb-4">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                              </svg>
+            <div 
+              key={task.id} 
+              className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+            >
+              <div className="p-5">
+                {/* Encabezado con área y prioridad */}
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
                               <h3 className="font-semibold text-gray-800">
                                 {task.type === 'assignment' && task.sala 
                                   ? `${task.sala.nombre} - ${task.area?.name || 'Área sin nombre'}` 
                                   : (task.area?.name || 'Tarea de mantenimiento')}
                               </h3>
-                            </div>
+                    </div>
                             <p className="text-sm text-gray-600 mt-1">
                               {task.title || 'Servicio programado'}
                             </p>
@@ -988,55 +988,55 @@ export default function TasksPage() {
                                 `Asignado a: ${task.assignee.first_name || ''} ${task.assignee.last_name || ''}`.trim() : 
                                 'Sin asignar'}
                             </p>
-                          </div>
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1 ${
-                            task.status === 'completed' ? 'bg-green-100 text-green-700' :
-                            task.status === 'pending' ? 'bg-orange-100 text-orange-700' :
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1 ${
+                    task.status === 'completed' ? 'bg-green-100 text-green-700' :
+                    task.status === 'pending' ? 'bg-orange-100 text-orange-700' :
                             task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
                             'bg-red-100 text-red-700'
-                          }`}>
-                            {task.status === 'completed' ? (
-                              <>
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Completada
-                              </>
-                            ) : task.status === 'pending' ? (
-                              <>
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                Pendiente
-                              </>
+                  }`}>
+                    {task.status === 'completed' ? (
+                      <>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Completada
+                      </>
+                    ) : task.status === 'pending' ? (
+                      <>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Pendiente
+                      </>
                             ) : task.status === 'in_progress' ? (
-                              <>
-                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                </svg>
-                                En Progreso
-                              </>
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        En Progreso
+                      </>
                             ) : (
                               <>
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                                 Cancelada
-                              </>
-                            )}
-                          </span>
-                        </div>
+                      </>
+                    )}
+                  </span>
+                </div>
 
-                        {/* Información adicional */}
-                        <div className="grid grid-cols-2 gap-4 mb-4">
-                          <div className="flex items-center gap-2">
-                            <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            <span className="text-sm text-gray-600">
-                              Creada: {new Date(task.created_at).toLocaleDateString()}
-                            </span>
-                          </div>
+                {/* Información adicional */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span className="text-sm text-gray-600">
+                      Creada: {new Date(task.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
                           {task.due_date && (
                             <div className="flex items-center gap-2">
                               <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1047,7 +1047,7 @@ export default function TasksPage() {
                               </span>
                             </div>
                           )}
-                        </div>
+                </div>
 
                         {task.description && (
                           <div className="mb-4 text-sm text-gray-600 line-clamp-2">
@@ -1055,29 +1055,29 @@ export default function TasksPage() {
                           </div>
                         )}
 
-                        {/* Botones de acción */}
-                        <div className="flex justify-end">
-                          <button
-                            onClick={() => handleDeleteTask(task.id)}
-                            className="inline-flex items-center px-3 py-2 mr-2 text-sm font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors duration-200"
-                            title="Eliminar tarea"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                {/* Botones de acción */}
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => handleDeleteTask(task.id)}
+                    className="inline-flex items-center px-3 py-2 mr-2 text-sm font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors duration-200"
+                    title="Eliminar tarea"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                           {task.status === 'pending' && (
-                            <button
-                              data-task-id={task.id}
-                              onClick={() => handleStartTask(task)}
-                              className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              Iniciar
-                            </button>
+                  <button
+                    data-task-id={task.id}
+                    onClick={() => handleStartTask(task)}
+                    className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Iniciar
+                  </button>
                           )}
                           {task.status === 'in_progress' && (
                             <button
@@ -1092,10 +1092,10 @@ export default function TasksPage() {
                               Continuar
                             </button>
                           )}
-                        </div>
-                      </div>
-                    </div>
-                  ))
+                </div>
+              </div>
+            </div>
+          ))
               )}
           </>
         )}

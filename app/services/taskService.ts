@@ -1,182 +1,284 @@
-import { supabaseService } from './supabaseService'
-import { Database } from '@/types/supabase'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
-type Task = Database['public']['Tables']['tasks']['Row']
-type TaskInsert = Database['public']['Tables']['tasks']['Insert']
-type TaskUpdate = Database['public']['Tables']['tasks']['Update']
-
+/**
+ * Servicio para gestionar la carga de tareas de forma consistente en toda la aplicación
+ */
 export const taskService = {
-  // Obtener tareas según el rol del usuario
-  async getTasks(): Promise<Task[]> {
+  /**
+   * Carga todas las tareas para una organización
+   * @returns Un array con todas las tareas de la organización
+   */
+  async loadAllTasks() {
+    const supabase = createClientComponentClient();
+    
     try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
-      if (authError) throw authError
-      if (!authData?.user) throw new Error('Usuario no autenticado')
+      // Obtener el usuario actual
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
 
-      const { data: tasks, error: tasksError } = await supabaseService.db
-        .from('tasks')
-        .select('*')
-      if (tasksError) throw tasksError
-
-      // Filtrar tareas según el rol del usuario
-      const { data: profile, error: profileError } = await supabaseService.db
+      // Obtener el perfil del usuario para acceder a la organización
+      const { data: userProfile } = await supabase
         .from('users')
-        .select('role')
-        .eq('id', authData.user.id)
-        .single()
-      if (profileError) throw profileError
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
 
-      if (profile?.role === 'enterprise') {
-        return tasks.filter(task => task.assigned_to === authData.user.id)
-      }
-      return tasks
+      if (!userProfile) throw new Error('Perfil no encontrado');
+      
+      // Consulta unificada para obtener todas las tareas activas (no canceladas)
+      const { data: tasksData, error: tasksError } = await supabase
+        .from('tasks')
+        .select(`
+          id,
+          title,
+          description,
+          status,
+          priority,
+          created_at,
+          start_date,
+          start_time,
+          end_time,
+          due_date,
+          type,
+          sala_id,
+          area_id,
+          assigned_to,
+          organization_id,
+          users!tasks_assigned_to_fkey (
+            id,
+            first_name,
+            last_name,
+            avatar_url
+          ),
+          areas (
+            id,
+            name
+          ),
+          salas (
+            id,
+            nombre
+          )
+        `)
+        .eq('organization_id', userProfile.organization_id)
+        .not('status', 'eq', 'cancelled')
+        .order('created_at', { ascending: false });
+
+      if (tasksError) throw tasksError;
+      
+      return tasksData || [];
     } catch (error) {
-      console.error('Error al obtener tareas:', error)
-      throw error
+      console.error('Error cargando tareas:', error);
+      throw error;
     }
   },
-
-  // Crear una nueva tarea
-  async createTask(taskData: Partial<TaskInsert>): Promise<Task> {
-    try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
-      if (authError) throw authError
-      if (!authData?.user) throw new Error('Usuario no autenticado')
-
-      const newTask: TaskInsert = {
-        title: taskData.title || '',
-        description: taskData.description || '',
-        status: taskData.status || 'pending',
-        priority: taskData.priority || 'medium',
-        organization_id: taskData.organization_id || '',
-        created_by: authData.user.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+  
+  /**
+   * Filtra las tareas por fecha
+   * @param tasks - Lista de tareas a filtrar
+   * @param date - Fecha para filtrar (formato YYYY-MM-DD)
+   * @returns Array de tareas que corresponden a la fecha especificada
+   */
+  filterTasksByDate(tasks, date) {
+    // Asegurar que la fecha está en formato YYYY-MM-DD
+    const targetDate = typeof date === 'string' ? date : date.toISOString().split('T')[0];
+    
+    return tasks.filter(task => {
+      // Primero intentar con due_date
+      if (task.due_date) {
+        const taskDate = new Date(task.due_date).toISOString().split('T')[0];
+        return taskDate === targetDate;
       }
-
-      const { data, error: insertError } = await supabaseService.db
-        .from('tasks')
-        .insert(newTask)
-        .select()
-        .single()
-      if (insertError) throw insertError
-      return data
+      
+      // Si no hay due_date, intentar con created_at
+      if (task.created_at) {
+        const taskDate = new Date(task.created_at).toISOString().split('T')[0];
+        return taskDate === targetDate;
+      }
+      
+      return false;
+    });
+  },
+  
+  /**
+   * Obtiene solo las tareas del día actual
+   * @returns Un array con las tareas del día actual
+   */
+  async getTodayTasks() {
+    const allTasks = await this.loadAllTasks();
+    const today = new Date().toISOString().split('T')[0];
+    return this.filterTasksByDate(allTasks, today);
+  },
+  
+  /**
+   * Carga las tareas para una sala específica
+   * @param salaId ID de la sala
+   * @returns Tareas filtradas para la sala especificada
+   */
+  async loadTasksBySala(salaId) {
+    try {
+      const allTasks = await this.loadAllTasks();
+      return allTasks.filter(task => task.sala_id === salaId);
     } catch (error) {
-      console.error('Error al crear tarea:', error)
-      throw error
+      console.error(`Error cargando tareas para sala ${salaId}:`, error);
+      throw error;
     }
   },
-
-  // Actualizar una tarea existente
-  async updateTask(id: string, updates: Partial<TaskUpdate>): Promise<Task> {
+  
+  /**
+   * Carga todas las tareas y las agrupa por sala
+   * @returns Array de salas con sus tareas asociadas
+   */
+  async loadTasksGroupedBySala() {
+    const supabase = createClientComponentClient();
+    
     try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
-      if (authError) throw authError
-      if (!authData?.user) throw new Error('Usuario no autenticado')
+      // Obtener el usuario actual
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
 
-      // Verificar permisos
-      const { data: profile, error: profileError } = await supabaseService.db
+      // Obtener el perfil del usuario
+      const { data: userProfile } = await supabase
         .from('users')
-        .select('role')
-        .eq('id', authData.user.id)
-        .single()
-      if (profileError) throw profileError
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
 
-      if (profile?.role === 'enterprise') {
-        const { data: task, error: taskError } = await supabaseService.db
-          .from('tasks')
-          .select()
-          .eq('id', id)
-          .single()
-        if (taskError) throw taskError
-        if (!task || task.assigned_to !== authData.user.id) {
-          throw new Error('No tienes permiso para modificar esta tarea')
-        }
-      }
+      if (!userProfile) throw new Error('Perfil no encontrado');
+      
+      // Cargar todas las salas
+      const { data: salasData, error: salasError } = await supabase
+        .from('salas')
+        .select(`
+          id,
+          nombre,
+          areas (
+            id,
+            name,
+            status
+          )
+        `)
+        .eq('organization_id', userProfile.organization_id);
 
-      const updatedTask = {
-        ...updates,
-        updated_at: new Date().toISOString()
-      }
-
-      const { data, error: updateError } = await supabaseService.db
-        .from('tasks')
-        .update(updatedTask)
-        .eq('id', id)
-        .select()
-        .single()
-      if (updateError) throw updateError
-      return data
+      if (salasError) throw salasError;
+      
+      // Cargar todas las tareas
+      const allTasks = await this.loadAllTasks();
+      
+      // Agrupar tareas por sala
+      const salasWithTasks = salasData.map(sala => {
+        const salaTasks = allTasks.filter(task => task.sala_id === sala.id);
+        
+        return {
+          id: sala.id,
+          nombre: sala.nombre,
+          tareas: salaTasks.map(task => ({
+            id: task.id,
+            title: task.title,
+            description: task.description || '',
+            status: task.status || 'pending',
+            priority: task.priority || 'medium',
+            created_at: new Date(task.created_at).toLocaleDateString(),
+            due_date: task.due_date,
+            assigned_to: task.assigned_to,
+            assignee: task.users ? {
+              first_name: task.users.first_name,
+              last_name: task.users.last_name
+            } : undefined
+          })),
+          areas: (sala.areas || [])
+            .filter(area => area.status === 'active')
+            .map(area => ({
+              id: area.id,
+              name: area.name
+            }))
+        };
+      });
+      
+      return salasWithTasks;
     } catch (error) {
-      console.error('Error al actualizar tarea:', error)
-      throw error
+      console.error('Error cargando tareas agrupadas por sala:', error);
+      throw error;
     }
   },
-
-  // Eliminar una tarea
-  async deleteTask(id: string): Promise<boolean> {
+  
+  /**
+   * Carga todas las tareas del día actual y las agrupa por sala
+   * @returns Array de salas con sus tareas asociadas filtradas por el día actual
+   */
+  async loadTodayTasksGroupedBySala() {
+    const supabase = createClientComponentClient();
+    
     try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
-      if (authError) throw authError
-      if (!authData?.user) throw new Error('Usuario no autenticado')
+      // Obtener el usuario actual
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autorizado');
 
-      // Verificar permisos
-      const { data: profile, error: profileError } = await supabaseService.db
+      // Obtener el perfil del usuario
+      const { data: userProfile } = await supabase
         .from('users')
-        .select('role')
-        .eq('id', authData.user.id)
-        .single()
-      if (profileError) throw profileError
+        .select('organization_id')
+        .eq('id', user.id)
+        .single();
 
-      if (profile?.role === 'enterprise') {
-        throw new Error('No tienes permiso para eliminar tareas')
-      }
+      if (!userProfile) throw new Error('Perfil no encontrado');
+      
+      // Cargar todas las salas
+      const { data: salasData, error: salasError } = await supabase
+        .from('salas')
+        .select(`
+          id,
+          nombre,
+          areas (
+            id,
+            name,
+            status
+          )
+        `)
+        .eq('organization_id', userProfile.organization_id);
 
-      const { error: deleteError } = await supabaseService.db
-        .from('tasks')
-        .delete()
-        .eq('id', id)
-      if (deleteError) throw deleteError
-      return true
+      if (salasError) throw salasError;
+      
+      // Cargar todas las tareas
+      const allTasks = await this.loadAllTasks();
+      
+      // Filtrar solo las tareas de hoy
+      const today = new Date().toISOString().split('T')[0];
+      const todayTasks = this.filterTasksByDate(allTasks, today);
+      
+      // Agrupar tareas por sala
+      const salasWithTasks = salasData.map(sala => {
+        const salaTasks = todayTasks.filter(task => task.sala_id === sala.id);
+        
+        return {
+          id: sala.id,
+          nombre: sala.nombre,
+          tareas: salaTasks.map(task => ({
+            id: task.id,
+            title: task.title,
+            description: task.description || '',
+            status: task.status || 'pending',
+            priority: task.priority || 'medium',
+            created_at: new Date(task.created_at).toLocaleDateString(),
+            due_date: task.due_date,
+            assigned_to: task.assigned_to,
+            assignee: task.users ? {
+              first_name: task.users.first_name,
+              last_name: task.users.last_name
+            } : undefined
+          })),
+          areas: (sala.areas || [])
+            .filter(area => area.status === 'active')
+            .map(area => ({
+              id: area.id,
+              name: area.name
+            }))
+        };
+      });
+      
+      return salasWithTasks;
     } catch (error) {
-      console.error('Error al eliminar tarea:', error)
-      throw error
-    }
-  },
-
-  // Asignar una tarea a un usuario
-  async assignTask(taskId: string, userId: string): Promise<Task> {
-    try {
-      const { data: authData, error: authError } = await supabaseService.auth.getUser()
-      if (authError) throw authError
-      if (!authData?.user) throw new Error('Usuario no autenticado')
-
-      // Verificar permisos
-      const { data: profile, error: profileError } = await supabaseService.db
-        .from('users')
-        .select('role')
-        .eq('id', authData.user.id)
-        .single()
-      if (profileError) throw profileError
-
-      if (profile?.role === 'enterprise') {
-        throw new Error('No tienes permiso para asignar tareas')
-      }
-
-      const { data, error: updateError } = await supabaseService.db
-        .from('tasks')
-        .update({
-          assigned_to: userId,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', taskId)
-        .select()
-        .single()
-      if (updateError) throw updateError
-      return data
-    } catch (error) {
-      console.error('Error al asignar tarea:', error)
-      throw error
+      console.error('Error cargando tareas agrupadas por sala:', error);
+      throw error;
     }
   }
-} 
+}; 

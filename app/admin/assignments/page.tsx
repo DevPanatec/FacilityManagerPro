@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Dialog } from '@headlessui/react';
 import { User } from '@supabase/supabase-js';
 import SalaAreaSelector from '@/app/shared/components/componentes/SalaAreaSelector';
 import { toast } from 'react-hot-toast';
 import { errorHandler } from '@/app/utils/errorHandler';
+import { motion } from 'framer-motion';
+import { taskService } from '@/app/services/taskService';
 
 interface WorkShiftData {
   id: string;
@@ -129,6 +131,188 @@ const formatTime = (time: string): string => {
   return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
 };
 
+// Componente de tareas por sala con animaciones
+function TareasPorSala({ salas, onTaskClick }: { salas: Sala[], onTaskClick: (task: Task) => void }) {
+  // Formatear fecha actual para mostrarla
+  const today = new Date();
+  const formattedDate = today.toLocaleDateString('es-ES', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+  
+  // Filtrar salas que tienen tareas
+  const salasWithTasks = salas.filter(sala => sala.tareas.length > 0);
+
+  return (
+    <div className="bg-white rounded-xl shadow-lg p-6 mt-6">
+      <div className="flex justify-between items-center mb-4">
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="flex items-center"
+        >
+          <h2 className="text-lg font-semibold mb-4">Tareas por Sala</h2>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="text-sm text-gray-500 italic flex items-center"
+        >
+          <svg className="w-4 h-4 mr-1 text-indigo-500" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+          </svg>
+          {formattedDate}
+        </motion.div>
+      </div>
+
+      {salasWithTasks.length === 0 ? (
+        <motion.div 
+          className="py-20 flex flex-col items-center justify-center text-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          <h3 className="text-lg font-medium text-gray-500">No hay tareas para hoy</h3>
+          <p className="text-sm text-gray-400 mt-2 max-w-md">
+            No hay tareas asignadas para las salas en el día de hoy. Las tareas aparecerán aquí según se vayan creando para la fecha actual.
+          </p>
+        </motion.div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {salasWithTasks.map((sala, index) => (
+            <motion.div
+              key={sala.id}
+              className="relative overflow-hidden bg-gradient-to-br from-white to-gray-50 rounded-xl border border-gray-100 shadow-sm"
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ 
+                duration: 0.5,
+                delay: index * 0.1,
+                ease: "easeOut"
+              }}
+            >
+              <div className="absolute top-0 right-0 left-0 h-1" style={{ backgroundColor: sala.color }} />
+              
+              <div className="p-4">
+                <div className="flex items-center mb-3">
+                  <div className="h-10 w-10 rounded-full flex items-center justify-center" 
+                    style={{ backgroundColor: `${sala.color}15` }}>
+                    <div className="h-6 w-6 rounded-full" style={{ backgroundColor: sala.color }} />
+                  </div>
+                  <h3 className="ml-3 font-semibold text-gray-800">{sala.nombre}</h3>
+                </div>
+                
+                <div className="space-y-3 mt-4">
+                  {sala.tareas.slice(0, 3).map((tarea, taskIndex) => {
+                    const isCompleted = tarea.status === 'completed';
+                    const isInProgress = tarea.status === 'in_progress';
+                    
+                    return (
+                      <motion.div 
+                        key={tarea.id}
+                        className={`p-3 rounded-lg border ${
+                          isCompleted ? 'border-green-100 bg-gradient-to-r from-green-50 to-emerald-50' : 
+                          isInProgress ? 'border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50' :
+                          'border-gray-100 bg-gradient-to-r from-gray-50 to-white'
+                        } hover:shadow-sm transition-all`}
+                        variants={{
+                          hidden: { opacity: 0, x: -20 },
+                          visible: { opacity: 1, x: 0 },
+                          completed: { 
+                            backgroundColor: "rgba(209, 250, 229, 0.6)", 
+                            borderColor: "rgba(167, 243, 208, 1)"
+                          }
+                        }}
+                        initial="hidden"
+                        animate={isCompleted ? ["visible", "completed"] : "visible"}
+                        whileHover={{ 
+                          y: -2, 
+                          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)" 
+                        }}
+                        transition={{ 
+                          duration: 0.3, 
+                          delay: 0.1 * taskIndex + 0.3 * index 
+                        }}
+                        onClick={() => onTaskClick(tarea)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-1 flex-1">
+                            <div className="flex items-center">
+                              <motion.div 
+                                className={`w-4 h-4 rounded-full mr-2 flex items-center justify-center border-2 ${
+                                  isCompleted ? 'border-green-500 bg-green-100' : 
+                                  isInProgress ? 'border-blue-500 bg-blue-100' :
+                                  'border-gray-300 bg-gray-100'
+                                }`}
+                                whileHover={{ scale: 1.2 }}
+                                whileTap={{ scale: 0.8 }}
+                              >
+                                {isCompleted && (
+                                  <motion.svg 
+                                    viewBox="0 0 24 24" 
+                                    className="w-3 h-3 text-green-500"
+                                    initial={{ opacity: 0, scale: 0 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ type: "spring", stiffness: 500, damping: 15 }}
+                                  >
+                                    <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+                                  </motion.svg>
+                                )}
+                              </motion.div>
+                              <h4 className={`font-medium text-sm ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
+                                {tarea.title}
+                              </h4>
+                            </div>
+                            <p className="text-sm text-gray-600 ml-6 mt-1">{tarea.description}</p>
+                          </div>
+                          
+                          <motion.span 
+                            className={`text-xs px-2 py-1 ml-2 flex-shrink-0 rounded-full font-medium ${
+                              isCompleted ? 'bg-green-100 text-green-700' :
+                              isInProgress ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: "spring", stiffness: 500, damping: 25, delay: 0.2 * taskIndex + 0.4 * index }}
+                          >
+                            {isCompleted ? 'Completado' :
+                             isInProgress ? 'En Progreso' : 'Pendiente'}
+                          </motion.span>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+                
+                {sala.tareas.length > 3 && (
+                  <motion.div 
+                    className="mt-3 p-2 text-center text-indigo-600 hover:text-indigo-800 cursor-pointer rounded-lg hover:bg-indigo-50 font-medium flex items-center justify-center"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <span>Ver todas ({sala.tareas.length})</span>
+                    <svg className="w-4 h-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </motion.div>
+                )}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AssignmentsPage() {
   const [loading, setLoading] = useState(true);
   const [turnos, setTurnos] = useState<Turno[]>([]);
@@ -150,7 +334,7 @@ export default function AssignmentsPage() {
   const [selectedShiftDetails, setSelectedShiftDetails] = useState<WorkShiftWithUsers | null>(null);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [isDeepTasks, setIsDeepTasks] = useState(false);
+  const [selectedDeepTasks, setSelectedDeepTasks] = useState(false);
 
   // Update the state definition with the proper type
   const [shiftHours, setShiftHours] = useState<ShiftHoursState>({
@@ -344,97 +528,17 @@ export default function AssignmentsPage() {
         setUserMap(newUserMap);
       }
 
-      // Cargar TODAS las salas sin ningún filtro
-      const { data: salasData, error: salasError } = await supabase
-        .from('salas')
-        .select(`
-          *,
-          areas:areas (
-            id,
-            name,
-            status
-          )
-        `)
-        .eq('organization_id', userProfile.organization_id);
+      // Cargar salas con tareas del día actual usando el servicio compartido
+      const salasWithTasks = await taskService.loadTodayTasksGroupedBySala();
+      
+      // Añadir el color a cada sala
+      const salasWithColors = salasWithTasks.map(sala => ({
+        ...sala,
+        color: getSalaColor(sala.nombre),
+      }));
 
-      if (salasError) throw salasError;
-
-      if (salasData) {
-        // Cargar las tareas para cada sala
-        const salasWithTasks = await Promise.all(salasData.map(async (sala) => {
-          const { data: tasksData, error: tasksError } = await supabase
-            .from('tasks')
-            .select(`
-              id,
-              title,
-              description,
-              status,
-              priority,
-              created_at,
-              start_date,
-              end_time,
-              start_time,
-              assigned_to,
-              users!tasks_assigned_to_fkey (
-                id,
-                first_name,
-                last_name
-              )
-            `)
-            .eq('sala_id', sala.id)
-            .eq('type', 'assignment')  // Solo tareas normales
-            .eq('organization_id', userProfile.organization_id)
-            .not('status', 'eq', 'cancelled')
-            .order('created_at', { ascending: false });
-
-          if (tasksError) {
-            console.error('Error loading tasks for sala:', tasksError);
-            return {
-              id: sala.id,
-              nombre: sala.nombre,
-              color: getSalaColor(sala.nombre),
-              tareas: [],
-              areas: (sala.areas || [])
-                .filter((area: Area) => area.status === 'active')
-                .map((area: Area) => ({
-                  id: area.id,
-                  name: area.name
-                }))
-            };
-          }
-
-          // Formatear las tareas
-          const formattedTasks: Task[] = (tasksData || []).map(task => ({
-            id: task.id,
-            title: task.title,
-            description: task.description || '',
-            status: task.status || 'pending',
-            priority: task.priority || 'medium',
-            created_at: new Date(task.created_at).toLocaleDateString(),
-            assigned_to: task.assigned_to,
-            assignee: task.users ? {
-              first_name: task.users[0]?.first_name,
-              last_name: task.users[0]?.last_name
-            } : undefined
-          }));
-
-          return {
-            id: sala.id,
-            nombre: sala.nombre,
-            color: getSalaColor(sala.nombre),
-            tareas: formattedTasks,
-            areas: (sala.areas || [])
-              .filter((area: Area) => area.status === 'active')
-              .map((area: Area) => ({
-                id: area.id,
-                name: area.name
-              }))
-          };
-        }));
-
-        console.log('Salas con tareas:', salasWithTasks);
-        setSalas(salasWithTasks);
-      }
+      console.log('Salas con tareas para hoy (usando servicio compartido):', salasWithColors);
+      setSalas(salasWithColors);
 
     } catch (error: any) {
       console.error('Error loading data:', error);
@@ -469,9 +573,10 @@ export default function AssignmentsPage() {
   };
 
   const handleCreateAssignment = async () => {
+    setIsCreating(true);
     try {
       // Validación inicial
-      if (isDeepTasks) {
+      if (selectedDeepTasks) {
         if (selectedUsers.length === 0 || !selectedSala || !selectedArea || !selectedDate || !startTime) {
           toast.error('Por favor complete todos los campos y seleccione al menos un usuario');
           return;
@@ -482,8 +587,6 @@ export default function AssignmentsPage() {
           return;
         }
       }
-
-      setIsCreating(true);
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No autorizado');
@@ -513,7 +616,7 @@ export default function AssignmentsPage() {
         .eq('id', selectedArea)
         .single();
 
-      if (isDeepTasks) {
+      if (selectedDeepTasks) {
         // Obtener las tareas profundas activas
         const { data: deepTasks, error: deepTasksError } = await supabase
           .from('deep_tasks')
@@ -595,7 +698,7 @@ export default function AssignmentsPage() {
         setSelectedArea('');
         setSelectedDate('');
         setStartTime('');
-        setIsDeepTasks(false);
+        setSelectedDeepTasks(false);
         loadData();
       }, 2000);
 
@@ -706,8 +809,8 @@ export default function AssignmentsPage() {
     }
   };
 
-  const handleTaskClick = (tarea: Task) => {
-    setSelectedTask(tarea);
+  const handleTaskClick = (task: Task) => {
+    setSelectedTask(task);
     setShowTaskDetailsModal(true);
   };
 
@@ -874,8 +977,12 @@ export default function AssignmentsPage() {
     }
   };
 
+  const handleSalaChange = (sala?: { id: string }) => {
+    setSelectedSala(sala?.id || null);
+  };
+
   return (
-    <div className="space-y-8">
+    <div className="container mx-auto py-8 px-4">
       <div className="px-6 -mx-6 py-6">
         <h1 className="text-2xl font-bold text-gray-800">Gestión de Asignaciones</h1>
         <p className="text-sm text-gray-600 mt-1">Administra las asignaciones del personal</p>
@@ -975,10 +1082,10 @@ export default function AssignmentsPage() {
                 <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
-                {isDeepTasks ? 'Usuarios' : 'Usuario'}
+                {selectedDeepTasks ? 'Usuarios' : 'Usuario'}
               </label>
               
-              {isDeepTasks ? (
+              {selectedDeepTasks ? (
                 // Selector múltiple mejorado para tareas profundas
                 <div className="space-y-2">
                   <div className="max-h-[200px] overflow-y-auto border border-blue-100 rounded-lg bg-white divide-y">
@@ -1094,16 +1201,16 @@ export default function AssignmentsPage() {
               <button
                 type="button"
                 role="switch"
-                aria-checked={isDeepTasks}
+                aria-checked={selectedDeepTasks}
                 className={`${
-                  isDeepTasks ? 'bg-blue-600' : 'bg-gray-200'
+                  selectedDeepTasks ? 'bg-blue-600' : 'bg-gray-200'
                 } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
-                onClick={() => setIsDeepTasks(!isDeepTasks)}
+                onClick={() => setSelectedDeepTasks(!selectedDeepTasks)}
               >
                 <span
                   aria-hidden="true"
                   className={`${
-                    isDeepTasks ? 'translate-x-5' : 'translate-x-0'
+                    selectedDeepTasks ? 'translate-x-5' : 'translate-x-0'
                   } pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
                 />
               </button>
@@ -1142,57 +1249,8 @@ export default function AssignmentsPage() {
         </div>
       </div>
 
-      {/* Tareas por Sala */}
-      <div className="mt-8">
-        <h2 className="text-lg font-semibold mb-4">Tareas por Sala</h2>
-        <div className="grid grid-cols-3 gap-6">
-          {salas.map((sala) => (
-            <div 
-              key={sala.id}
-              className="bg-white rounded-lg shadow-sm overflow-hidden"
-              style={{ borderLeft: `4px solid ${sala.color}` }}
-            >
-              {/* Encabezado de la sala */}
-              <div className="p-4" style={{ backgroundColor: `${sala.color}10` }}>
-                <h3 className="font-semibold text-gray-800">{sala.nombre}</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  {sala.tareas.length} tareas pendientes
-                </p>
-              </div>
-
-              {/* Lista de tareas */}
-              <div className="p-4 max-h-[400px] overflow-y-auto">
-                {sala.tareas.length > 0 ? (
-                  <div className="space-y-3">
-                    {sala.tareas.map((tarea) => (
-                      <div 
-                        key={tarea.id}
-                        className="p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
-                        onClick={() => handleTaskClick(tarea)}
-                      >
-                        <div className="flex justify-between items-start">
-                          <h4 className="font-medium text-gray-800">{tarea.title}</h4>
-                          <span className={`px-2 py-1 rounded-full text-xs ${
-                            tarea.priority === 'high' ? 'bg-red-100 text-red-700' :
-                            tarea.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-green-100 text-green-700'
-                          }`}>
-                            {tarea.priority === 'high' ? 'Alta' :
-                             tarea.priority === 'medium' ? 'Media' : 'Baja'}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-2">{tarea.description}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-center text-gray-500 py-4">No hay tareas pendientes</p>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Reemplazar la sección de Tareas por Sala con el nuevo componente */}
+      <TareasPorSala salas={salas} onTaskClick={handleTaskClick} />
     </div>
   );
 }

@@ -4,6 +4,8 @@ import { createBrowserClient } from '@supabase/ssr'
 import Calendar from '@/app/shared/schedule/components/Calendar'
 import TaskModal from './components/TaskModal'
 import { Database } from '@/lib/types/database'
+import { taskService } from '@/app/services/taskService'
+import { toast } from 'react-hot-toast'
 
 type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
 type TaskPriority = 'low' | 'medium' | 'high'
@@ -76,20 +78,24 @@ export default function EnterpriseSchedulePage() {
         console.log('User profile loaded:', profile)
         setUserProfile(profile)
 
-        // 3. Obtener las tareas filtradas por la organización
-        const { data, error } = await supabase
-          .from('tasks')
-          .select(`
-            *,
-            area:area_id(id, name),
-            assignee:assigned_to(id, first_name, last_name)
-          `)
-          .eq('organization_id', profile.organization_id)
-          .order('due_date')
+        // 3. Cargar tareas usando el servicio compartido para garantizar consistencia
+        const allTasks = await taskService.loadAllTasks();
+        console.log('Tareas cargadas con servicio compartido para el Calendario de Empresa:', allTasks);
+        
+        // Formatear las tareas para incluir assignee en el formato esperado por el calendario
+        const formattedTasks = allTasks.map(task => ({
+          ...task,
+          assignee: task.users ? {
+            first_name: task.users.first_name,
+            last_name: task.users.last_name
+          } : undefined,
+          area: task.areas ? {
+            id: task.areas.id,
+            name: task.areas.name
+          } : null
+        }));
 
-        if (error) throw error
-
-        setTasks(data || [])
+        setTasks(formattedTasks || [])
         setLoading(false)
       } catch (error: unknown) {
         console.error('Error fetching data:', error)
@@ -110,7 +116,7 @@ export default function EnterpriseSchedulePage() {
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
-        table: 'tareas',
+        table: 'tasks',
         filter: userProfile ? `organization_id=eq.${userProfile.organization_id}` : undefined
       }, payload => {
         console.log('Change received!', payload)
@@ -142,40 +148,71 @@ export default function EnterpriseSchedulePage() {
       // Obtener el usuario actual para asignar la tarea
       const { data: { user } } = await supabase.auth.getUser()
       
-      // Solución definitiva para el problema de zona horaria: 
-      // Agregar un día a la fecha para compensar la conversión a UTC
-      let correctedDate = null;
+      // Procesar la fecha para asegurarnos que esté en formato correcto
+      let dueDate = null;
+      
       if (taskData.fecha) {
+        // Convertir a Date y luego a formato ISO para eliminar problemas de zona horaria
         const localDate = new Date(taskData.fecha);
-        // Sumamos un día para compensar
-        localDate.setDate(localDate.getDate() + 1);
-        correctedDate = localDate.toISOString().split('T')[0];
-        console.log('Fecha original:', taskData.fecha, 'Fecha corregida:', correctedDate);
+        dueDate = localDate.toISOString().split('T')[0];
+      } else if (selectedDate) {
+        // Si no hay fecha en los datos pero hay una fecha seleccionada
+        const localDate = new Date(selectedDate);
+        dueDate = localDate.toISOString().split('T')[0];
+      } else {
+        // Si no hay ninguna fecha, usar la fecha actual
+        dueDate = new Date().toISOString().split('T')[0];
       }
       
-      // Simplificar la estructura para que coincida con asignaciones
+      console.log('Fecha final para la tarea:', dueDate);
+      
+      // Preparar los datos de la tarea
+      const taskPayload = {
+        title: taskData.titulo,
+        description: taskData.descripcion || '',
+        area_id: taskData.area_id,
+        status: 'pending',
+        priority: 'medium',
+        assigned_to: user?.id,
+        due_date: dueDate,
+        organization_id: userProfile.organization_id,
+        created_by: user?.id,
+        type: 'calendar'  // Establecer tipo calendar para que aparezca en el calendario
+      };
+      
+      // Insertar la tarea en la base de datos
       const { data, error } = await supabase
         .from('tasks')
-        .insert([{
-          title: taskData.titulo,
-          description: taskData.descripcion || '',  // Descripción simple sin texto adicional
-          area_id: taskData.area_id,
-          status: 'pending',  // Siempre comienza como pendiente
-          priority: 'medium', // Prioridad media por defecto
-          assigned_to: user?.id, // Siempre asignar al usuario actual
-          due_date: correctedDate,
-          organization_id: userProfile.organization_id,
-          created_by: user?.id
-        }])
+        .insert([taskPayload])
         .select()
 
       if (error) throw error
 
-      // Actualizar la lista de tareas localmente
-      setTasks(prevTasks => [...prevTasks, data[0]])
-      setShowTaskModal(false)
+      toast.success('Tarea creada correctamente');
+      
+      // Obtener todas las tareas nuevamente para reflejar los cambios
+      const allTasks = await taskService.loadAllTasks();
+      console.log('Tareas actualizadas después de crear:', allTasks);
+      
+      // Formatear para la visualización en el calendario
+      const formattedTasks = allTasks.map(task => ({
+        ...task,
+        assignee: task.users ? {
+          first_name: task.users.first_name,
+          last_name: task.users.last_name
+        } : undefined,
+        area: task.areas ? {
+          id: task.areas.id,
+          name: task.areas.name
+        } : null
+      }));
+
+      // Actualizar el estado con todas las tareas
+      setTasks(formattedTasks);
+      setShowTaskModal(false);
     } catch (error) {
-      console.error('Error creating task:', error)
+      console.error('Error creating task:', error);
+      toast.error('Error al crear la tarea');
     }
   }
 

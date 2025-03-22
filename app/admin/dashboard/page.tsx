@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useRouter } from 'next/navigation';
+import { toast } from 'react-hot-toast';
+import { taskService } from '@/app/services/taskService';
 
 interface DashboardData {
   asignacionesPendientes: {
@@ -173,30 +175,14 @@ export default function Dashboard() {
       endOfWeek.setDate(startOfWeek.getDate() + 5);
       endOfWeek.setHours(23, 59, 59, 999);
 
-      // Primero obtener solo las tareas básicas sin relaciones
-      const { data: taskData, error: taskError } = await supabase
-        .from('tasks')
-        .select(`
-          id,
-          title,
-          description,
-          status,
-          assigned_to,
-          created_at,
-          start_time,
-          completed_at,
-          area_id,
-          sala_id,
-          organization_id
-        `)
-        .eq('organization_id', userProfile.organization_id);
+      // Cargar tareas usando el servicio compartido
+      const taskData = await taskService.loadAllTasks();
+      console.log('Datos de tareas (usando servicio compartido):', taskData);
 
-      if (taskError) {
-        console.error('Error en consulta de tareas:', taskError);
-        throw new Error('Error al obtener las tareas: ' + taskError.message);
-      }
-
-      console.log('Datos básicos de tareas:', taskData);
+      // Obtener usuarios asociados a las tareas
+      const userIds = taskData
+        .filter(task => task.assigned_to)
+        .map(task => task.assigned_to);
 
       // Si la consulta básica funciona, obtener los usuarios asignados
       const { data: usersData, error: usersError } = await supabase
@@ -206,7 +192,7 @@ export default function Dashboard() {
           first_name,
           last_name
         `)
-        .in('id', (taskData || []).map(task => task.assigned_to).filter(Boolean));
+        .in('id', userIds.filter(Boolean));
 
       if (usersError) {
         console.error('Error al obtener usuarios:', usersError);
@@ -220,7 +206,7 @@ export default function Dashboard() {
       }, {});
 
       // Combinar los datos de tareas con los usuarios
-      const tasksWithUsers = (taskData || []).map(task => ({
+      const tasksWithUsers = taskData.map(task => ({
         ...task,
         user: task.assigned_to ? usersMap[task.assigned_to] : null
       }));

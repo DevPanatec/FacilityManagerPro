@@ -200,9 +200,9 @@ export default function InventoryModal({
             
             // Consulta con timestamp para evitar caché
             const { data: retry } = await supabase
-              .from('inventory_restock')
+        .from('inventory_restock')
               .select('*')
-              .eq('inventory_id', item.id)
+        .eq('inventory_id', item.id)
               .order('created_at', { ascending: false });
               
             if (retry && retry.length > 0) {
@@ -589,7 +589,7 @@ export default function InventoryModal({
                                       <span className="text-green-600">+{record.quantity} unidades</span>
                                     </div>
                                     <div className="text-gray-500 text-xs mt-1">
-                                      {new Date(record.date).toLocaleDateString()} 
+                                      {new Date(record.date).toLocaleDateString()}
                                       {record.created_at && ` (${new Date(record.created_at).toLocaleTimeString()})`}
                                     </div>
                                     <div className="text-gray-400 text-xs mt-1 truncate">

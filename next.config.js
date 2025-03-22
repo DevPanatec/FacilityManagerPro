@@ -120,11 +120,10 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   
-  // Deshabilitar la optimización de seguridad
-  security: {
-    // Esto podría no existir en tu versión de Next.js, pero es seguro incluirlo
-    contentSecurityPolicy: false,
-  },
+  // La propiedad 'security' no es reconocida en esta versión de Next.js y se ha eliminado
+  // security: {
+  //   contentSecurityPolicy: false,
+  // },
 }
 
 module.exports = nextConfig; 
