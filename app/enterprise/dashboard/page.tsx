@@ -1350,6 +1350,145 @@ function EnterpriseDashboard() {
               </motion.div>
             </div>
           </div>
+
+          {/* Sección de Tareas por Sala */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <motion.h2 
+              className="text-xl font-semibold text-gray-800 mb-6"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              Tareas por Sala
+            </motion.h2>
+            
+            <div className="grid grid-cols-1 gap-6">
+              {areasTasks.length === 0 ? (
+                <motion.div 
+                  className="flex flex-col items-center justify-center py-8 text-center"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.5, delay: 0.2 }}
+                >
+                  <svg className="w-12 h-12 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">No hay tareas asignadas</h3>
+                  <p className="text-sm text-gray-500 max-w-sm">
+                    Las tareas por sala aparecerán aquí cuando se asignen tareas a las áreas.
+                  </p>
+                </motion.div>
+              ) : (
+                areasTasks.map((sala, index) => {
+                  // Solo mostrar salas que tienen tareas
+                  if (!sala.tasks || sala.tasks.length === 0) return null;
+                  
+                  const pendingTasks = sala.tasks.filter(task => task.status === 'pending' || task.status === 'in_progress');
+                  const completedTasks = sala.tasks.filter(task => task.status === 'completed');
+                  const totalTasks = sala.tasks.length;
+                  const completionPercentage = totalTasks > 0 ? Math.round((completedTasks.length / totalTasks) * 100) : 0;
+                  
+                  return (
+                    <motion.div 
+                      key={sala.id}
+                      className="border border-gray-100 rounded-xl overflow-hidden"
+                      variants={salaCardVariants}
+                      initial="hidden"
+                      animate="visible"
+                      whileHover="hover"
+                      custom={index}
+                    >
+                      <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                        <div className="flex items-center space-x-3">
+                          <div 
+                            className="w-4 h-4 rounded-full" 
+                            style={{ backgroundColor: getSalaColor(sala.name || '') }} 
+                          />
+                          <h3 className="font-semibold text-gray-700">{sala.name}</h3>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span 
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              completionPercentage >= 75 ? 'bg-green-100 text-green-800' :
+                              completionPercentage >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {completionPercentage}% completado
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="p-3 bg-white">
+                        <div className="w-full bg-gray-100 h-2 rounded-full mb-3 overflow-hidden">
+                          <motion.div 
+                            className={`h-2 rounded-full ${
+                              completionPercentage >= 75 ? 'bg-green-500' :
+                              completionPercentage >= 50 ? 'bg-yellow-500' :
+                              'bg-red-500'
+                            }`}
+                            initial={{ width: '0%' }}
+                            animate={{ width: `${completionPercentage}%` }}
+                            transition={{ duration: 1, delay: 0.2 * (index + 1) }}
+                          />
+                        </div>
+                        
+                        <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                          {sala.tasks.slice(0, 5).map((task, taskIndex) => (
+                            <motion.div 
+                              key={task.id}
+                              className={`p-3 rounded-lg border ${
+                                task.status === 'completed' ? 'border-green-100 bg-green-50' : 
+                                task.priority === 'high' || task.priority === 'urgent' ? 'border-red-100 bg-red-50' :
+                                'border-gray-100 bg-gray-50'
+                              }`}
+                              variants={taskVariants}
+                              initial="hidden"
+                              animate={task.status === 'completed' ? ["visible", "completed"] : "visible"}
+                              whileHover="hover"
+                              custom={taskIndex}
+                            >
+                              <div className="flex justify-between items-start">
+                                <div className="space-y-1">
+                                  <h4 className="font-medium text-sm text-gray-800">{task.title}</h4>
+                                  <p className="text-xs text-gray-500">
+                                    {task.assigned_name || 'Sin asignar'}
+                                  </p>
+                                </div>
+                                <span className={`text-xs px-2 py-1 rounded-full ${
+                                  task.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                  task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                                  task.priority === 'urgent' ? 'bg-red-100 text-red-700' :
+                                  task.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                                  'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {task.status === 'completed' ? 'Completado' :
+                                   task.status === 'in_progress' ? 'En Progreso' :
+                                   task.priority === 'urgent' ? 'Urgente' :
+                                   task.priority === 'high' ? 'Alta Prioridad' :
+                                   'Pendiente'}
+                                </span>
+                              </div>
+                            </motion.div>
+                          ))}
+                          
+                          {sala.tasks.length > 5 && (
+                            <motion.div 
+                              className="text-center p-2 text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                            >
+                              Ver {sala.tasks.length - 5} tareas más...
+                            </motion.div>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                }).filter(Boolean) // Filtrar elementos null (salas sin tareas)
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="lg:col-span-1">
