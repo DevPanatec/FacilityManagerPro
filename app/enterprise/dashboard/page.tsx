@@ -11,6 +11,8 @@ import { toast } from 'react-hot-toast';
 import InventoryModal from '@/app/shared/inventory/components/InventoryModal';
 import CleaningManagerModal from './components/CleaningManagerModal';
 import { motion } from 'framer-motion';
+import { DashboardNotificationProvider } from './DashboardNotifications';
+import DemoNotifications from './DemoNotifications';
 
 interface User {
   first_name: string
@@ -176,7 +178,16 @@ type CleaningManagersOrgs = {
   [key: string]: CleaningManagersShifts;
 };
 
-export default function EnterpriseOverviewPage() {
+// Componente wrapper para proveer notificaciones
+export default function EnterpriseDashboardWrapper() {
+  return (
+    <DashboardNotificationProvider>
+      <EnterpriseDashboard />
+    </DashboardNotificationProvider>
+  );
+}
+
+function EnterpriseDashboard() {
   const router = useRouter();
   const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
   const [showShiftModal, setShowShiftModal] = useState(false);
@@ -512,6 +523,22 @@ export default function EnterpriseOverviewPage() {
   const handleInventoryModalSubmit = async (formData: any) => {
     try {
       console.log('Form data submitted:', formData);
+      
+      // Mostrar notificaciones según la operación
+      if (formData.operation === 'use' && selectedInventoryItem) {
+        // showInventoryUsed(
+        //   selectedInventoryItem.name,
+        //   formData.operationQuantity,
+        //   selectedInventoryItem.unit || 'unidades'
+        // );
+      } else if (formData.operation === 'restock' && selectedInventoryItem) {
+        // showInventoryRestocked(
+        //   selectedInventoryItem.name,
+        //   formData.operationQuantity,
+        //   selectedInventoryItem.unit || 'unidades'
+        // );
+      }
+      
       setShowInventoryModal(false);
       await loadDashboardData();
     } catch (error) {
@@ -870,6 +897,40 @@ export default function EnterpriseOverviewPage() {
       }
     }
   };
+
+  // Detectar cambios de turno
+  useEffect(() => {
+    const checkShiftChange = () => {
+      const now = new Date();
+      const currentHour = now.getHours();
+      
+      let currentShift: 'morning' | 'afternoon' | 'night';
+      if (currentHour >= 6 && currentHour < 14) {
+        currentShift = 'morning';
+      } else if (currentHour >= 14 && currentHour < 22) {
+        currentShift = 'afternoon';
+      } else {
+        currentShift = 'night';
+      }
+      
+      // Verificar si hubo un cambio de turno
+      if (typeof window !== 'undefined') {
+        const lastShift = localStorage.getItem('lastShift');
+        if (lastShift && lastShift !== currentShift) {
+          // showShiftChanged(currentShift);
+        }
+        localStorage.setItem('lastShift', currentShift);
+      }
+    };
+    
+    // Verificar al cargar
+    checkShiftChange();
+    
+    // Verificar cada minuto
+    const interval = setInterval(checkShiftChange, 60000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   if (loading) {
     return (
@@ -1452,150 +1513,6 @@ export default function EnterpriseOverviewPage() {
         </div>
       </div>
 
-      <div className="mt-8">
-        <motion.h2 
-          className="text-2xl font-bold text-gray-800 mb-6"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >Tareas por Sala</motion.h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {areasTasks.map((sala, index) => {
-            const completedTasks = sala.tasks.filter(t => t.status === 'completed').length;
-            const progress = `${completedTasks}/${sala.tasks.length}`;
-            const progressPercentage = sala.tasks.length > 0 ? (completedTasks / sala.tasks.length) * 100 : 0;
-            const salaColor = getSalaColor(sala.name);
-
-            const areasWithTasks = sala.areas.filter(area => 
-              sala.tasks.some(task => task.area_id === area.id)
-            );
-
-            return (
-              <motion.div 
-                key={sala.id} 
-                className="bg-white rounded-xl shadow-lg overflow-hidden"
-                variants={salaCardVariants}
-                initial="hidden"
-                animate="visible"
-                whileHover="hover"
-                custom={index}
-              >
-                <div className="p-6 border-l-4" style={{ borderColor: salaColor }}>
-                  <div className="flex justify-between items-center mb-4">
-                    <motion.h3 
-                      className="text-lg font-semibold" 
-                      style={{ color: salaColor }}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.3 + (0.1 * index), duration: 0.5 }}
-                    >{sala.name}</motion.h3>
-                    <motion.span 
-                      className="text-sm text-gray-500"
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.4 + (0.1 * index), duration: 0.5 }}
-                    >{sala.tasks.length} tareas</motion.span>
-                  </div>
-
-                  <div className="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
-                    {areasWithTasks.map((area, areaIndex) => {
-                      const areaTasks = sala.tasks.filter(task => task.area_id === area.id);
-                      
-                      return (
-                        <motion.div 
-                          key={area.id} 
-                          className="border-t pt-4 first:border-t-0 first:pt-0"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: 0.5 + (0.05 * areaIndex), duration: 0.3 }}
-                        >
-                          <div className="flex justify-between items-center mb-2">
-                            <h4 className="font-medium text-gray-700">{area.name}</h4>
-                            <span className="text-xs text-gray-500">{areaTasks.length} tareas</span>
-                          </div>
-                          <div className="space-y-3">
-                            {areaTasks.map((task, taskIndex) => (
-                              <motion.div 
-                                key={task.id} 
-                                className="p-3 bg-gray-50 rounded-lg"
-                                variants={taskVariants}
-                                initial="hidden"
-                                animate={task.status === 'completed' ? ["visible", "completed"] : "visible"}
-                                whileHover="hover"
-                                custom={taskIndex}
-                              >
-                                <div className="flex justify-between items-start">
-                                  <h5 className="font-medium text-gray-900">{task.title}</h5>
-                                  <motion.span 
-                                    className={`text-xs px-2 py-1 rounded-full ${
-                                    task.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                    task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                                    'bg-gray-100 text-gray-800'
-                                    }`}
-                                    animate={
-                                      task.status === 'completed' 
-                                        ? { scale: [1, 1.2, 1], backgroundColor: ["#E1EFFE", "#D1FAE5", "#D1FAE5"] } 
-                                        : {}
-                                    }
-                                    transition={{ duration: 0.5 }}
-                                  >
-                                    {task.status === 'completed' ? 'Completado' :
-                                     task.status === 'in_progress' ? 'En progreso' :
-                                     'Pendiente'}
-                                  </motion.span>
-                                </div>
-                                <div className="mt-2 space-y-1">
-                                  <p className="text-sm text-gray-600">{task.description}</p>
-                                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                                    <span>Asignado a: {task.assigned_name}</span>
-                                  </div>
-                                </div>
-                              </motion.div>
-                            ))}
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-sm text-gray-500">Progreso General</span>
-                    <motion.span 
-                      className="text-sm" 
-                      style={{ color: salaColor }}
-                      animate={{ 
-                        scale: progressPercentage === 100 ? [1, 1.2, 1] : 1,
-                        color: progressPercentage === 100 ? [salaColor, "#047857", salaColor] : salaColor 
-                      }}
-                      transition={{ duration: 1, repeat: progressPercentage === 100 ? 2 : 0 }}
-                    >{progress}</motion.span>
-                  </div>
-                  <div className="mt-2 h-1 bg-gray-200 rounded-full">
-                    <motion.div 
-                      className="h-1 rounded-full" 
-                      style={{ 
-                        width: `${progressPercentage}%`,
-                        backgroundColor: salaColor
-                      }}
-                      initial={{ width: '0%' }}
-                      animate={{ 
-                        width: `${progressPercentage}%`,
-                        backgroundColor: progressPercentage === 100 ? [salaColor, "#047857", salaColor] : salaColor 
-                      }}
-                      transition={{ 
-                        duration: 1, 
-                        ease: "easeOut", 
-                        delay: 0.6 + (0.1 * index) 
-                      }}
-                    ></motion.div>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </div>
-
       {showInventoryModal && selectedInventoryItem && (
         <InventoryModal
           isOpen={showInventoryModal}
@@ -1619,6 +1536,9 @@ export default function EnterpriseOverviewPage() {
           isShiftChangingSoon={isShiftChangingSoon()}
         />
       )}
+
+      {/* Componente de notificaciones animadas */}
+      <DemoNotifications />
     </div>
   );
 }
