@@ -32,39 +32,46 @@ interface ReportData {
 async function loadImage(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     console.log("Intentando cargar imagen:", url.substring(0, 50) + "...");
-    
+
     // Verificar que la URL sea válida
     if (!url || url.trim() === "") {
       console.log("URL de imagen inválida o vacía");
       reject("URL de imagen inválida o vacía");
       return;
     }
-    
+
     const img = new Image();
-    
+
     // Manejo de errores
     img.onerror = (error) => {
-      console.error("Error cargando imagen:", url.substring(0, 50) + "...", error);
+      console.error(
+        "Error cargando imagen:",
+        url.substring(0, 50) + "...",
+        error,
+      );
       reject(error);
     };
-    
+
     // Cuando la imagen cargue
     img.onload = () => {
       console.log("Imagen cargada correctamente:", {
         url: url.substring(0, 50) + "...",
-        dimensiones: `${img.width}x${img.height}`
+        dimensiones: `${img.width}x${img.height}`,
       });
       resolve(url);
     };
-    
+
     // Intentar con crossOrigin 'anonymous' para evitar problemas de CORS
     img.crossOrigin = "anonymous";
     img.src = url;
-    
+
     // Si después de 5 segundos la imagen no carga, rechazar
     setTimeout(() => {
       if (!img.complete) {
-        console.warn("Tiempo de carga de imagen excedido:", url.substring(0, 50) + "...");
+        console.warn(
+          "Tiempo de carga de imagen excedido:",
+          url.substring(0, 50) + "...",
+        );
         reject("Tiempo de carga excedido");
       }
     }, 5000);
@@ -181,7 +188,7 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
     // Procesar descripción
     let parsedDescription = "";
     let mostrarDescripcion = false;
-    
+
     try {
       if (safeData.description) {
         // Si es una descripción simple, usarla directamente
@@ -201,95 +208,111 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
           // Si hay imágenes en la descripción, usarlas
           if (descData.details?.imagenes) {
             const imagenes = descData.details.imagenes;
-            
+
             // Combinar con las imágenes del reporte, priorizando las de la descripción
             if (imagenes.inicial && !imagenesReporte.inicial) {
               imagenesReporte.inicial = imagenes.inicial;
             }
-            
+
             if (imagenes.durante && !imagenesReporte.durante) {
               imagenesReporte.durante = imagenes.durante;
             }
-            
+
             if (imagenes.final && !imagenesReporte.final) {
               imagenesReporte.final = imagenes.final;
             }
-            
-            console.log("Imágenes extraídas de la descripción (details.imagenes):", {
-              inicial: !!imagenes.inicial,
-              durante: !!imagenes.durante,
-              final: !!imagenes.final
-            });
+
+            console.log(
+              "Imágenes extraídas de la descripción (details.imagenes):",
+              {
+                inicial: !!imagenes.inicial,
+                durante: !!imagenes.durante,
+                final: !!imagenes.final,
+              },
+            );
           }
-          
+
           // Verificar si hay imágenes en la raíz del objeto
           if (descData.imagenes) {
             const imagenes = descData.imagenes;
-            
+
             // Combinar con las imágenes del reporte, priorizando las de la descripción
             if (imagenes.inicial && !imagenesReporte.inicial) {
               imagenesReporte.inicial = imagenes.inicial;
             }
-            
+
             if (imagenes.durante && !imagenesReporte.durante) {
               imagenesReporte.durante = imagenes.durante;
             }
-            
+
             if (imagenes.final && !imagenesReporte.final) {
               imagenesReporte.final = imagenes.final;
             }
-            
+
             console.log("Imágenes extraídas de la descripción (raíz):", {
               inicial: !!imagenes.inicial,
               durante: !!imagenes.durante,
-              final: !!imagenes.final
+              final: !!imagenes.final,
             });
           }
-          
+
           // Verificar si hay un array de imágenes
           if (descData.images || descData.photos || descData.attachments) {
-            const imageArray = descData.images || descData.photos || descData.attachments || [];
-            
+            const imageArray =
+              descData.images || descData.photos || descData.attachments || [];
+
             if (Array.isArray(imageArray) && imageArray.length > 0) {
               // Ordenar por fecha si tienen propiedad created_at
               const sorted = imageArray.sort((a, b) => {
                 if (a.created_at && b.created_at) {
-                  return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+                  return (
+                    new Date(a.created_at).getTime() -
+                    new Date(b.created_at).getTime()
+                  );
                 }
                 return 0;
               });
-              
+
               // Asignar imágenes según su posición en el array
               if (sorted.length >= 1 && !imagenesReporte.inicial) {
                 imagenesReporte.inicial = sorted[0].url || sorted[0];
               }
-              
+
               if (sorted.length >= 2 && !imagenesReporte.durante) {
                 imagenesReporte.durante = sorted[1].url || sorted[1];
               }
-              
+
               if (sorted.length >= 3 && !imagenesReporte.final) {
                 imagenesReporte.final = sorted[2].url || sorted[2];
               }
-              
+
               console.log("Imágenes extraídas de array en la descripción:", {
                 encontradas: sorted.length,
                 inicial: !!imagenesReporte.inicial,
                 durante: !!imagenesReporte.durante,
-                final: !!imagenesReporte.final
+                final: !!imagenesReporte.final,
               });
             }
           }
 
           // Resumen final de todas las imágenes recopiladas
-          console.log("Estado final de imágenes después de procesar todas las fuentes:", {
-            inicial: !!imagenesReporte.inicial,
-            durante: !!imagenesReporte.durante,
-            final: !!imagenesReporte.final,
-            urlInicial: imagenesReporte.inicial ? imagenesReporte.inicial.substring(0, 50) + "..." : "No disponible",
-            urlDurante: imagenesReporte.durante ? imagenesReporte.durante.substring(0, 50) + "..." : "No disponible",
-            urlFinal: imagenesReporte.final ? imagenesReporte.final.substring(0, 50) + "..." : "No disponible"
-          });
+          console.log(
+            "Estado final de imágenes después de procesar todas las fuentes:",
+            {
+              inicial: !!imagenesReporte.inicial,
+              durante: !!imagenesReporte.durante,
+              final: !!imagenesReporte.final,
+              urlInicial: imagenesReporte.inicial
+                ? imagenesReporte.inicial.substring(0, 50) + "..."
+                : "No disponible",
+              urlDurante: imagenesReporte.durante
+                ? imagenesReporte.durante.substring(0, 50) + "..."
+                : "No disponible",
+              urlFinal: imagenesReporte.final
+                ? imagenesReporte.final.substring(0, 50) + "..."
+                : "No disponible",
+            },
+          );
 
           // Si hay una descripción directa, usarla
           if (descData.details?.descripcion) {
@@ -500,6 +523,7 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
             </div>
 
             <div class="basic-info">
+              ${!mostrarDescripcion ? `
               <div class="info-row">
                 <div class="info-label">Área:</div>
                   <div class="info-value">${capitalize(safeData.area)}</div>
@@ -514,6 +538,7 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
                 </div>`
                   : ""
               }
+              ` : ''}
 
               <div class="info-row">
                 <div class="info-label">Fecha:</div>
@@ -578,9 +603,6 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
                     <div class="task-header">${i + 1}. ${task.title}</div>
                     ${task.description ? `<div class="task-description">${task.description}</div>` : ""}
                     <div class="task-meta">
-                      <strong>Estado:</strong> ${task.status === "completed" ? "Completada" : "Pendiente"} | 
-                      <strong>Prioridad:</strong> ${task.priority} | 
-                      <strong>Tiempo estimado:</strong> ${task.estimated_hours}h
                     </div>
                   </div>
               `,
@@ -593,8 +615,10 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
             ${
               // Mostrar imágenes en la primera página si hay menos de 4 tareas o si hay descripción
               (safeData.tasks.length < 4 || mostrarDescripcion) &&
-                ((imagenesReporte.inicial && imagenesReporte.inicial.length > 0) ||
-                (imagenesReporte.durante && imagenesReporte.durante.length > 0) ||
+              ((imagenesReporte.inicial &&
+                imagenesReporte.inicial.length > 0) ||
+                (imagenesReporte.durante &&
+                  imagenesReporte.durante.length > 0) ||
                 (imagenesReporte.final && imagenesReporte.final.length > 0))
                 ? `
               <div class="section-title">Evidencia Fotográfica</div>
@@ -662,7 +686,7 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
                           <img src="${logoMINSA}" class="logo" alt="MINSA"/>
                         </div>
                         
-                        <div class="section-title">Tareas Asignadas (continuación)</div>
+                        <div class="section-title"></div>
                         <div class="tasks-list">
                           ${tasksChunk
                             .map(
@@ -671,9 +695,6 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
                               <div class="task-header">${start + i + 1}. ${task.title}</div>
                               ${task.description ? `<div class="task-description">${task.description}</div>` : ""}
                               <div class="task-meta">
-                                <strong>Estado:</strong> ${task.status === "completed" ? "Completada" : "Pendiente"} | 
-                                <strong>Prioridad:</strong> ${task.priority} | 
-                                <strong>Tiempo estimado:</strong> ${task.estimated_hours}h
                               </div>
                 </div>
               `,
@@ -852,8 +873,8 @@ export const generateContingencyPDF = async (reportData: ReportData) => {
       console.log("Datos iniciales de imágenes recibidos:", {
         "imagenesReporte inicial": {
           inicial: !!imagenesReporte.inicial,
-          durante: !!imagenesReporte.durante, 
-          final: !!imagenesReporte.final
+          durante: !!imagenesReporte.durante,
+          final: !!imagenesReporte.final,
         },
         "safeData.description presente": !!safeData.description,
       });
