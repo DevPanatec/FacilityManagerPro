@@ -85,14 +85,14 @@ interface SupabaseReport {
     name: string;
     subareas:
       | {
-          id: string;
-          nombre: string;
-          descripcion: string | null;
-          area_id: string;
-          sala: {
-            id: string;
-            nombre: string;
-          } | null;
+      id: string;
+      nombre: string;
+      descripcion: string | null;
+      area_id: string;
+      sala: {
+        id: string;
+        nombre: string;
+      } | null;
         }[]
       | null;
   };
@@ -130,6 +130,7 @@ export default function ReportsPage() {
   const [contingencyType, setContingencyType] = useState("");
   const [description, setDescription] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [showNewReportForm, setShowNewReportForm] = useState(true);
   const [selectedReport, setSelectedReport] =
     useState<ContingencyReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -155,6 +156,8 @@ export default function ReportsPage() {
   const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]);
 
   const [customTitle, setCustomTitle] = useState("");
+  // Nuevos estados para la fecha y horas del reporte
+  const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
 
   const supabase = createClientComponentClient();
 
@@ -355,7 +358,7 @@ export default function ReportsPage() {
       const reportsWithOrgs = reports.map((report: any) => {
         const sala = report.area?.sala;
         const tasks = report.area?.tasks || [];
-
+        
         console.log("Datos del reporte:", {
           id: report.id,
           fecha: new Date(report.created_at).toLocaleDateString(),
@@ -364,7 +367,7 @@ export default function ReportsPage() {
           area: report.area?.name || "No aplica",
           sala: sala?.nombre || "No aplica",
         });
-
+        
         return {
           id: report.id,
           title: report.title || report.type?.name || "Sin título",
@@ -431,7 +434,7 @@ export default function ReportsPage() {
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setImages((prev) => [...prev, ...acceptedFiles]);
-
+    
     // Crear URLs para preview
     const newUrls = acceptedFiles.map((file) => URL.createObjectURL(file));
     setImageUrls((prev) => [...prev, ...newUrls]);
@@ -654,8 +657,6 @@ export default function ReportsPage() {
             area: selectedArea || null,
             sala: selectedSala || null,
             fecha: new Date().toLocaleDateString(),
-            horaInicio: new Date().toLocaleTimeString(),
-            horaFin: new Date().toLocaleTimeString(),
             descripcion: description,
             imagenes: uploadedUrls.reduce(
               (acc, url, index) => {
@@ -707,12 +708,15 @@ export default function ReportsPage() {
       setDescription("");
       setImages([]);
       setImageUrls([]);
+      
+      // Ocultar el formulario
+      setShowNewReportForm(false);
 
       // Forzar una recarga inmediata de los datos
       await loadData();
-
+      
       toast.success("Reporte creado exitosamente");
-
+      
       // Esperar un momento y volver a cargar los datos para asegurarnos
       setTimeout(async () => {
         console.log("Recargando datos después de un breve retraso...");
@@ -862,8 +866,11 @@ export default function ReportsPage() {
     }
 
     return (
-      <div className="divide-y divide-gray-100">
-        <div className="grid grid-cols-4 gap-2 p-3 text-xs font-medium text-gray-500 bg-gray-50 sticky top-0 z-10">
+      <div className="max-h-[650px] overflow-y-auto pr-2 pt-1 pb-0" style={{
+        scrollbarWidth: 'thin',
+        scrollbarColor: '#CBD5E0 #EDF2F7'
+      }}>
+        <div className="sticky top-0 z-10 grid grid-cols-4 gap-2 p-3 text-xs font-medium text-gray-500 bg-gray-50">
           <div className="flex items-center gap-1">
             <svg
               className="w-4 h-4"
@@ -920,115 +927,117 @@ export default function ReportsPage() {
           </div>
           <div className="text-center">ACCIONES</div>
         </div>
-        {reportes.map((report) => (
-          <div
-            key={report.id}
-            className="grid grid-cols-4 gap-2 p-2 text-sm hover:bg-gray-50 items-center"
-          >
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  report.status === "Pendiente"
-                    ? "bg-yellow-400"
-                    : "bg-green-400"
-                }`}
-              />
-              <span className="text-gray-600">
-                {new Date(report.date).toLocaleDateString()}
-              </span>
-            </div>
-            <div className="truncate text-gray-600" title={report.sala}>
-              {report.sala || "No especificada"}
-            </div>
-            <div className="truncate text-gray-600" title={report.area}>
-              {report.area}
-            </div>
-            <div className="flex justify-center gap-4">
-              {/* Icono de ojo para ver detalles */}
-              <button
-                onClick={() => {
-                  setSelectedReport(report);
-                  setShowModal(true);
-                }}
-                className="text-blue-500 hover:text-blue-600"
-                title="Ver detalles"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+        <div className="divide-y divide-gray-100">
+          {reportes.map((report) => (
+            <div
+              key={report.id}
+              className="grid grid-cols-4 gap-2 p-2 text-sm hover:bg-gray-50 items-center"
+            >
+              <div className="flex items-center gap-2">
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      report.status === "Pendiente"
+                        ? "bg-yellow-400"
+                        : "bg-green-400"
+                    }`}
+                  />
+                  <span className="text-gray-600">
+                    {new Date(report.date).toLocaleDateString()}
+                  </span>
+              </div>
+              <div className="truncate text-gray-600" title={report.sala}>
+                  {report.sala || "No especificada"}
+              </div>
+              <div className="truncate text-gray-600" title={report.area}>
+                {report.area}
+              </div>
+              <div className="flex justify-center gap-4">
+                {/* Icono de ojo para ver detalles */}
+                <button
+                  onClick={() => {
+                    setSelectedReport(report);
+                    setShowModal(true);
+                  }}
+                  className="text-blue-500 hover:text-blue-600"
+                  title="Ver detalles"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                  />
-                </svg>
-              </button>
-              {/* Icono de check para marcar como completado */}
-              <button
-                onClick={() =>
-                  handleUpdateStatus(
-                    report.id,
-                    report.status === "Pendiente" ? "Completada" : "Pendiente",
-                  )
-                }
-                className={`${
-                  report.status === "Pendiente"
-                    ? "text-gray-400 hover:text-green-500"
-                    : "text-green-500 hover:text-green-600"
-                }`}
-                title={
-                  report.status === "Pendiente"
-                    ? "Marcar como completado"
-                    : "Marcar como pendiente"
-                }
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                      />
+                  </svg>
+                </button>
+                {/* Icono de check para marcar como completado */}
+                <button
+                    onClick={() =>
+                      handleUpdateStatus(
+                        report.id,
+                        report.status === "Pendiente" ? "Completada" : "Pendiente",
+                      )
+                    }
+                  className={`${
+                      report.status === "Pendiente"
+                        ? "text-gray-400 hover:text-green-500"
+                        : "text-green-500 hover:text-green-600"
+                    }`}
+                    title={
+                      report.status === "Pendiente"
+                        ? "Marcar como completado"
+                        : "Marcar como pendiente"
+                    }
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M5 13l4 4L19 7"
+                      />
+                  </svg>
+                </button>
+                {/* Icono de eliminar */}
+                <button
+                  onClick={() => handleDeleteReport(report.id)}
+                  className="text-gray-400 hover:text-red-500"
+                  title="Eliminar reporte"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </button>
-              {/* Icono de eliminar */}
-              <button
-                onClick={() => handleDeleteReport(report.id)}
-                className="text-gray-400 hover:text-red-500"
-                title="Eliminar reporte"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
-              </button>
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                  </svg>
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     );
   };
@@ -1038,7 +1047,10 @@ export default function ReportsPage() {
 
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-2xl p-6 w-[600px] max-h-[80vh] overflow-y-auto m-4 shadow-xl">
+        <div className="bg-white rounded-2xl p-6 w-[600px] max-h-[80vh] overflow-y-auto m-4 shadow-xl" style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#CBD5E0 #EDF2F7'
+        }}>
           {/* Header con gradiente */}
           <div className="flex justify-between items-start mb-6 -mx-6 -mt-6 px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-800 rounded-t-2xl">
             <div>
@@ -1094,7 +1106,7 @@ export default function ReportsPage() {
                 try {
                   const data = JSON.parse(selectedReport.description);
                   const details = data.details || {};
-
+                  
                   return (
                     <>
                       {/* Información básica */}
@@ -1121,48 +1133,54 @@ export default function ReportsPage() {
                               "No especificada"}
                           </p>
                         </div>
+                        
+                        {/* Solo mostrar sala y área cuando NO hay descripción JSON válida */}
+                        {!data.details && (
+                          <>
                         <div className="bg-gray-50 p-3 rounded-lg">
                           <p className="text-gray-500 text-sm font-medium mb-1 flex items-center gap-2">
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-                              />
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                                  />
                             </svg>
                             Sala
                           </p>
-                          <p className="font-medium text-gray-900">
-                            {selectedReport.sala || "No especificada"}
-                          </p>
+                              <p className="font-medium text-gray-900">
+                                {selectedReport.sala || "No especificada"}
+                              </p>
                         </div>
                         <div className="bg-gray-50 p-3 rounded-lg">
                           <p className="text-gray-500 text-sm font-medium mb-1 flex items-center gap-2">
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                              />
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                                  />
                             </svg>
                             Área
                           </p>
-                          <p className="font-medium text-gray-900">
-                            {selectedReport.area || "No especificada"}
-                          </p>
+                              <p className="font-medium text-gray-900">
+                                {selectedReport.area || "No especificada"}
+                              </p>
                         </div>
+                          </>
+                        )}
                         <div className="col-span-2 bg-gray-50 p-3 rounded-lg">
                           <p className="text-gray-500 text-sm font-medium mb-1 flex items-center gap-2">
                             <svg
@@ -1235,8 +1253,8 @@ export default function ReportsPage() {
                       {/* Tareas */}
                       {selectedReport.tasks &&
                         selectedReport.tasks.length > 0 && (
-                          <div className="bg-gray-50 p-4 rounded-lg">
-                            <h4 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
                               <svg
                                 className="w-5 h-5 text-blue-600"
                                 fill="none"
@@ -1249,11 +1267,14 @@ export default function ReportsPage() {
                                   strokeWidth="2"
                                   d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2H9a2 2 0 00-2 2m0 0V5a2 2 0 012-2h2a2 2 0 012 2m0 0V5a2 2 0 012-2h2a2 2 0 012 2m0 0v12a2 2 0 01-2 2h-2m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0h2m-6 0a2 2 0 002 2h2a2 2 0 002-2"
                                 />
-                              </svg>
-                              Tareas del Área
-                            </h4>
-                            <div className="space-y-2">
-                              {selectedReport.tasks.map((task, index) => (
+                            </svg>
+                            Tareas del Área
+                          </h4>
+                            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2" style={{
+                              scrollbarWidth: 'thin',
+                              scrollbarColor: '#CBD5E0 #EDF2F7'
+                            }}>
+                            {selectedReport.tasks.map((task, index) => (
                                 <div
                                   key={task.id}
                                   className="flex items-start gap-3 bg-white p-3 rounded-lg shadow-sm"
@@ -1265,98 +1286,217 @@ export default function ReportsPage() {
                                         : "bg-blue-100 text-blue-600"
                                     }`}
                                   >
-                                    {index + 1}
-                                  </div>
-                                  <div className="flex-1">
+                                  {index + 1}
+                                </div>
+                                <div className="flex-1">
                                     <h5 className="font-medium text-gray-900">
                                       {task.title}
                                     </h5>
-                                    {task.description && (
+                                  {task.description && (
                                       <p className="text-sm text-gray-500 mt-1">
                                         {task.description}
                                       </p>
-                                    )}
-                                    <div className="flex items-center gap-4 mt-2">
-                                      <span
-                                        className={`text-xs px-2 py-1 rounded-full ${
-                                          task.status === "completed"
-                                            ? "bg-green-100 text-green-800"
-                                            : "bg-gray-100 text-gray-800"
-                                        }`}
-                                      >
-                                        {task.status === "completed"
-                                          ? "Completada"
-                                          : "Pendiente"}
-                                      </span>
+                                  )}
+                                  <div className="flex items-center gap-4 mt-2">
+                                    {task.estimated_hours && (
                                       <span className="text-xs text-gray-500">
-                                        Prioridad: {task.priority}
-                                      </span>
-                                      {task.estimated_hours && (
-                                        <span className="text-xs text-gray-500">
                                           Tiempo estimado:{" "}
                                           {task.estimated_hours}h
-                                        </span>
-                                      )}
-                                    </div>
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                      {/* Imágenes */}
-                      {details.imagenes && (
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <h4 className="text-lg font-semibold text-gray-900 mb-2">
-                            Evidencia Fotográfica
-                          </h4>
-                          <div className="grid grid-cols-3 gap-4">
-                            {details.imagenes.inicial && (
-                              <div className="space-y-1">
-                                <div className="aspect-video rounded-lg overflow-hidden shadow-sm">
-                                  <img
-                                    src={details.imagenes.inicial}
-                                    alt="Imagen inicial"
-                                    className="w-full h-full object-cover"
-                                  />
-                                </div>
-                                <p className="text-sm text-center text-gray-500">
-                                  Antes
-                                </p>
                               </div>
-                            )}
-                            {details.imagenes.durante && (
-                              <div className="space-y-1">
-                                <div className="aspect-video rounded-lg overflow-hidden shadow-sm">
-                                  <img
-                                    src={details.imagenes.durante}
-                                    alt="Imagen durante"
-                                    className="w-full h-full object-cover"
-                                  />
-                                </div>
-                                <p className="text-sm text-center text-gray-500">
-                                  Durante
-                                </p>
-                              </div>
-                            )}
-                            {details.imagenes.final && (
-                              <div className="space-y-1">
-                                <div className="aspect-video rounded-lg overflow-hidden shadow-sm">
-                                  <img
-                                    src={details.imagenes.final}
-                                    alt="Imagen final"
-                                    className="w-full h-full object-cover"
-                                  />
-                                </div>
-                                <p className="text-sm text-center text-gray-500">
-                                  Después
-                                </p>
-                              </div>
-                            )}
+                            ))}
                           </div>
                         </div>
                       )}
+
+                      {/* Imágenes - Siempre mostrar la sección de imágenes */}
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                          Evidencia Fotográfica
+                        </h4>
+                        {(() => {
+                          // Objeto para almacenar las imágenes encontradas
+                          const imagenesReporte: {
+                            inicial: string | null,
+                            durante: string | null,
+                            final: string | null,
+                            adicionales: string[]
+                          } = {
+                            inicial: null,
+                            durante: null,
+                            final: null,
+                            adicionales: [] as string[]
+                          };
+                          
+                          try {
+                            // 1. Imágenes directas de details.imagenes (caso más común)
+                            if (details?.imagenes) {
+                              if (details.imagenes.inicial) imagenesReporte.inicial = details.imagenes.inicial;
+                              if (details.imagenes.durante) imagenesReporte.durante = details.imagenes.durante;
+                              if (details.imagenes.final) imagenesReporte.final = details.imagenes.final;
+                            }
+                            
+                            // 2. Si la descripción es un JSON, intentar extraer imágenes de diferentes estructuras
+                            if (selectedReport.description && typeof selectedReport.description === 'string') {
+                              try {
+                                const descData = JSON.parse(selectedReport.description);
+                                
+                                // 2.1 Buscar en la raíz del objeto description
+                                if (descData.imagenes) {
+                                  if (descData.imagenes.inicial && !imagenesReporte.inicial) 
+                                    imagenesReporte.inicial = descData.imagenes.inicial;
+                                  if (descData.imagenes.durante && !imagenesReporte.durante) 
+                                    imagenesReporte.durante = descData.imagenes.durante;
+                                  if (descData.imagenes.final && !imagenesReporte.final) 
+                                    imagenesReporte.final = descData.imagenes.final;
+                                }
+                                
+                                // 2.2 Buscar en images o attachments array
+                                const imageArray = descData.images || [];
+                                if (Array.isArray(imageArray) && imageArray.length > 0) {
+                                  // Asignar imágenes según su posición en el array
+                                  if (imageArray.length >= 1 && !imagenesReporte.inicial) {
+                                    imagenesReporte.inicial = typeof imageArray[0] === 'string' 
+                                      ? imageArray[0] 
+                                      : imageArray[0]?.url;
+                                  }
+                                  if (imageArray.length >= 2 && !imagenesReporte.durante) {
+                                    imagenesReporte.durante = typeof imageArray[1] === 'string' 
+                                      ? imageArray[1] 
+                                      : imageArray[1]?.url;
+                                  }
+                                  if (imageArray.length >= 3 && !imagenesReporte.final) {
+                                    imagenesReporte.final = typeof imageArray[2] === 'string' 
+                                      ? imageArray[2] 
+                                      : imageArray[2]?.url;
+                                  }
+                                  
+                                  // Imágenes adicionales (desde la 4ta en adelante)
+                                  for (let i = 3; i < imageArray.length; i++) {
+                                    const imgUrl = typeof imageArray[i] === 'string' 
+                                      ? imageArray[i] 
+                                      : imageArray[i]?.url;
+                                    if (imgUrl) imagenesReporte.adicionales.push(imgUrl);
+                                  }
+                                }
+                              } catch (e) {
+                                // Si hay error al parsear, continuar con las otras fuentes
+                                console.log("Error al parsear descripción JSON:", e);
+                              }
+                            }
+                            
+                            // 3. Añadir imágenes de attachments si aún faltan imágenes
+                            if (selectedReport.attachments && selectedReport.attachments.length > 0) {
+                              const imageAttachments = selectedReport.attachments
+                                .filter(att => att.type === 'image')
+                                .map(att => att.url);
+                                
+                              // Asignar a posiciones principales si están vacías
+                              if (!imagenesReporte.inicial && imageAttachments.length > 0) 
+                                imagenesReporte.inicial = imageAttachments[0];
+                              if (!imagenesReporte.durante && imageAttachments.length > 1) 
+                                imagenesReporte.durante = imageAttachments[1];
+                              if (!imagenesReporte.final && imageAttachments.length > 2) 
+                                imagenesReporte.final = imageAttachments[2];
+                              
+                              // Agregar el resto como adicionales
+                              for (let i = 3; i < imageAttachments.length; i++) {
+                                // Evitar duplicados
+                                if (!imagenesReporte.adicionales.includes(imageAttachments[i])) {
+                                  imagenesReporte.adicionales.push(imageAttachments[i]);
+                                }
+                              }
+                            }
+                            
+                            // Renderizar las imágenes
+                            return (
+                              <div className="grid grid-cols-3 gap-4">
+                                {imagenesReporte.inicial && (
+                                  <div className="space-y-1">
+                                    <div className="aspect-video rounded-lg overflow-hidden shadow-sm">
+                                      <img 
+                                        src={imagenesReporte.inicial} 
+                                        alt="Imagen inicial" 
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </div>
+                                    <p className="text-sm text-center text-gray-500">
+                                      Antes
+                                    </p>
+                                  </div>
+                                )}
+                                
+                                {imagenesReporte.durante && (
+                                  <div className="space-y-1">
+                                    <div className="aspect-video rounded-lg overflow-hidden shadow-sm">
+                                      <img 
+                                        src={imagenesReporte.durante} 
+                                        alt="Imagen durante" 
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </div>
+                                    <p className="text-sm text-center text-gray-500">
+                                      Durante
+                                    </p>
+                                  </div>
+                                )}
+                                
+                                {imagenesReporte.final && (
+                                  <div className="space-y-1">
+                                    <div className="aspect-video rounded-lg overflow-hidden shadow-sm">
+                                      <img 
+                                        src={imagenesReporte.final} 
+                                        alt="Imagen final" 
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </div>
+                                    <p className="text-sm text-center text-gray-500">
+                                      Después
+                                    </p>
+                                  </div>
+                                )}
+                                
+                                {/* Imágenes adicionales */}
+                                {imagenesReporte.adicionales.map((url, index) => (
+                                  <div key={index} className="space-y-1">
+                                    <div className="aspect-video rounded-lg overflow-hidden shadow-sm">
+                                      <img 
+                                        src={url} 
+                                        alt={`Imagen adicional ${index + 1}`} 
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </div>
+                                    <p className="text-sm text-center text-gray-500">
+                                      Adicional {index + 1}
+                                    </p>
+                                  </div>
+                                ))}
+                                
+                                {/* Mensaje cuando no hay imágenes */}
+                                {!imagenesReporte.inicial && 
+                                 !imagenesReporte.durante && 
+                                 !imagenesReporte.final && 
+                                 imagenesReporte.adicionales.length === 0 && (
+                                  <div className="col-span-3 text-center py-4 text-gray-500">
+                                    No hay evidencias fotográficas disponibles
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          } catch (error) {
+                            console.error("Error al procesar imágenes:", error);
+                            return (
+                              <p className="text-red-500">
+                                Error al cargar las imágenes del reporte
+                              </p>
+                            );
+                          }
+                        })()}
+                      </div>
+                     
                     </>
                   );
                 } catch (error) {
@@ -1632,28 +1772,65 @@ export default function ReportsPage() {
           {/* Formulario de Nuevo Reporte */}
           <div className="bg-white rounded-xl shadow-lg">
             <div className="p-4 border-b border-gray-100">
+              <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <svg
-                  className="w-5 h-5 text-blue-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M12 4v16m8-8H4"
-                  />
+                  <svg
+                    className="w-5 h-5 text-blue-500"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M12 4v16m8-8H4"
+                    />
                 </svg>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Nuevo Reporte
-                </h3>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Nuevo Reporte
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => setShowNewReportForm(!showNewReportForm)}
+                  className="text-blue-500 hover:text-blue-700"
+                >
+                  {showNewReportForm ? (
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M5 15l7-7 7 7"
+                      />
+                    </svg>
+                  )}
+                </button>
               </div>
             </div>
 
+            {showNewReportForm && (
             <form onSubmit={handleSaveReport} className="p-4">
-              <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-y-5 gap-x-4">
                 {/* Tipo de Contingencia */}
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1663,10 +1840,10 @@ export default function ReportsPage() {
                     value={contingencyType}
                     onChange={(e) => {
                       setContingencyType(e.target.value);
-                      console.log(
-                        "Tipo de contingencia seleccionado:",
-                        e.target.value,
-                      );
+                        console.log(
+                          "Tipo de contingencia seleccionado:",
+                          e.target.value,
+                        );
                     }}
                     className="w-full h-10 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
                     required
@@ -1683,7 +1860,7 @@ export default function ReportsPage() {
                 </div>
 
                 {/* Campos para Otra Contingencia */}
-                {contingencyType === "other" && (
+                  {contingencyType === "other" && (
                   <>
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1702,16 +1879,16 @@ export default function ReportsPage() {
                 )}
 
                 {/* Área y Sala (opcional si es otra contingencia) */}
-                {contingencyType !== "other" && (
+                  {contingencyType !== "other" && (
                   <div className="col-span-2 md:col-span-1">
                     <SalaAreaSelector
                       onSalaChange={(sala) => {
                         setSelectedSala(sala?.id || null);
-                        console.log("Sala seleccionada:", sala);
+                          console.log("Sala seleccionada:", sala);
                       }}
                       onAreaChange={(area) => {
-                        setSelectedArea(area?.id || "");
-                        console.log("Área seleccionada:", area);
+                          setSelectedArea(area?.id || "");
+                          console.log("Área seleccionada:", area);
                       }}
                       className="space-y-2"
                     />
@@ -1727,10 +1904,10 @@ export default function ReportsPage() {
                     value={description}
                     onChange={(e) => {
                       setDescription(e.target.value);
-                      console.log("Descripción actualizada:", e.target.value);
+                        console.log("Descripción actualizada:", e.target.value);
                     }}
                     placeholder="Descripción detallada de la contingencia..."
-                    className="w-full h-32 px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full h-28 px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
                   />
                 </div>
@@ -1742,27 +1919,27 @@ export default function ReportsPage() {
                   </label>
                   <div
                     {...getRootProps()}
-                    className={`border border-dashed rounded-lg p-3 text-center cursor-pointer ${
-                      isDragActive
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-gray-300"
+                      className={`border border-dashed rounded-lg p-5 text-center cursor-pointer ${
+                        isDragActive
+                          ? "border-blue-500 bg-blue-50"
+                          : "border-gray-300"
                     }`}
                   >
                     <input {...getInputProps()} />
-                    <FiUpload className="w-6 h-6 text-gray-400 mx-auto" />
-                    <p className="text-xs text-gray-500 mt-1">
-                      {isDragActive
-                        ? "Suelta aquí"
-                        : "Arrastra o selecciona imágenes"}
+                      <FiUpload className="w-8 h-8 text-gray-400 mx-auto" />
+                      <p className="text-sm text-gray-500 mt-2">
+                        {isDragActive
+                          ? "Suelta aquí"
+                          : "Arrastra o selecciona imágenes"}
                     </p>
                   </div>
                 </div>
 
                 {/* Preview de imágenes */}
                 {imageUrls.length > 0 && (
-                  <div className="col-span-2 grid grid-cols-4 gap-2">
+                    <div className="col-span-2 grid grid-cols-4 gap-3 pt-2">
                     {imageUrls.map((url, index) => (
-                      <div key={url} className="relative group aspect-square">
+                        <div key={url} className="relative group aspect-square h-24">
                         <Image
                           src={url}
                           alt={`Preview ${index + 1}`}
@@ -1786,18 +1963,19 @@ export default function ReportsPage() {
                   <button
                     type="submit"
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={
-                      !contingencyType ||
-                      (!selectedArea && contingencyType !== "other") ||
-                      !description ||
-                      (contingencyType === "other" && !customTitle)
-                    }
+                      disabled={
+                        !contingencyType ||
+                        (!selectedArea && contingencyType !== "other") ||
+                        !description ||
+                        (contingencyType === "other" && !customTitle)
+                      }
                   >
                     Crear Reporte
                   </button>
                 </div>
               </div>
             </form>
+            )}
           </div>
         </div>
       </div>
