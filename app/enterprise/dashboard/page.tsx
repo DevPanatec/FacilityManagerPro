@@ -1207,7 +1207,7 @@ function EnterpriseDashboard() {
               </div>
             </motion.div>
           </div>
-          
+
           {/* Sección de Distribución por Salas (movida debajo de los turnos) */}
           <div className="bg-white rounded-xl shadow-lg p-6 mt-6">
             <div className="flex justify-between items-center mb-6">
@@ -1242,7 +1242,7 @@ function EnterpriseDashboard() {
                 </motion.button>
               </div>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <motion.div 
                 className="h-64 bg-gray-50 rounded-lg p-4 overflow-hidden"
@@ -1338,9 +1338,9 @@ function EnterpriseDashboard() {
                   );
                 })}
               </motion.div>
+              </div>
             </div>
           </div>
-        </div>
         
         {/* Sección de Inventario (Versión móvil) */}
         <div className="lg:hidden">
@@ -1415,7 +1415,7 @@ function EnterpriseDashboard() {
             </div>
           </motion.div>
         </div>
-        
+
         {/* Inventario para pantallas grandes */}
         <div className="hidden lg:block lg:col-span-1">
           <div className="sticky top-6">
@@ -1574,9 +1574,9 @@ function EnterpriseDashboard() {
                 )}
               </div>
             </motion.div>
+            </div>
           </div>
         </div>
-      </div>
 
       {/* Sección principal */}
       <div className="grid grid-cols-1 gap-6">
@@ -1613,9 +1613,9 @@ function EnterpriseDashboard() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </motion.button>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {areasTasks.length === 0 ? (
               <motion.div 
                 className="flex flex-col items-center justify-center py-12 text-center col-span-full"
@@ -1669,8 +1669,8 @@ function EnterpriseDashboard() {
                   const totalTasks = sala.tasks.length;
                   const completionPercentage = totalTasks > 0 ? Math.round((completedTasks.length / totalTasks) * 100) : 0;
                   const areaColor = getSalaColor(sala.name || '');
-                  
-                  return (
+
+            return (
                     <motion.div 
                       key={sala.id}
                       className="rounded-xl overflow-hidden bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all"
@@ -1716,8 +1716,8 @@ function EnterpriseDashboard() {
                               <span>{completedTasks.length} completadas</span>
                             </div>
                           </div>
-                        </div>
-                        
+                  </div>
+
                         <motion.div 
                           className="relative h-12 w-12"
                           whileHover={{ scale: 1.15 }}
@@ -1759,8 +1759,8 @@ function EnterpriseDashboard() {
                           {sala.tasks.slice(0, 3).map((task, taskIndex) => {
                             const isCompleted = task.status === 'completed';
                             const isHighPriority = task.priority === 'high' || task.priority === 'urgent';
-                            
-                            return (
+                      
+                      return (
                               <motion.div 
                                 key={task.id}
                                 className={`p-3 rounded-lg border ${
@@ -1814,14 +1814,14 @@ function EnterpriseDashboard() {
                                       <h4 className={`font-medium text-sm ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
                                         {task.title}
                                       </h4>
-                                    </div>
+                          </div>
                                     <div className="flex items-center text-xs text-gray-500 ml-6">
                                       <span className="flex items-center">
                                         <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                         </svg>
                                         {task.assigned_name || 'Sin asignar'}
-                                      </span>
+                                  </span>
                                       {task.due_date && (
                                         <>
                                           <span className="mx-1.5">•</span>
@@ -1833,7 +1833,7 @@ function EnterpriseDashboard() {
                                           </span>
                                         </>
                                       )}
-                                    </div>
+                                </div>
                                   </div>
                                   
                                   <motion.span 
@@ -1856,10 +1856,10 @@ function EnterpriseDashboard() {
                                   </motion.span>
                                 </div>
                               </motion.div>
-                            );
-                          })}
-                        </div>
-                        
+                      );
+                    })}
+                  </div>
+
                         {sala.tasks.length > 3 && (
                           <motion.div 
                             className="mt-3 p-2 text-center text-indigo-600 hover:text-indigo-800 cursor-pointer rounded-lg hover:bg-indigo-50 font-medium flex items-center justify-center"
@@ -1872,10 +1872,10 @@ function EnterpriseDashboard() {
                             </svg>
                           </motion.div>
                         )}
-                      </div>
+                  </div>
                     </motion.div>
-                  );
-                })}
+            );
+          })}
                 
                 {/* Mensaje cuando se filtran todas las salas por no tener tareas */}
                 {areasTasks.filter(sala => sala.tasks && sala.tasks.length > 0).length === 0 && (

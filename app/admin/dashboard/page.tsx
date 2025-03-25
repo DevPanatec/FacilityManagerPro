@@ -322,56 +322,51 @@ export default function Dashboard() {
         };
       });
 
-      // Obtener inventario
-      const { data: inventoryAlerts, error: inventoryError } = await supabase
+      // Obtener datos del inventario
+      const { data: inventoryData, error: inventoryError } = await supabase
         .from('inventory_items')
-        .select(`
-          id,
-          name,
-          quantity,
-          min_stock,
-          status,
-          organization_id
-        `)
-        .eq('organization_id', userProfile.organization_id);
-
-      console.log('Raw inventory data:', inventoryAlerts); // Debug log
+        .select('*')
+        .eq('organization_id', userProfile.organization_id)
+        .or(`quantity.lt.min_stock,status.eq.out_of_stock`);
 
       if (inventoryError) {
-        console.error('Error fetching inventory:', inventoryError);
+        console.error('Error al obtener inventario:', inventoryError);
         throw new Error('Error al obtener inventario: ' + inventoryError.message);
       }
 
-      // Formatear alertas de inventario y filtrar los que están bajo el mínimo
-      const formattedAlerts = (inventoryAlerts || [])
-        .filter(item => {
-          console.log('Checking item:', item.name, {
-            quantity: item.quantity,
-            min_stock: item.min_stock,
+      // Debug: Mostrar todos los items del inventario
+      console.log('Datos crudos del inventario:', inventoryData);
+
+      // Formatear alertas de inventario
+      const formattedAlerts = (inventoryData || [])
+        .map(item => {
+          // Asegurarse de que los valores sean números
+          const quantity = Number(item.quantity);
+          const minStock = Number(item.min_stock);
+          
+          // Debug: Mostrar valores convertidos
+          console.log('Procesando item:', {
+            name: item.name,
+            quantity,
+            minStock,
+            difference: minStock - quantity,
             status: item.status
           });
-          // Incluir items que:
-          // 1. Tienen cantidad 0
-          // 2. Tienen estado out_of_stock
-          // 3. Tienen cantidad menor al stock mínimo
-          return (
-            item.quantity === 0 ||
-            item.status === 'out_of_stock' ||
-            (item.quantity < item.min_stock && item.min_stock > 0)
-          );
-        })
-        .map(item => ({
-          producto: item.name,
-          stockActual: item.quantity || 0,
-          stockMinimo: item.min_stock || 0,
-          itemsNecesarios: Math.max(0, (item.min_stock || 0) - (item.quantity || 0))
-        }));
 
-      console.log('Final formatted alerts:', formattedAlerts); // Ver alertas finales
+          return {
+            producto: item.name,
+            stockActual: quantity,
+            stockMinimo: minStock,
+            itemsNecesarios: Math.max(0, minStock - quantity)
+          };
+        });
+
+      // Debug: Mostrar alertas finales
+      console.log('Alertas formateadas:', formattedAlerts);
 
       // Actualizar el estado
-      setDashboardData({
-        ...dashboardData,
+      setDashboardData(prevData => ({
+        ...prevData,
         asignacionesPendientes: {
           cantidad: pendientes,
           variacion: Math.round((pendientes - (taskDataArray.filter(t => t.status === 'pending' && t.assigned_to).length || 0)) / (taskDataArray.filter(t => t.status === 'pending' && t.assigned_to).length || 1) * 100)
@@ -419,7 +414,7 @@ export default function Dashboard() {
           pendientes,
           enProgreso
         }
-      });
+      }));
 
       // Agregar logs para depuración
       console.log('Estadísticas de tareas:', {
@@ -647,35 +642,33 @@ export default function Dashboard() {
             <div className="flex-1 overflow-y-auto p-6">
               <div className="space-y-4">
                 {dashboardData.alertasInventario.length > 0 ? (
-                  <>
-                    {dashboardData.alertasInventario.map((item, index) => (
-                      <div key={index} className="space-y-2 hover:bg-gray-50 p-3 rounded-lg transition-all duration-300">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 ${item.stockActual === 0 ? 'bg-red-500' : 'bg-yellow-500'} rounded-full`} />
-                            <div>
-                              <p className="text-sm font-medium text-gray-900">{item.producto}</p>
-                              <p className="text-xs text-gray-500">{item.itemsNecesarios} items necesitan reposición</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs">Stock actual: {item.stockActual}</p>
-                            <p className={`text-[11px] ${item.stockActual === 0 ? 'text-red-500' : 'text-yellow-500'}`}>
-                              Mínimo requerido: {item.stockMinimo}
-                            </p>
+                  dashboardData.alertasInventario.map((item, index) => (
+                    <div key={index} className="space-y-2 hover:bg-gray-50 p-3 rounded-lg transition-all duration-300">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 ${item.stockActual === 0 ? 'bg-red-500' : 'bg-yellow-500'} rounded-full`} />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{item.producto}</p>
+                            <p className="text-xs text-gray-500">{item.itemsNecesarios} items necesitan reposición</p>
                           </div>
                         </div>
-                        <div className="relative pt-1">
-                          <div className="h-2 bg-gray-100 rounded-full">
-                            <div
-                              className="h-2 rounded-full bg-gray-400"
-                              style={{ width: `${(item.stockActual / item.stockMinimo) * 100}%` }}
-                            />
-                          </div>
+                        <div className="text-right">
+                          <p className="text-xs">Stock actual: {item.stockActual}</p>
+                          <p className={`text-[11px] ${item.stockActual === 0 ? 'text-red-500' : 'text-yellow-500'}`}>
+                            Mínimo requerido: {item.stockMinimo}
+                          </p>
                         </div>
                       </div>
-                    ))}
-                  </>
+                      <div className="relative pt-1">
+                        <div className="h-2 bg-gray-100 rounded-full">
+                          <div
+                            className={`h-2 rounded-full ${item.stockActual === 0 ? 'bg-red-500' : 'bg-yellow-500'}`}
+                            style={{ width: `${Math.min((item.stockActual / item.stockMinimo) * 100, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))
                 ) : (
                   <div className="text-center py-4 text-gray-500">
                     No hay items con stock bajo
