@@ -323,19 +323,32 @@ export default function Dashboard() {
       });
 
       // Obtener datos del inventario
-      const { data: inventoryData, error: inventoryError } = await supabase
+      let { data: inventoryData, error: inventoryError } = await supabase
         .from('inventory_items')
         .select('*')
-        .eq('organization_id', userProfile.organization_id)
-        .or(`quantity.lt.min_stock,status.eq.out_of_stock`);
+        .eq('organization_id', userProfile.organization_id);
 
       if (inventoryError) {
         console.error('Error al obtener inventario:', inventoryError);
         throw new Error('Error al obtener inventario: ' + inventoryError.message);
       }
 
-      // Debug: Mostrar todos los items del inventario
-      console.log('Datos crudos del inventario:', inventoryData);
+      console.log('Inventario completo obtenido:', inventoryData);
+
+      // Filtrar en JavaScript los elementos con cantidad menor al stock mínimo o con estado "out_of_stock"
+      inventoryData = (inventoryData || []).filter(item => {
+        const quantity = Number(item.quantity);
+        const minStock = Number(item.min_stock);
+        const isLowStock = quantity <= minStock;
+        const isOutOfStock = item.status === 'out_of_stock';
+        
+        console.log(`Item ${item.name}: cantidad=${quantity}, min_stock=${minStock}, bajo_stock=${isLowStock}, out_of_stock=${isOutOfStock}`);
+        
+        return isLowStock || isOutOfStock;
+      });
+
+      // Debug: Mostrar todos los items del inventario filtrados
+      console.log('Datos de inventario filtrados:', inventoryData);
 
       // Formatear alertas de inventario
       const formattedAlerts = (inventoryData || [])
