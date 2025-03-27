@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface InventoryItem {
   id: string
@@ -326,35 +327,76 @@ export default function InventoryModal({ isOpen, onClose, onSubmit, item, mode }
     }
   }
 
+  // Definir las variantes de animación para el modal
+  const modalVariants = {
+    hidden: { 
+      opacity: 0,
+      scale: 0.9,
+      y: 20
+    },
+    visible: { 
+      opacity: 1,
+      scale: 1,
+      y: 0,
+      transition: {
+        type: 'spring',
+        stiffness: 300,
+        damping: 25
+      }
+    },
+    exit: {
+      opacity: 0,
+      scale: 0.9,
+      y: 20,
+      transition: {
+        duration: 0.2
+      }
+    }
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
-        <h2 className="text-xl font-bold mb-4">
-          {getTitle()}
-        </h2>
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <motion.div 
+            className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full relative overflow-hidden"
+            variants={modalVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            <h2 className="text-xl font-bold mb-4">
+              {getTitle()}
+            </h2>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {renderForm()}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {renderForm()}
 
-          <div className="flex justify-end gap-2 mt-6">
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={onClose}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="btn btn-primary"
-            >
-              {mode === 'usage' ? 'Registrar Uso' : 
-               mode === 'restock' ? 'Registrar Reposición' : 
-               item ? 'Actualizar' : 'Crear'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+              <div className="flex justify-end gap-2 mt-6">
+                <motion.button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={onClose}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  Cancelar
+                </motion.button>
+                <motion.button
+                  type="submit"
+                  className="btn btn-primary"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  {mode === 'usage' ? 'Registrar Uso' : 
+                   mode === 'restock' ? 'Registrar Reposición' : 
+                   item ? 'Actualizar' : 'Crear'}
+                </motion.button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   )
 } 

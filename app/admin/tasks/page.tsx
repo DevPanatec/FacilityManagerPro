@@ -162,8 +162,10 @@ export default function TasksPage() {
         console.log('Mostrando todas las tareas (sin filtro de assigned_to)');
       }
       
-      // Ordenar por fecha de creación
-      query = query.order('created_at', { ascending: false });
+      // Ordenar primero por estado (pendientes primero) y luego por fecha programada (más recientes primero)
+      query = query.order('status', { ascending: true, nullsFirst: false }) // pendientes vienen primero en orden alfabético
+                  .order('start_date', { ascending: false }) // fechas más recientes primero
+                  .order('created_at', { ascending: false }); // si no hay fecha programada, usar fecha de creación
       
       console.log('Ejecutando consulta de tareas...');
       const { data: tasksData, error: tasksError } = await query;
@@ -929,7 +931,40 @@ export default function TasksPage() {
                 )
               )
               .sort((a, b) => {
-                // Ordenar por fecha de creación descendente (más recientes primero)
+                // Prioridad de ordenamiento:
+                // Si estamos mostrando todas las tareas, ordenar por estado primero
+                if (activeFilter === 'all') {
+                  // Primero ordenar por estado
+                  if (a.status !== b.status) {
+                    // Pendientes primero
+                    if (a.status === 'pending') return -1;
+                    if (b.status === 'pending') return 1;
+                    
+                    // Luego en progreso
+                    if (a.status === 'in_progress') return -1;
+                    if (b.status === 'in_progress') return 1;
+                    
+                    // Completadas al final
+                    if (a.status === 'completed') return 1;
+                    if (b.status === 'completed') return -1;
+                  }
+                }
+                
+                // Para todos los casos (con o sin filtro por estado):
+                // Ordenar por fecha programada (más recientes primero)
+                const aDate = a.start_date ? new Date(a.start_date).getTime() : 0;
+                const bDate = b.start_date ? new Date(b.start_date).getTime() : 0;
+                
+                // Si ambas tienen start_date, comparar por esa fecha (más reciente primero)
+                if (aDate && bDate) {
+                  return bDate - aDate;
+                }
+                
+                // Si solo una tiene start_date, esa va primero
+                if (aDate) return -1;
+                if (bDate) return 1;
+                
+                // Si ninguna tiene start_date, ordenar por fecha de creación
                 return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
               })
               .map(task => (
@@ -968,9 +1003,9 @@ export default function TasksPage() {
                         
                         {/* Mostrar asignado a - especialmente útil para tareas del calendario */}
                         <p className="text-xs text-gray-500 mt-1">
-                          {task.assignee ? 
-                            `Asignado a: ${task.assignee.first_name || ''} ${task.assignee.last_name || ''}`.trim() : 
-                            'Sin asignar'}
+                          {task.assignee && task.assignee.first_name && task.assignee.last_name ? 
+                            `Asignado a: ${task.assignee.first_name} ${task.assignee.last_name}` : 
+                            ''}
                         </p>
                   </div>
                   <span className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1 ${
