@@ -25,7 +25,10 @@ export const taskService = {
 
       if (!userProfile) throw new Error('Perfil no encontrado');
       
+      console.log('Cargando todas las tareas para la organización:', userProfile.organization_id);
+      
       // Consulta unificada para obtener todas las tareas activas (no canceladas)
+      // Sin filtrar por tipo para asegurar que se incluyan todos los tipos ('assignment', 'calendar', etc.)
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
         .select(`
@@ -64,6 +67,11 @@ export const taskService = {
         .order('created_at', { ascending: false });
 
       if (tasksError) throw tasksError;
+      
+      // Log para diagnóstico de tipos de tareas
+      const taskTypes = tasksData ? [...new Set(tasksData.map(task => task.type))].filter(Boolean) : [];
+      console.log('Tipos de tareas encontrados:', taskTypes);
+      console.log('Total tareas cargadas:', tasksData?.length || 0);
       
       return tasksData || [];
     } catch (error) {

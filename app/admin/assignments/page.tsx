@@ -9,6 +9,7 @@ import { toast } from 'react-hot-toast';
 import { errorHandler } from '@/app/utils/errorHandler';
 import { motion, AnimatePresence } from 'framer-motion';
 import { taskService } from '@/app/services/taskService';
+import { Database } from '@/app/types/supabase';
 
 interface WorkShiftData {
   id: string;
@@ -551,6 +552,17 @@ export default function AssignmentsPage() {
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [selectedDeepTasks, setSelectedDeepTasks] = useState(false);
+  // Nuevas variables de estado requeridas
+  const [assignmentTitle, setAssignmentTitle] = useState('');
+  const [assignmentDescription, setAssignmentDescription] = useState('');
+  const [isFormError, setIsFormError] = useState(false);
+  const [selectedPriority, setSelectedPriority] = useState('medium');
+  const [selectedStartTime, setSelectedStartTime] = useState('');
+  const [selectedEndTime, setSelectedEndTime] = useState('');
+  const [createError, setCreateError] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [assignmentCreated, setAssignmentCreated] = useState(false);
+  const [selectedCleaningAreas, setSelectedCleaningAreas] = useState<string[]>([]);
 
   // Update the state definition with the proper type
   const [shiftHours, setShiftHours] = useState<ShiftHoursState>({
@@ -788,156 +800,119 @@ export default function AssignmentsPage() {
     return colorMap[salaNombre] || '#6B7280'; // Color por defecto
   };
 
-  const handleCreateAssignment = async () => {
+  const handleCreateAssignment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    
+    // Validación de campos requeridos - eliminamos título y descripción de la validación
+    if (!selectedSala || !selectedArea || !selectedDate || !selectedUser) {
+      setIsFormError(true);
+      return;
+    }
+    
     setIsCreating(true);
+    
     try {
-      // Validación inicial
-      if (selectedDeepTasks) {
-        if (selectedUsers.length === 0 || !selectedSala || !selectedArea || !selectedDate || !startTime) {
-          toast.error('Por favor complete todos los campos y seleccione al menos un usuario');
-          return;
-        }
-      } else {
-        if (!selectedUser || !selectedSala || !selectedArea || !selectedDate || !startTime) {
-          toast.error('Por favor complete todos los campos');
-          return;
-        }
+      // Obtener el usuario autenticado y su organización
+      const supabase = createClientComponentClient<Database>();
+      const userResponse = await supabase.auth.getUser();
+      const user = userResponse.data.user;
+      
+      if (!user) {
+        throw new Error("Usuario no autenticado");
       }
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No autorizado');
-
+      
       const { data: userProfile } = await supabase
         .from('users')
         .select('organization_id')
         .eq('id', user.id)
         .single();
-
-      if (!userProfile) throw new Error('Error al obtener el perfil del usuario');
-
-      // Formatear la fecha y hora correctamente
-      const [hours, minutes] = startTime.split(':');
-      const formattedTime = `${hours}:${minutes}`;
       
-      // Asegurarnos de que la fecha esté en el formato correcto para la base de datos
-      // y para el calendario (YYYY-MM-DD)
-      const formattedDate = selectedDate;
-      
-      // Due date debe ser un día después de start_date para compensar el problema de zona horaria
-      // y asegurar que aparezca en el día correcto en el calendario
-      const dueDateObj = new Date(formattedDate);
-      dueDateObj.setDate(dueDateObj.getDate() + 1);
-      const dueDateFormatted = dueDateObj.toISOString().split('T')[0];
+      if (!userProfile || !userProfile.organization_id) {
+        throw new Error("Información de organización no disponible");
+      }
 
-      // Obtener información de sala y área
+      // Obtener información de sala y área para crear un título automático
       const { data: salaInfo } = await supabase
         .from('salas')
         .select('nombre')
         .eq('id', selectedSala)
         .single();
-
+        
       const { data: areaInfo } = await supabase
         .from('areas')
         .select('name')
         .eq('id', selectedArea)
         .single();
-
+        
+      const generatedTitle = `${salaInfo?.nombre || ''} - ${areaInfo?.name || ''}`;
+      
+      // Preparar los datos de la tarea básica con título generado automáticamente
+      const taskData = {
+        title: generatedTitle,
+        description: `Tarea asignada a ${selectedUser}`,
+        status: 'pending',
+        priority: 'medium', // Valor predeterminado
+        created_at: new Date().toISOString(),
+        start_date: selectedDate,
+        due_date: selectedDate, // Asegurar que tenga fecha de vencimiento para que aparezca en el calendario
+        sala_id: selectedSala,
+        area_id: selectedArea,
+        assigned_to: userMap[selectedUser],
+        organization_id: userProfile.organization_id,
+        type: 'calendar', // Cambiado de 'assignment' a 'calendar' para que aparezca en calendario y tareas
+        start_time: selectedStartTime || null,
+        end_time: selectedEndTime || null
+      };
+      
+      // Manejar los casos de limpieza profunda y asignaciones normales
       if (selectedDeepTasks) {
-        // Obtener las tareas profundas activas
-        const { data: deepTasks, error: deepTasksError } = await supabase
-          .from('deep_tasks')
-          .select('*')
-          .eq('active', true)
-          .order('created_at', { ascending: true });
-
-        if (deepTasksError) throw deepTasksError;
-
-        if (!deepTasks || deepTasks.length === 0) {
-          toast.error('No hay tareas profundas configuradas');
-          return;
-        }
-
-        // Crear una asignación por cada usuario seleccionado
-        for (const userName of selectedUsers) {
-          // Crear un timestamp único para esta tarea
-          const uniqueTimestamp = new Date().getTime();
-          
-          const taskData = {
-            title: `Limpieza Profunda - ${salaInfo?.nombre || ''} - ${areaInfo?.name || ''}`,
-            description: `Tarea de limpieza profunda asignada a ${userName}`,
-            organization_id: userProfile.organization_id,
-            assigned_to: userMap[userName],
-            sala_id: selectedSala,
-            area_id: selectedArea,
-            start_date: formattedDate,
-            start_time: formattedTime,
-            due_date: dueDateFormatted, // Añadido para asegurar que aparezca en el calendario
-            status: 'pending',
-            type: 'deep_cleaning',
-            created_by: user.id,
-            priority: 'medium',
-            deep_tasks: deepTasks.map((task, index) => ({
-              // Generar un ID único para cada tarea profunda combinando el ID original y un timestamp
-              id: `${task.id}_${uniqueTimestamp}_${index}`,
-              original_task_id: task.id, // Guardar el ID original como referencia
-              name: task.name,
-              description: task.description,
-              step: index + 1,
-              status: 'pending',
-              completed_at: null
-            }))
-          };
-
-          const { error: insertError } = await supabase
-            .from('tasks')
-            .insert([taskData]);
-
-          if (insertError) throw insertError;
-        }
-
-        toast.success(`Se crearon ${selectedUsers.length} asignaciones de limpieza profunda`);
-      } else {
-        // Insertar una única asignación normal
-        const { error: insertError } = await supabase
+        // Para limpieza profunda, crear tarea principal
+        const { data, error } = await supabase
           .from('tasks')
-          .insert({
-            title: `${salaInfo?.nombre || ''} - ${areaInfo?.name || ''}`,
-            description: `Tarea asignada para ${selectedUser}`,
-            organization_id: userProfile.organization_id,
-            assigned_to: userMap[selectedUser],
-            sala_id: selectedSala,
-            area_id: selectedArea,
-            start_date: formattedDate,
-            start_time: formattedTime,
-            due_date: dueDateFormatted, // Añadido para asegurar que aparezca en el calendario
-            status: 'pending',
-            type: 'assignment',  // Asegurarnos de que es una tarea normal
-            created_by: user.id,
-            priority: 'medium',
-            deep_tasks: null  // Explícitamente establecer deep_tasks como null para tareas normales
-          });
-
-        if (insertError) throw insertError;
-        toast.success('Asignación creada exitosamente');
+          .insert([{
+            ...taskData,
+            title: `Limpieza profunda: ${generatedTitle}`,
+            type: 'calendar' // Cambiado de 'deep_cleaning' a 'calendar'
+          }])
+          .select();
+        
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          const parentTaskId = data[0].id;
+          
+          // Crear subtareas para cada área de limpieza seleccionada
+          for (const area of selectedCleaningAreas) {
+            await supabase
+              .from('deep_tasks')
+              .insert([{
+                task_id: parentTaskId,
+                area_name: area,
+                status: 'pending',
+                organization_id: userProfile.organization_id
+              }]);
+          }
+        }
+      } else {
+        // Asignación normal, crear una sola tarea
+        const { error } = await supabase
+          .from('tasks')
+          .insert([taskData]);
+        
+        if (error) throw error;
       }
-
-      // Mostrar animación y resetear el formulario
-      setShowSuccessAnimation(true);
-      setTimeout(() => {
-        setShowSuccessAnimation(false);
-        setSelectedUser('');
-        setSelectedUsers([]);
-        setSelectedSala(null);
-        setSelectedArea('');
-        setSelectedDate('');
-        setStartTime('');
-        setSelectedDeepTasks(false);
-        loadData();
-      }, 2000);
-
+      
+      // Resetear el formulario y cerrar el modal
+      resetForm();
+      setShowCreateModal(false);
+      setAssignmentCreated(true);
+      
+      // Recargar las asignaciones para mostrar la nueva
+      loadAssignments();
+      
     } catch (error) {
-      console.error('Error al crear la asignación:', error);
-      toast.error('Error al crear la asignación');
+      console.error("Error al crear la asignación:", error);
+      setCreateError(true);
     } finally {
       setIsCreating(false);
     }
@@ -1214,6 +1189,26 @@ export default function AssignmentsPage() {
     setSelectedSala(sala?.id || null);
   };
 
+  // Añadir función resetForm para limpiar el formulario
+  const resetForm = () => {
+    setSelectedUser('');
+    setSelectedUsers([]);
+    setSelectedSala(null);
+    setSelectedArea('');
+    setSelectedDate('');
+    setStartTime('');
+    setSelectedDeepTasks(false);
+    setSelectedStartTime('');
+    setSelectedEndTime('');
+    setSelectedCleaningAreas([]);
+    setIsFormError(false);
+  };
+
+  // Función para cargar las asignaciones
+  const loadAssignments = async () => {
+    await loadData();
+  };
+
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="px-6 -mx-6 py-6">
@@ -1475,8 +1470,8 @@ export default function AssignmentsPage() {
                 <motion.input
                   type="time"
                   className="w-32 p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
+                  value={selectedStartTime}
+                  onChange={(e) => setSelectedStartTime(e.target.value)}
                   placeholder="Hora de inicio"
                   whileHover={{ boxShadow: "0 0 0 2px rgba(66, 99, 235, 0.2)" }}
                   whileFocus={{ boxShadow: "0 0 0 3px rgba(66, 99, 235, 0.3)" }}
@@ -1485,12 +1480,36 @@ export default function AssignmentsPage() {
               </div>
             </motion.div>
 
+            {/* Hora de finalización */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.32 }}
+            >
+              <label className="flex items-center gap-2 text-sm font-medium text-blue-700 mb-2">
+                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Hora de Finalización (Opcional)
+              </label>
+              <motion.input
+                type="time"
+                className="w-full p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                value={selectedEndTime}
+                onChange={(e) => setSelectedEndTime(e.target.value)}
+                placeholder="Hora de finalización"
+                whileHover={{ boxShadow: "0 0 0 2px rgba(66, 99, 235, 0.2)" }}
+                whileFocus={{ boxShadow: "0 0 0 3px rgba(66, 99, 235, 0.3)" }}
+                transition={{ duration: 0.2 }}
+              />
+            </motion.div>
+
             {/* Switch para Tareas Profundas */}
             <motion.div 
               className="flex items-center justify-between py-2"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.4 }}
+              transition={{ delay: 0.35 }}
             >
               <label className="flex items-center gap-2 text-sm font-medium text-blue-700">
                 <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1521,6 +1540,50 @@ export default function AssignmentsPage() {
               </motion.button>
             </motion.div>
 
+            {/* Opciones de limpieza profunda */}
+            <AnimatePresence>
+              {selectedDeepTasks && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mt-2 p-4 bg-blue-50 rounded-lg border border-blue-100"
+                  transition={{ duration: 0.3 }}
+                >
+                  <label className="block text-sm font-medium text-blue-700 mb-2 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    Áreas de limpieza profunda
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Baños', 'Pisos', 'Ventanas', 'Equipos', 'Mobiliario'].map((area) => (
+                      <motion.label 
+                        key={area} 
+                        className="flex items-center p-2 bg-white rounded-md border border-blue-50 hover:border-blue-200 cursor-pointer"
+                        whileHover={{ scale: 1.02, backgroundColor: 'rgba(239, 246, 255, 0.6)' }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                          checked={selectedCleaningAreas.includes(area)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedCleaningAreas([...selectedCleaningAreas, area]);
+                            } else {
+                              setSelectedCleaningAreas(selectedCleaningAreas.filter(a => a !== area));
+                            }
+                          }}
+                        />
+                        <span className="ml-2 text-sm text-gray-700">{area}</span>
+                      </motion.label>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Botón de Crear Asignación */}
             <motion.div 
               className="mt-6 relative"
@@ -1528,6 +1591,26 @@ export default function AssignmentsPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
             >
+              {/* Mensaje de error del formulario */}
+              <AnimatePresence>
+                {isFormError && (
+                  <motion.div 
+                    className="mb-3 p-3 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <div className="flex items-start">
+                      <svg className="w-4 h-4 mt-0.5 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p>Por favor completa todos los campos obligatorios: sala, área, fecha y usuario.</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <motion.button
                 onClick={handleCreateAssignment}
                 className={`w-full py-3 text-white rounded-lg transition-all duration-300 relative ${
@@ -1826,6 +1909,40 @@ export default function AssignmentsPage() {
             </div>
           </motion.div>
         </div>
+      )}
+
+      {/* Verificar si selectedDeepTasks está activado y mostrar opciones adicionales */}
+      {selectedDeepTasks && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="mt-4 p-4 bg-blue-50 rounded-lg"
+          transition={{ duration: 0.3 }}
+        >
+          <label className="block text-sm font-medium text-blue-700 mb-2">
+            Áreas de limpieza profunda
+          </label>
+          <div className="space-y-2">
+            {['Baños', 'Pisos', 'Ventanas', 'Equipos', 'Mobiliario'].map((area) => (
+              <label key={area} className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                  checked={selectedCleaningAreas.includes(area)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedCleaningAreas([...selectedCleaningAreas, area]);
+                    } else {
+                      setSelectedCleaningAreas(selectedCleaningAreas.filter(a => a !== area));
+                    }
+                  }}
+                />
+                <span className="ml-2 text-sm text-gray-700">{area}</span>
+              </label>
+            ))}
+          </div>
+        </motion.div>
       )}
     </div>
   );
