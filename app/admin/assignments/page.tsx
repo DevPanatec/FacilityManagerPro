@@ -149,10 +149,10 @@ function TareasPorSala({ salas, onTaskClick }: { salas: Sala[], onTaskClick: (ta
   // Formatear la fecha actual para mostrarla
   const today = new Date();
   const formattedToday = today.toLocaleDateString('es-ES', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   });
 
   // Función para formatear fechas
@@ -164,7 +164,7 @@ function TareasPorSala({ salas, onTaskClick }: { salas: Sala[], onTaskClick: (ta
       year: 'numeric'
     });
   };
-
+  
   // Filtrar salas que tienen tareas
   const salasConTareas = salas.filter(sala => sala.tareas && sala.tareas.length > 0);
 
@@ -274,7 +274,7 @@ function TareasPorSala({ salas, onTaskClick }: { salas: Sala[], onTaskClick: (ta
             >
               <svg className="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
+          </svg>
             </motion.div>
             <motion.div 
               className="absolute -right-2 -top-2 bg-blue-100 rounded-full p-1"
@@ -340,7 +340,7 @@ function TareasPorSala({ salas, onTaskClick }: { salas: Sala[], onTaskClick: (ta
                       <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                       </svg>
-                    </div>
+                  </div>
                   </motion.div>
                   <div>
                     <h3 className="font-bold text-gray-800">{sala.nombre}</h3>
@@ -354,7 +354,7 @@ function TareasPorSala({ salas, onTaskClick }: { salas: Sala[], onTaskClick: (ta
                     const isInProgress = tarea.status === 'in_progress';
                     
                     return (
-                      <motion.div
+                      <motion.div 
                         key={tarea.id}
                         variants={taskVariants}
                         className={`border-l-4 ${isCompleted ? 'border-gray-300' : 'border-blue-500'} 
@@ -364,7 +364,7 @@ function TareasPorSala({ salas, onTaskClick }: { salas: Sala[], onTaskClick: (ta
                       >
                         <h4 className={`font-medium text-sm truncate ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
                           {sala.nombre} - {tarea.area ? tarea.area.name : ''}
-                        </h4>
+                              </h4>
                         
                         {tarea.start_date && (
                           <p className="text-xs text-gray-600 mt-1">
@@ -508,9 +508,9 @@ function TaskDetailsModal({ show, task, onClose }: { show: boolean; task: Task |
               <div className="mb-4">
                 <p className="text-sm text-gray-500">Descripción</p>
                 <p className="text-sm mt-1">{task.description}</p>
-              </div>
-            )}
-          </div>
+        </div>
+      )}
+    </div>
           
           {/* Botón de cerrar */}
           <div className="border-t border-gray-200 p-4 flex justify-end">
@@ -1276,7 +1276,7 @@ export default function AssignmentsPage() {
           >
             {/* Animación de éxito */}
             <AnimatePresence>
-              {showSuccessAnimation && (
+            {showSuccessAnimation && (
                 <motion.div 
                   className="absolute inset-0 bg-white/90 backdrop-blur-sm flex items-center justify-center z-10"
                   initial={{ opacity: 0 }}
@@ -1295,20 +1295,20 @@ export default function AssignmentsPage() {
                       transition={{ repeat: 3, duration: 0.6 }}
                     >
                       <motion.svg 
-                        className="w-12 h-12 text-green-500" 
-                        fill="none" 
-                        viewBox="0 0 24 24" 
-                        stroke="currentColor"
+                      className="w-12 h-12 text-green-500" 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
                         initial={{ pathLength: 0, opacity: 0 }}
                         animate={{ pathLength: 1, opacity: 1 }}
                         transition={{ duration: 0.5, delay: 0.2 }}
                       >
                         <motion.path 
-                          strokeLinecap="round" 
-                          strokeLinejoin="round" 
-                          strokeWidth={3} 
-                          d="M5 13l4 4L19 7"
-                        />
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={3} 
+                        d="M5 13l4 4L19 7"
+                      />
                       </motion.svg>
                     </motion.div>
                     <motion.p 
@@ -1317,7 +1317,7 @@ export default function AssignmentsPage() {
                       animate={{ opacity: [0, 1, 0.8, 1] }}
                       transition={{ duration: 1, delay: 0.5 }}
                     >
-                      ¡Asignación creada con éxito!
+                    ¡Asignación creada con éxito!
                     </motion.p>
                   </motion.div>
                 </motion.div>
@@ -1371,48 +1371,48 @@ export default function AssignmentsPage() {
                     ))}
                   </motion.div>
                   <AnimatePresence>
-                    {selectedUsers.length > 0 && (
+                  {selectedUsers.length > 0 && (
                       <motion.div 
                         className="flex flex-wrap gap-2 mt-2"
                         initial={{ opacity: 0, y: -10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                       >
-                        {selectedUsers.map(user => (
+                      {selectedUsers.map(user => (
                           <motion.span
-                            key={user}
-                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                          key={user}
+                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
                             initial={{ scale: 0.8, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.8, opacity: 0 }}
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
-                          >
-                            {user}
+                        >
+                          {user}
                             <motion.button
-                              type="button"
-                              onClick={() => setSelectedUsers(selectedUsers.filter(u => u !== user))}
-                              className="ml-1 inline-flex items-center justify-center"
+                            type="button"
+                            onClick={() => setSelectedUsers(selectedUsers.filter(u => u !== user))}
+                            className="ml-1 inline-flex items-center justify-center"
                               whileHover={{ rotate: 90 }}
                               transition={{ duration: 0.2 }}
-                            >
-                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                              </svg>
+                          >
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
                             </motion.button>
                           </motion.span>
-                        ))}
+                      ))}
                         <motion.button
-                          type="button"
-                          onClick={() => setSelectedUsers([])}
-                          className="text-xs text-gray-500 hover:text-red-500"
+                        type="button"
+                        onClick={() => setSelectedUsers([])}
+                        className="text-xs text-gray-500 hover:text-red-500"
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                        >
-                          Limpiar selección
+                      >
+                        Limpiar selección
                         </motion.button>
                       </motion.div>
-                    )}
+                  )}
                   </AnimatePresence>
                 </div>
               ) : (
@@ -1439,15 +1439,15 @@ export default function AssignmentsPage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <SalaAreaSelector
-                onSalaChange={(sala) => {
-                  setSelectedSala(sala?.id || null);
-                }}
-                onAreaChange={(area) => {
-                  setSelectedArea(area?.id || '');
-                }}
-                className="space-y-4"
-              />
+            <SalaAreaSelector
+              onSalaChange={(sala) => {
+                setSelectedSala(sala?.id || null);
+              }}
+              onAreaChange={(area) => {
+                setSelectedArea(area?.id || '');
+              }}
+              className="space-y-4"
+            />
             </motion.div>
 
             {/* Fecha y Hora */}
@@ -1554,7 +1554,7 @@ export default function AssignmentsPage() {
             </motion.div>
           </motion.div>
         </div>
-      </div>
+            </div>
 
       {/* Reemplazar la sección de Tareas por Sala con el nuevo componente */}
       <TareasPorSala salas={salas} onTaskClick={handleTaskClick} />
@@ -1666,7 +1666,7 @@ export default function AssignmentsPage() {
                       })}
                       className="w-full p-2 border border-gray-300 rounded"
                     />
-                  </div>
+          </div>
                   <div>
                     <label className="block text-sm text-gray-600 mb-1">Hora fin</label>
                     <input
@@ -1681,8 +1681,8 @@ export default function AssignmentsPage() {
                       })}
                       className="w-full p-2 border border-gray-300 rounded"
                     />
-                  </div>
-                </div>
+        </div>
+      </div>
               </motion.div>
 
               <motion.div 

@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { toast } from 'react-hot-toast'
+import { motion, AnimatePresence } from 'framer-motion'
 import InventoryModal from './components/InventoryModal'
 
 interface InventoryItem {
@@ -49,6 +50,55 @@ interface InventoryFormData {
   min_stock: number
   organization_id?: string
 }
+
+// Variantes de animación
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { 
+    opacity: 0,
+    y: 20
+  },
+  visible: { 
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 100
+    }
+  }
+};
+
+const cardVariants = {
+  hidden: { 
+    opacity: 0,
+    scale: 0.95
+  },
+  visible: { 
+    opacity: 1,
+    scale: 1,
+    transition: {
+      type: "spring",
+      stiffness: 100
+    }
+  },
+  hover: {
+    scale: 1.02,
+    transition: {
+      type: "spring",
+      stiffness: 400,
+      damping: 10
+    }
+  }
+};
 
 export default function InventoryPage() {
   const [sortConfig, setSortConfig] = useState<{
@@ -750,344 +800,198 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header Principal */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Inventario</h1>
-              <p className="mt-1 text-sm text-gray-500">Gestiona los items del inventario</p>
-            </div>
-            <button
-              onClick={() => {
-                setSelectedItem(undefined)
-                setModalMode('create')
-                setIsModalOpen(true)
-              }}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium 
-                       rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 
-                       focus:ring-blue-500 transition-all duration-200 shadow-sm"
-            >
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                className="h-5 w-5 mr-2" 
-                viewBox="0 0 20 20" 
-                fill="currentColor"
-              >
-                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-              </svg>
-              Agregar Item
-            </button>
+    <motion.div 
+      initial="hidden"
+      animate="visible"
+      variants={containerVariants}
+      className="min-h-screen bg-gradient-to-b from-gray-50 to-white"
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Header */}
+        <motion.div 
+          variants={itemVariants}
+          className="flex flex-col md:flex-row md:items-center md:justify-between mb-12"
+        >
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 tracking-tight">
+              Inventario
+            </h1>
+            <p className="mt-2 text-lg text-gray-600">
+              Gestiona y monitorea tu inventario en tiempo real
+            </p>
           </div>
-        </div>
-      </div>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              setModalMode('create')
+              setIsModalOpen(true)
+            }}
+            className="mt-4 md:mt-0 inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-xl text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 shadow-lg hover:shadow-xl"
+          >
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Nuevo Item
+          </motion.button>
+        </motion.div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Estadísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        {/* Stats Cards */}
+        <motion.div 
+          variants={itemVariants}
+          className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12"
+        >
+          <motion.div
+            variants={cardVariants}
+            whileHover="hover"
+            className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 transform transition-all duration-200"
+          >
             <div className="flex items-center">
-              <div className="p-3 rounded-lg bg-blue-50">
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="p-4 bg-blue-50 rounded-xl">
+                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Total Items</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.total}</p>
+              <div className="ml-6">
+                <p className="text-lg font-medium text-gray-600">Total Items</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{stats.total}</p>
               </div>
             </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          </motion.div>
+
+          <motion.div
+            variants={cardVariants}
+            whileHover="hover"
+            className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 transform transition-all duration-200"
+          >
             <div className="flex items-center">
-              <div className="p-3 rounded-lg bg-yellow-50">
-                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="p-4 bg-yellow-50 rounded-xl">
+                <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Stock Crítico</p>
-                <p className="text-2xl font-semibold text-gray-900">{stats.lowStock}</p>
+              <div className="ml-6">
+                <p className="text-lg font-medium text-gray-600">Stock Crítico</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{stats.lowStock}</p>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
 
-        {/* Sección de diagnóstico */}
-        {diagnosisResult && (
-          <div className="mb-6 bg-white rounded-xl shadow-sm border border-blue-200 overflow-hidden">
-            <div className="px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <h3 className="text-sm font-medium text-gray-900">Diagnóstico del Sistema</h3>
-                    <p className="text-sm text-gray-500 mt-1">{diagnosisResult}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => runDiagnosis()}
-                  className="p-1 rounded-md hover:bg-gray-100 transition-colors duration-200"
-                  title="Ejecutar diagnóstico otra vez"
-                >
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </button>
+          <motion.div
+            variants={cardVariants}
+            whileHover="hover"
+            className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 transform transition-all duration-200"
+          >
+            <div className="flex items-center">
+              <div className="p-4 bg-green-50 rounded-xl">
+                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-6">
+                <p className="text-lg font-medium text-gray-600">Disponibles</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">
+                  {items.filter(item => item.status === 'available').length}
+                </p>
               </div>
             </div>
-            <div className="border-t border-blue-100 bg-blue-50 px-6 py-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-blue-800">Prueba manual de reposición:</span>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={async () => {
-                      if (items.length === 0) {
-                        toast.error('No hay items para probar');
-                        return;
-                      }
+          </motion.div>
+        </motion.div>
 
-                      // Probar con el primer item
-                      const testItem = items[0];
-                      setDiagnosisResult(`Probando reposición con item: ${testItem.name}`);
-                      
-                      try {
-                        // Usar registerItemUsage directamente para la prueba
-                        const result = await registerItemUsage(testItem.id, {
-                          operationQuantity: 1,
-                          date: new Date().toISOString().split('T')[0],
-                          userName: 'Test User',
-                          operation: 'restock'
-                        });
-                        
-                        setDiagnosisResult(`Reposición exitosa: ${JSON.stringify(result)}`);
-                        await loadInventoryItems(); // Refrescar datos
-                      } catch (error: any) {
-                        setDiagnosisResult(`Error en reposición: ${error.message}`);
-                      }
-                    }}
-                    className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium text-blue-700 
-                             bg-blue-100 hover:bg-blue-200 transition-colors duration-200"
-                  >
-                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Test Reposición
-                  </button>
-                  
-                  <button
-                    onClick={async () => {
-                      if (items.length === 0) {
-                        toast.error('No hay items para probar');
-                        return;
-                      }
-
-                      const testItem = items[0];
-                      setDiagnosisResult(`Probando registro directo en inventory_restock para: ${testItem.name}`);
-                      
-                      try {
-                        // Insertando directamente en la tabla inventory_restock
-                        const now = new Date().toISOString();
-                        const restockData = {
-                          inventory_id: testItem.id,
-                          quantity: 1,
-                          supplier: 'Test Direct',
-                          date: now.split('T')[0],
-                          organization_id: testItem.organization_id,
-                          created_at: now,
-                          updated_at: now
-                        };
-                        
-                        const { data, error } = await supabase
-                          .from('inventory_restock')
-                          .insert([restockData]);
-                          
-                        if (error) {
-                          console.error('Error en inserción directa:', error);
-                          setDiagnosisResult(`Error en inserción directa: ${error.message}`);
-                        } else {
-                          setDiagnosisResult(`Registro directo exitoso en inventory_restock`);
-                          console.log('Registro directo completado');
-                          
-                          // Verificar que se insertó
-                          const { data: checkData } = await supabase
-                            .from('inventory_restock')
-                            .select('*')
-                            .eq('inventory_id', testItem.id)
-                            .order('created_at', { ascending: false })
-                            .limit(5);
-                            
-                          console.log('Últimos registros de reposición:', checkData);
-                        }
-                      } catch (error: any) {
-                        setDiagnosisResult(`Error en inserción directa: ${error.message}`);
-                      }
-                    }}
-                    className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium text-green-700 
-                             bg-green-100 hover:bg-green-200 transition-colors duration-200"
-                  >
-                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                    </svg>
-                    Test Directo
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Alertas de stock bajo */}
-        {showAlerts && lowStockItems.length > 0 && (
-          <div className="mb-6 bg-white rounded-xl shadow-sm border border-yellow-200 overflow-hidden">
-            <div className="px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <h3 className="text-sm font-medium text-gray-900">Stock Crítico</h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {lowStockItems.length} {lowStockItems.length === 1 ? 'item requiere' : 'items requieren'} atención
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowAlerts(false)}
-                  className="p-1 rounded-md hover:bg-gray-100 transition-colors duration-200"
-                >
-                  <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div className="border-t border-yellow-100 bg-yellow-50 px-6 py-3">
-              <div className="grid gap-2">
-                {lowStockItems.map(item => (
-                  <div key={item.id} className="flex justify-between items-center">
-                    <div className="flex items-center">
-                      <div className="h-2 w-2 rounded-full bg-yellow-400 mr-2"></div>
-                      <span className="text-sm text-gray-600">{item.name}: {item.quantity} unidades (Mínimo: {item.min_stock})</span>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        setSelectedItem(item);
-                        setModalMode('restock');
-                        console.log('Abriendo modal de reposición para item:', item.name, item.id);
-                        
-                        // Dar tiempo para que se actualice el estado
-                        setTimeout(() => {
-                          setIsModalOpen(true);
-                          
-                          // Mostrar mensaje de confirmación
-                          toast.success(`Modal abierto para reponer ${item.name}`);
-                          
-                          // Registrar la acción para el diagnóstico
-                          setDiagnosisResult(`Abriendo modal para reponer ${item.name}. ID: ${item.id}`);
-                        }, 100);
-                      }}
-                      className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium text-yellow-700 
-                               bg-yellow-100 hover:bg-yellow-200 transition-colors duration-200"
-                    >
-                      <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 11l5-5m0 0l5 5m-5-5v12" />
-                      </svg>
-                      Reponer
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tabla */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="border-b border-gray-200 px-6 py-4">
-            <div className="flex flex-col sm:flex-row justify-between gap-4">
-              <div className="relative flex-1 maxw-lg">
+        {/* Search and Filters */}
+        <motion.div 
+          variants={itemVariants}
+          className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-8"
+        >
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <div className="relative">
                 <input
                   type="text"
                   placeholder="Buscar en inventario..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-gray-50
-                           text-sm placeholder-gray-400 focus:outline-none focus:ring-2 
+                  className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl bg-gray-50
+                           text-base placeholder-gray-400 focus:outline-none focus:ring-2 
                            focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                 />
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
                   <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0118 0z" />
                   </svg>
                 </div>
               </div>
-              <div className="flex items-center">
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                  className="block w-full pl-3 pr-10 py-2 text-sm border border-gray-300 rounded-lg
-                           bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 
-                           focus:border-transparent transition-all duration-200"
-                >
-                  <option value="all">Todos los estados</option>
-                  <option value="available">Disponible</option>
-                  <option value="low">Stock bajo</option>
-                  <option value="out_of_stock">Sin stock</option>
-                </select>
-              </div>
+            </div>
+            
+            <div className="w-full md:w-48">
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl
+                         bg-gray-50 text-base text-gray-900
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 
+                         focus:border-transparent transition-all duration-200"
+              >
+                <option value="all">Todos los estados</option>
+                <option value="available">Disponible</option>
+                <option value="low">Stock bajo</option>
+                <option value="out_of_stock">Sin stock</option>
+              </select>
             </div>
           </div>
+        </motion.div>
 
-          {/* Agregar contenedor con altura fija y scroll */}
-          <div className="max-h-[600px] overflow-y-auto">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                {/* Hacer que el encabezado sea fijo */}
-                <thead className="bg-gray-50 sticky top-0 z-10">
-                  <tr>
-                    {[
-                      { key: 'name', label: 'Nombre', width: '30%' },
-                      { key: 'quantity', label: 'Stock', width: '15%' },
-                      { key: 'min_stock', label: 'Stock Mínimo', width: '15%' },
-                      { key: 'status', label: 'Estado', width: '15%' },
-                      { key: 'organization', label: 'Organización', width: '15%' },
-                      { key: 'updated_at', label: 'Actualizado', width: '10%' },
-                      { key: 'actions', label: '', width: '120px' }
-                    ].map(({ key, label, width }) => (
-                      <th
-                        key={key}
-                        style={{ width }}
-                        onClick={() => key !== 'actions' && setSortConfig(current => ({
-                          key: key as keyof InventoryItem,
-                          direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
-                        }))}
-                        className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider
-                                  ${key !== 'actions' ? 'cursor-pointer hover:bg-gray-100' : ''}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          {label}
-                          {key !== 'actions' && sortConfig.key === key && (
-                            <span className="text-blue-500">
-                              {sortConfig.direction === 'asc' ? '↑' : '↓'}
-                            </span>
-                          )}
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredItems.map(item => (
-                    <tr key={item.id} className="hover:bg-gray-50">
+        {/* Table */}
+        <motion.div 
+          variants={itemVariants}
+          className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden"
+        >
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  {[
+                    { key: 'name', label: 'Nombre', width: '30%' },
+                    { key: 'quantity', label: 'Stock', width: '15%' },
+                    { key: 'min_stock', label: 'Stock Mínimo', width: '15%' },
+                    { key: 'status', label: 'Estado', width: '15%' },
+                    { key: 'organization', label: 'Organización', width: '15%' },
+                    { key: 'updated_at', label: 'Actualizado', width: '10%' },
+                    { key: 'actions', label: '', width: '120px' }
+                  ].map(({ key, label, width }) => (
+                    <th
+                      key={key}
+                      style={{ width }}
+                      onClick={() => key !== 'actions' && setSortConfig(current => ({
+                        key: key as keyof InventoryItem,
+                        direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+                      }))}
+                      className={`px-6 py-4 text-left text-sm font-semibold text-gray-900
+                                ${key !== 'actions' ? 'cursor-pointer hover:bg-gray-100 transition-colors duration-150' : ''}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {label}
+                        {key !== 'actions' && sortConfig.key === key && (
+                          <span className="text-blue-600">
+                            {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                <AnimatePresence>
+                  {filteredItems.map((item, index) => (
+                    <motion.tr
+                      key={item.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2, delay: index * 0.05 }}
+                      className="hover:bg-gray-50 transition-colors duration-150"
+                    >
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">{item.name}</div>
                         {item.description && (
@@ -1096,103 +1000,89 @@ export default function InventoryPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center">
-                          <span className={`flex-shrink-0 w-2.5 h-2.5 rounded-full mr-2 ${
-                            item.quantity > item.min_stock ? 'bg-green-400' :
-                            item.quantity === 0 ? 'bg-red-400' : 'bg-yellow-400'
-                          }`}></span>
-                          <span className="text-sm text-gray-600">
-                            {item.quantity} unidades
+                          <motion.span 
+                            className={`flex-shrink-0 w-2.5 h-2.5 rounded-full mr-2 ${
+                              item.quantity > item.min_stock ? 'bg-green-400' :
+                              item.quantity === 0 ? 'bg-red-400' : 'bg-yellow-400'
+                            }`}
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: "spring", stiffness: 500, damping: 25 }}
+                          />
+                          <span className="text-sm text-gray-900 font-medium">
+                            {item.quantity} {item.unit}
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {item.min_stock} unidades
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        {item.min_stock} {item.unit}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                          ${calculateItemStatus(item) === 'available'
-                            ? 'bg-green-100 text-green-800'
-                            : calculateItemStatus(item) === 'out_of_stock'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                          }`}>
+                        <motion.span
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+                            ${calculateItemStatus(item) === 'available'
+                              ? 'bg-green-100 text-green-800'
+                              : calculateItemStatus(item) === 'out_of_stock'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                            }`}
+                        >
                           {calculateItemStatus(item) === 'available' ? 'Disponible' :
                            calculateItemStatus(item) === 'out_of_stock' ? 'Sin Stock' : 'Stock Bajo'}
-                        </span>
+                        </motion.span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
+                      <td className="px-6 py-4 text-sm text-gray-900">
                         {item.organization?.name || 'N/A'}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
+                      <td className="px-6 py-4 text-sm text-gray-500">
                         {new Date(item.updated_at).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end space-x-2">
-                          <button
+                        <div className="flex items-center justify-end space-x-3">
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
                             onClick={() => handleEditClick(item)}
-                            className="text-gray-600 hover:text-blue-600"
+                            className="text-gray-600 hover:text-blue-600 transition-colors duration-150"
                             title="Editar"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
                                     d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
-                          </button>
-                          <button
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
                             onClick={() => handleItemClick(item)}
-                            className="text-gray-600 hover:text-green-600"
+                            className="text-gray-600 hover:text-green-600 transition-colors duration-150"
                             title="Registrar uso"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
                                     d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (window.confirm('¿Estás seguro de que deseas eliminar este item?')) {
-                                deleteInventoryItem(item.id)
-                              }
-                            }}
-                            className="text-gray-600 hover:text-red-600"
-                            title="Eliminar"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" 
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                          </motion.button>
                         </div>
                       </td>
-                    </tr>
+                    </motion.tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </AnimatePresence>
+              </tbody>
+            </table>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       <InventoryModal
         isOpen={isModalOpen}
-        onClose={() => {
-          console.log('Cerrando modal...');
-          setIsModalOpen(false);
-          setModalMode('edit');
-          // Recargar datos al cerrar el modal para asegurar que la UI esté actualizada
-          console.log('Recargando datos del inventario después de cerrar el modal...');
-          setTimeout(() => {
-            loadInventoryItems().then(() => {
-              console.log('Datos recargados exitosamente');
-            }).catch(err => {
-              console.error('Error al recargar datos:', err);
-            });
-          }, 500); // Pequeño retraso para asegurar que todas las operaciones anteriores hayan terminado
-        }}
+        onClose={() => setIsModalOpen(false)}
         onSubmit={handleModalSubmit}
         item={selectedItem}
         mode={modalMode}
       />
-    </div>
+    </motion.div>
   )
 }

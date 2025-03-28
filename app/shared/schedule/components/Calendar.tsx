@@ -181,7 +181,11 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
                   : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
                 }
               `}
-              onClick={() => onTaskClick(task)}
+              onClick={(e) => {
+                e.stopPropagation(); // Evitar que el evento se propague al día
+                // Mostrar el modal con todas las tareas del día en lugar de editar directamente
+                handleDayClick(date);
+              }}
             >
               <div className="flex items-center gap-2">
                 <span className={`h-2 w-2 rounded-full ${
@@ -195,19 +199,7 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
               </div>
               <div className="flex justify-between items-center mt-1">
                 <p className="truncate flex-1">{task.title}</p>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm('¿Estás seguro de que deseas eliminar esta tarea?')) {
-                      onDeleteTask(task.id);
-                    }
-                  }}
-                  className="ml-2 p-1 text-gray-500 hover:text-red-600 rounded-full hover:bg-red-50 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
+                {/* Eliminamos los botones de aquí para evitar acciones directas */}
               </div>
             </div>
           )
@@ -221,7 +213,11 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
       <div
         key={task.id}
         className={`p-2 mb-1 rounded-lg border cursor-pointer ${STATUS_COLORS[task.status as string] || 'bg-gray-100 border-gray-200'}`}
-        onClick={() => onTaskClick(task)}
+        onClick={(e) => {
+          e.stopPropagation(); // Evitar que el evento se propague
+          // Solo mostrar el modal de tareas del día
+          handleDayClick(new Date(task.due_date || ''));
+        }}
       >
         <div className="font-medium text-sm truncate">{task.title}</div>
         {task.organization && (
@@ -265,7 +261,7 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/30"
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
           />
 
           <div className="fixed inset-0 flex items-center justify-center p-4">
@@ -274,186 +270,199 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: -20 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+              className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
             >
-              <Dialog.Panel className="p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <Dialog.Title className="text-xl font-semibold">
-                    {isCreatingTask ? 
-                      `Nueva tarea para ${selectedDayTasks?.date.toLocaleDateString('es-ES', { 
-                        weekday: 'long', 
-                        day: 'numeric',
-                        month: 'long', 
-                        year: 'numeric'
-                      })}` : 
-                      `Tareas para ${selectedDayTasks?.date.toLocaleDateString('es-ES', { 
-                        weekday: 'long', 
-                        day: 'numeric',
-                        month: 'long', 
-                        year: 'numeric'
-                      })}`
-                    }
-                  </Dialog.Title>
-                  <button
-                    onClick={() => setShowTaskDetails(false)}
-                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+              <Dialog.Panel>
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
+                  <div className="flex justify-between items-center">
+                    <Dialog.Title className="text-xl font-bold">
+                      {isCreatingTask ? 
+                        `Nueva tarea para ${selectedDayTasks?.date.toLocaleDateString('es-ES', { 
+                          weekday: 'long', 
+                          day: 'numeric',
+                          month: 'long', 
+                          year: 'numeric'
+                        })}` : 
+                        `Tareas para ${selectedDayTasks?.date.toLocaleDateString('es-ES', { 
+                          weekday: 'long', 
+                          day: 'numeric',
+                          month: 'long', 
+                          year: 'numeric'
+                        })}`
+                      }
+                    </Dialog.Title>
+                    <button
+                      onClick={() => setShowTaskDetails(false)}
+                      className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                    >
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
 
-                {isCreatingTask ? (
-                  <div className="space-y-4">
-                    <button
-                      onClick={() => {
-                        // Regresar a la vista de tareas si hay tareas, o cerrar si no hay
-                        if (selectedDayTasks?.tasks.length === 0) {
-                          setShowTaskDetails(false);
-                        } else {
-                          setIsCreatingTask(false);
-                        }
-                      }}
-                      className="flex items-center text-blue-600 hover:text-blue-800 mb-4"
-                    >
-                      <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-                      </svg>
-                      {selectedDayTasks?.tasks.length === 0 ? 'Cancelar' : 'Ver tareas de este día'}
-                    </button>
-                    <div className="mt-4">
+                <div className="p-6">
+                  {isCreatingTask ? (
+                    <div className="space-y-4">
                       <button
                         onClick={() => {
-                          // Llamar a onAddTask con la fecha formateada
-                          onAddTask(formatDate(selectedDayTasks?.date || new Date()));
-                          // Cerrar el modal después de iniciar la creación
-                          setShowTaskDetails(false);
+                          // Regresar a la vista de tareas si hay tareas, o cerrar si no hay
+                          if (selectedDayTasks?.tasks.length === 0) {
+                            setShowTaskDetails(false);
+                          } else {
+                            setIsCreatingTask(false);
+                          }
                         }}
-                        className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg 
-                                  flex items-center justify-center transition-colors shadow-md hover:shadow-lg"
+                        className="flex items-center text-blue-600 hover:text-blue-800 mb-4 font-medium"
                       >
-                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                        <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
                         </svg>
-                        Crear nueva tarea
+                        {selectedDayTasks?.tasks.length === 0 ? 'Cancelar' : 'Ver tareas de este día'}
                       </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center mb-6">
-                      <div className="flex gap-2">
-                        {selectedDayTasks?.tasks && selectedDayTasks.tasks.length > 0 && (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="flex gap-2 text-sm"
-                          >
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-md">
-                              {selectedDayTasks.tasks.length} {selectedDayTasks.tasks.length === 1 ? 'tarea' : 'tareas'}
-                            </span>
-                          </motion.div>
-                        )}
+                      <div className="mt-4">
+                        <button
+                          onClick={() => {
+                            // Llamar a onAddTask con la fecha formateada
+                            onAddTask(formatDate(selectedDayTasks?.date || new Date()));
+                            // Cerrar el modal después de iniciar la creación
+                            setShowTaskDetails(false);
+                          }}
+                          className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium rounded-lg 
+                                    flex items-center justify-center transition-all duration-300 shadow-md hover:shadow-lg
+                                    hover:from-blue-700 hover:to-indigo-700 transform hover:-translate-y-1"
+                        >
+                          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                          </svg>
+                          Crear nueva tarea
+                        </button>
                       </div>
-                      <button
-                        onClick={() => setIsCreatingTask(true)}
-                        className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                        </svg>
-                        Añadir tarea
-                      </button>
                     </div>
-
-                    {selectedDayTasks?.tasks.length === 0 ? (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
-                        className="text-center py-8"
-                      >
-                        <svg className="w-16 h-16 mx-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" 
-                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <p className="mt-4 text-gray-500">No hay tareas programadas para este día</p>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center mb-6">
+                        <div className="flex gap-2">
+                          {selectedDayTasks?.tasks && selectedDayTasks.tasks.length > 0 && (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              className="flex gap-2 text-sm"
+                            >
+                              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full font-medium">
+                                {selectedDayTasks.tasks.length} {selectedDayTasks.tasks.length === 1 ? 'tarea' : 'tareas'}
+                              </span>
+                            </motion.div>
+                          )}
+                        </div>
                         <button
                           onClick={() => setIsCreatingTask(true)}
-                          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                          className="flex items-center gap-1 text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200"
                         >
-                          Crear una tarea
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                          </svg>
+                          <span>Añadir tarea</span>
                         </button>
-                      </motion.div>
-                    ) : (
-                      <div className="space-y-4">
-                        {selectedDayTasks?.tasks.map((task, index) => (
-                          <motion.div
-                            key={task.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
-                            transition={{ delay: index * 0.05 }}
-                            className="p-4 border rounded-lg hover:shadow-md transition-all duration-200"
+                      </div>
+
+                      {selectedDayTasks?.tasks.length === 0 ? (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.1 }}
+                          className="text-center py-12 px-6 bg-gray-50 rounded-xl border border-gray-100"
+                        >
+                          <svg className="w-20 h-20 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" 
+                                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <h3 className="text-lg font-semibold text-gray-800 mb-2">No hay tareas programadas</h3>
+                          <p className="text-gray-500 mb-6">Este día todavía no tiene tareas asignadas</p>
+                          <button
+                            onClick={() => setIsCreatingTask(true)}
+                            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium"
                           >
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <h3 className="font-medium text-lg">{task.title}</h3>
-                                {task.description && (
-                                  <p className="text-gray-600 mt-1">{task.description}</p>
-                                )}
-                                <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                                  {task.start_time && (
-                                    <span className="flex items-center gap-1">
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                      </svg>
-                                      {task.start_time}
-                                    </span>
+                            Crear una tarea
+                          </button>
+                        </motion.div>
+                      ) : (
+                        <div className="space-y-4">
+                          {selectedDayTasks?.tasks.map((task, index) => (
+                            <motion.div
+                              key={task.id}
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -20 }}
+                              transition={{ delay: index * 0.05 }}
+                              className="p-4 border rounded-xl hover:shadow-md transition-all duration-300 hover:border-blue-200 bg-white"
+                            >
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <h3 className="font-semibold text-lg text-gray-900">{task.title}</h3>
+                                  {task.description && (
+                                    <p className="text-gray-600 mt-1 text-sm">{task.description}</p>
                                   )}
-                                  {task.assignee && (
-                                    <span className="flex items-center gap-1">
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                      </svg>
-                                      {task.assignee.first_name} {task.assignee.last_name}
-                                    </span>
-                                  )}
-                                  {task.priority && (
-                                    <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
-                                      task.priority === 'high' ? 'bg-red-100 text-red-800' :
-                                      task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                      'bg-gray-100 text-gray-800'
+                                  <div className="flex flex-wrap items-center gap-3 mt-3 text-sm text-gray-500">
+                                    {task.start_time && (
+                                      <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        {task.start_time}
+                                      </span>
+                                    )}
+                                    {task.assignee && (
+                                      <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        </svg>
+                                        {task.assignee.first_name} {task.assignee.last_name}
+                                      </span>
+                                    )}
+                                    {task.priority && (
+                                      <span className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${
+                                        task.priority === 'high' ? 'bg-red-100 text-red-800' :
+                                        task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                        'bg-gray-100 text-gray-800'
+                                      }`}>
+                                        {task.priority === 'high' ? 'Prioridad Alta' :
+                                         task.priority === 'medium' ? 'Prioridad Media' : 'Prioridad Baja'}
+                                      </span>
+                                    )}
+                                    <span className={`px-2 py-1 rounded-md text-xs font-medium ${
+                                      task.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                      task.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                                      task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                                      'bg-yellow-100 text-yellow-800'
                                     }`}>
-                                      {task.priority === 'high' ? 'Alta' :
-                                       task.priority === 'medium' ? 'Media' : 'Baja'}
+                                      {task.status === 'completed' ? 'Completada' :
+                                       task.status === 'cancelled' ? 'Cancelada' :
+                                       task.status === 'in_progress' ? 'En Progreso' :
+                                       'Pendiente'}
                                     </span>
-                                  )}
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  task.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                  task.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                                  task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                                  'bg-yellow-100 text-yellow-800'
-                                }`}>
-                                  {task.status === 'completed' ? 'Completada' :
-                                   task.status === 'cancelled' ? 'Cancelada' :
-                                   task.status === 'in_progress' ? 'En Progreso' :
-                                   'Pendiente'}
-                                </span>
-                                <div className="flex items-center">
-                                  <button
-                                    onClick={() => onTaskClick(task)}
-                                    className="p-2 hover:bg-blue-100 text-blue-600 rounded-full transition-colors"
+                                <div className="flex ml-4">
+                                  <motion.button
+                                    whileHover={{ scale: 1.1 }}
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // Este es el ÚNICO punto desde donde se puede editar una tarea
+                                      onTaskClick(task);
+                                      setShowTaskDetails(false); // Cerrar el modal de detalles al editar
+                                    }}
+                                    className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors mr-2"
                                   >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                     </svg>
-                                  </button>
-                                  <button
+                                  </motion.button>
+                                  <motion.button
+                                    whileHover={{ scale: 1.1 }}
+                                    whileTap={{ scale: 0.9 }}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (confirm('¿Estás seguro de que deseas eliminar esta tarea?')) {
@@ -467,21 +476,21 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
                                         }
                                       }
                                     }}
-                                    className="p-2 hover:bg-red-100 text-red-600 rounded-full transition-colors"
+                                    className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
                                   >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                     </svg>
-                                  </button>
+                                  </motion.button>
                                 </div>
                               </div>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                            </motion.div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </Dialog.Panel>
             </motion.div>
           </div>
@@ -491,21 +500,21 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
   )
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-white shadow-lg rounded-lg overflow-hidden">
       {/* Header del calendario */}
-      <div className="p-4 border-b">
+      <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-4">
             <motion.button
               onClick={() => setCurrentDate(new Date())}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md"
+              className="px-4 py-2 text-sm font-medium text-blue-600 bg-white hover:bg-blue-50 rounded-lg border border-blue-200 shadow-sm transition-all duration-200"
             >
               Hoy
             </motion.button>
             <motion.h2 
-              className="text-lg font-semibold"
+              className="text-xl font-bold text-gray-800"
               animate={{ opacity: 1, y: 0 }}
               initial={{ opacity: 0, y: -10 }}
               key={currentDate.getMonth() + "" + currentDate.getFullYear()}
@@ -521,19 +530,19 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
               whileTap={{ scale: 0.95 }}
               className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium 
                        rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 
-                       focus:ring-blue-500 transition-all duration-200 shadow-sm"
+                       focus:ring-blue-500 transition-all duration-200 shadow-md"
             >
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
               </svg>
               Nueva Tarea
             </motion.button>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center bg-white rounded-lg p-1 shadow-sm border border-gray-100">
               <motion.button
                 onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))}
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className="p-2 hover:bg-gray-100 rounded-md text-gray-600"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
@@ -543,7 +552,7 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
                 onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))}
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
-                className="p-2 hover:bg-gray-100 rounded-full"
+                className="p-2 hover:bg-gray-100 rounded-md text-gray-600"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
@@ -555,12 +564,12 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
       </div>
 
       {/* Días de la semana */}
-      <div className="grid grid-cols-7 border-b">
+      <div className="grid grid-cols-7 bg-gray-50">
         {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((day, i) => (
           <div 
             key={day} 
-            className={`py-3 text-sm font-medium text-center
-              ${i === 0 || i === 6 ? 'text-blue-600' : 'text-gray-600'}`}
+            className={`py-3 text-sm font-semibold text-center
+              ${i === 0 || i === 6 ? 'text-blue-600' : 'text-gray-700'}`}
           >
             {day}
           </div>
@@ -568,29 +577,49 @@ export default function Calendar({ tasks, onTaskClick, onAddTask, onDeleteTask }
       </div>
 
       {/* Grid de días */}
-      <div className="grid grid-cols-7 flex-1">
+      <div className="grid grid-cols-7 flex-1 gap-px bg-gray-200">
         {daysInMonth.map((day, index) => (
           <motion.div
             key={index}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: index * 0.02 }}
+            transition={{ delay: index * 0.01 }}
             className={`
-              min-h-[100px] p-2 border-b border-r bg-white
+              min-h-[100px] p-3 bg-white
               ${!day.isCurrentMonth ? 'bg-gray-50' : ''}
-              ${day.isWeekend ? 'bg-gray-50' : ''}
-              hover:bg-gray-50 transition-all duration-200
+              ${day.isWeekend ? 'bg-blue-50/30' : ''}
+              hover:bg-blue-50/50 transition-all duration-200 
               ${formatDate(day.date, 'compare') === formatDate(new Date(), 'compare') ? 
-                'ring-1 ring-inset ring-blue-500' : ''}
+                'ring-2 ring-inset ring-blue-400' : ''}
             `}
             onClick={() => handleDayClick(day.date)}
           >
-            <span className={`text-sm font-medium
-              ${!day.isCurrentMonth ? 'text-gray-400' : 
-                day.isWeekend ? 'text-gray-600' : 'text-gray-900'}
-            `}>
-              {day.date.getDate()}
-            </span>
+            <div className="flex justify-between items-center mb-1">
+              <span className={`flex items-center justify-center w-7 h-7 rounded-full text-sm font-semibold
+                ${formatDate(day.date, 'compare') === formatDate(new Date(), 'compare') ? 
+                  'bg-blue-600 text-white' : 
+                  !day.isCurrentMonth ? 'text-gray-400' : 
+                  day.isWeekend ? 'text-blue-600' : 'text-gray-700'}
+              `}>
+                {day.date.getDate()}
+              </span>
+              
+              {day.isCurrentMonth && (
+                <motion.button
+                  whileHover={{ scale: 1.2 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAddTask(day.date);
+                  }}
+                  className="w-5 h-5 opacity-0 group-hover:opacity-100 text-blue-500 hover:text-blue-700 transition-opacity"
+                >
+                  <svg className="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                </motion.button>
+              )}
+            </div>
             <div className="mt-1 space-y-1">
               {renderCellTasks(day.date)}
             </div>
