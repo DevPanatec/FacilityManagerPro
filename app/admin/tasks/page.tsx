@@ -115,240 +115,125 @@ export default function TasksPage() {
       }
       if (!userProfile) throw new Error('Perfil no encontrado')
 
-      // Construir la consulta básica sin filtros complejos
-      console.log('Iniciando búsqueda de tareas...');
+      // Verificar roles
+      const isAdmin = userProfile.role === 'admin'
+      const isTech = userProfile.role === 'tech'
       
-      // Primero, hacer una consulta específica para las asignaciones
-      console.log('Buscando todas las asignaciones en la base de datos...');
-      const { data: allAssignments, error: assignmentsError } = await supabase
-        .from('tasks')
-        .select('id, title, type, assigned_to')
-        .eq('organization_id', userProfile.organization_id)
-        .eq('type', 'assignment');
-      
-      console.log('Asignaciones encontradas:', allAssignments?.length || 0);
-      if (allAssignments && allAssignments.length > 0) {
-        console.log('Ejemplo de asignación:', allAssignments[0]);
-      }
-      
-      if (assignmentsError) {
-        console.error('Error buscando asignaciones:', assignmentsError);
-      }
-      
-      // Ahora hacer la consulta normal para todas las tareas
       let query = supabase
         .from('tasks')
         .select(`
-          *,
-          assignee:users!tasks_assigned_to_fkey (
-            first_name,
-            last_name
-          ),
-          area:areas!tasks_area_id_fkey (
-            name
-          ),
-          sala:salas (
+          id,
+          title,
+          description,
+          status,
+          priority,
+          created_at,
+          start_date,
+          start_time,
+          due_date,
+          type,
+          organization_id,
+          installation_id,
+          assigned_to,
+          sala_id,
+          area_id,
+          users!tasks_assigned_to_fkey (
             id,
-            nombre
+            first_name,
+            last_name,
+            avatar_url
+          ),
+          salas (
+            id,
+            nombre,
+            estado
+          ),
+          areas (
+            id,
+            name
           )
         `)
-        .eq('organization_id', userProfile.organization_id);
+        .eq('organization_id', userProfile.organization_id)
       
-      // Solo filtrar por usuario actual si el toggle está desactivado
-      if (!showAllTasks) {
-        query = query.eq('assigned_to', user.id);
-        console.log('Filtrando por assigned_to:', user.id);
-      } else {
-        console.log('Mostrando todas las tareas (sin filtro de assigned_to)');
+      // Si es técnico, mostrar solo sus tareas
+      if (isTech) {
+        query = query.eq('assigned_to', user.id)
       }
       
-      // Ordenar primero por estado (pendientes primero) y luego por fecha programada (más recientes primero)
-      query = query.order('status', { ascending: true, nullsFirst: false }) // pendientes vienen primero en orden alfabético
-                  .order('start_date', { ascending: false }) // fechas más recientes primero
-                  .order('created_at', { ascending: false }); // si no hay fecha programada, usar fecha de creación
-      
-      console.log('Ejecutando consulta de tareas...');
-      const { data: tasksData, error: tasksError } = await query;
-      
-      // Usar let para poder modificar allTasks más adelante
-      let allTasks = tasksData || [];
-      
-      console.log('Consulta completada. Tareas encontradas:', allTasks?.length || 0);
-      if (allTasks && allTasks.length > 0) {
-        // Obtener tipos únicos de tareas 
-        const taskTypes = allTasks.map(t => t.type).filter((value, index, self) => self.indexOf(value) === index);
-        console.log('Tipos de tareas encontrados:', taskTypes);
-        
-        console.log('Ejemplo de tarea:', {
-          id: allTasks[0].id,
-          title: allTasks[0].title,
-          type: allTasks[0].type,
-          assigned_to: allTasks[0].assigned_to
-        });
-        
-        // Verificar específicamente las asignaciones
-        const assignments = allTasks.filter(t => t.type === 'assignment');
-        console.log('Número de asignaciones encontradas en tareas:', assignments.length);
-        if (assignments.length > 0) {
-          console.log('Ejemplo de asignación en tareas:', {
-            id: assignments[0].id,
-            title: assignments[0].title,
-            assigned_to: assignments[0].assigned_to,
-            sala: assignments[0].sala
-          });
-        }
-        
-        // Verificar si hay discrepancia entre las asignaciones directas y las encontradas en todas las tareas
-        if (allAssignments && allAssignments.length > assignments.length) {
-          console.log('Hay asignaciones faltantes. Encontradas directamente:', allAssignments.length, 'En tareas:', assignments.length);
-          
-          // Buscar las asignaciones que faltan
-          const assignmentIds = assignments.map(a => a.id);
-          const missingAssignments = allAssignments.filter(a => !assignmentIds.includes(a.id));
-          console.log('Asignaciones faltantes:', missingAssignments);
-          
-          // Agregar información detallada para cada asignación faltante
-          if (missingAssignments.length > 0) {
-            const missingAssignmentPromises = missingAssignments.map(async (assignment) => {
-              const { data: detailedAssignment, error } = await supabase
-                .from('tasks')
-                .select(`
-                  *,
-          assignee:users!tasks_assigned_to_fkey (
-            first_name,
-            last_name
-          ),
-          area:areas!tasks_area_id_fkey (
-            name
-                  ),
-                  sala:salas (
-                    id,
-                    nombre
-                  )
-                `)
-                .eq('id', assignment.id)
-                .single();
-                
-              if (error) {
-                console.error('Error obteniendo detalles de asignación faltante:', error);
-                return null;
-              }
-              
-              return detailedAssignment;
-            });
-            
-            const detailedMissingAssignments = await Promise.all(missingAssignmentPromises);
-            const validMissingAssignments = detailedMissingAssignments.filter(Boolean);
-            
-            console.log('Detalles de asignaciones faltantes:', validMissingAssignments);
-            
-            // Formatear las asignaciones faltantes
-            const formattedMissingAssignments = validMissingAssignments.map(task => {
-              const assignee = task.assignee && Array.isArray(task.assignee) && task.assignee[0] ? {
-                first_name: task.assignee[0].first_name,
-                last_name: task.assignee[0].last_name
-              } : (task.assigned_to ? { first_name: "Sin nombre", last_name: "disponible" } : undefined);
-    
-              const area = task.area && Array.isArray(task.area) && task.area[0] ? {
-                name: task.area[0].name || 'Área sin identificar'
-              } : (task.area_id ? { name: "Limpieza/Mantenimiento" } : undefined);
-              
-              const sala = task.sala && Array.isArray(task.sala) && task.sala[0] ? {
-                id: task.sala[0].id,
-                nombre: task.sala[0].nombre
-              } : undefined;
-    
-              return {
-                id: task.id,
-                title: task.title || 'Sin título',
-                description: task.description || 'Sin descripción',
-                priority: (task.priority || 'low') as 'low' | 'medium' | 'high',
-                status: task.status || 'pending',
-                assigned_to: task.assigned_to,
-                created_at: task.created_at,
-                due_date: task.due_date,
-                area_id: task.area_id,
-                organization_id: task.organization_id,
-                start_time: task.start_time,
-                end_time: task.end_time,
-                type: task.type,
-                start_date: task.start_date,
-                sala_id: task.sala_id,
-                assignee,
-                area,
-                sala
-              } as Task;
-            });
-            
-            // Añadir las asignaciones faltantes a las tareas existentes
-            allTasks = [...allTasks, ...formattedMissingAssignments];
-            console.log('Se agregaron', formattedMissingAssignments.length, 'asignaciones faltantes al conjunto de tareas');
-          }
-        }
+      // Filtrar por instalación si está seleccionada
+      if (selectedInstallation) {
+        query = query.eq('installation_id', selectedInstallation)
       }
-
+      
+      // Filtrar por sala si está seleccionada
+      if (selectedRoom) {
+        query = query.eq('sala_id', selectedRoom)
+      }
+      
+      // Filtrar por estado si está seleccionado
+      if (selectedStatus && selectedStatus !== 'all') {
+        query = query.eq('status', selectedStatus)
+      }
+      
+      // Filtrar por fecha
+      if (filterDate) {
+        const nextDay = new Date(filterDate)
+        nextDay.setDate(nextDay.getDate() + 1)
+        query = query.gte('start_date', filterDate).lt('start_date', nextDay.toISOString().split('T')[0])
+      }
+      
+      // Filtrar por tipo - Asegurar que se incluyan 'calendar' y 'assignment'
+      // Esto permite que las tareas creadas como asignaciones aparezcan en la sección de tareas
+      query = query.or(`type.eq.calendar,type.eq.assignment`)
+      
+      // Ordenar por fecha de creación
+      query = query.order('created_at', { ascending: false })
+      
+      const { data: tasksData, error: tasksError } = await query
+      
       if (tasksError) {
-        console.error('Error detallado al obtener tareas:', {
-          message: tasksError.message,
-          code: tasksError.code,
-          details: tasksError.details,
-          hint: tasksError.hint
-        })
+        console.error('Error buscando tareas:', tasksError)
         throw new Error('Error al obtener tareas: ' + tasksError.message)
       }
       
-      console.log('Tareas obtenidas:', allTasks?.length || 0, 'tareas', showAllTasks ? '(todas)' : '(solo asignadas)') // Debug
+      console.log('Tareas cargadas:', tasksData?.length || 0)
 
-      const formattedTasks = allTasks?.map(task => {
+      const formattedTasks = tasksData?.map(task => {
         // Ensure assignee is properly typed
         const assignee = task.assignee && Array.isArray(task.assignee) && task.assignee[0] ? {
           first_name: task.assignee[0].first_name,
           last_name: task.assignee[0].last_name
-        } : (task.assigned_to ? { first_name: "Sin nombre", last_name: "disponible" } : undefined);
+        } : (task.assigned_to ? { first_name: "Sin nombre", last_name: "disponible" } : undefined)
 
         // Ensure area is properly typed
         const area = task.area && Array.isArray(task.area) && task.area[0] ? {
           name: task.area[0].name || 'Área sin identificar'
-        } : (task.area_id ? { name: "Limpieza/Mantenimiento" } : undefined);
+        } : (task.area_id ? { name: "Limpieza/Mantenimiento" } : undefined)
         
         // Ensure sala is properly typed
         const sala = task.sala && Array.isArray(task.sala) && task.sala[0] ? {
           id: task.sala[0].id,
           nombre: task.sala[0].nombre
-        } : undefined;
+        } : undefined
 
         return {
-          id: task.id,
-          title: task.title || 'Sin título',
-          description: task.description || 'Sin descripción',
-          priority: (task.priority || 'low') as 'low' | 'medium' | 'high',
-          status: task.status || 'pending',
-          assigned_to: task.assigned_to,
-          created_at: task.created_at,
-          due_date: task.due_date,
-          area_id: task.area_id,
-          organization_id: task.organization_id,
-          start_time: task.start_time,
-          end_time: task.end_time,
-          type: task.type,
-          start_date: task.start_date,
-          sala_id: task.sala_id,
+          ...task,
           assignee,
           area,
           sala
-        } as Task;
+        } as Task
       }) || []
 
-      console.log('Tareas formateadas:', formattedTasks) // Debug
+      console.log('Tareas formateadas:', formattedTasks)
 
       // Actualizar estadísticas usando los valores de status directly
       const stats = {
-        completed: allTasks?.filter(t => t.status === 'completed').length || 0,
-        pending: allTasks?.filter(t => t.status === 'pending').length || 0,
-        inProgress: allTasks?.filter(t => t.status === 'in_progress').length || 0
+        completed: formattedTasks?.filter(t => t.status === 'completed').length || 0,
+        pending: formattedTasks?.filter(t => t.status === 'pending').length || 0,
+        inProgress: formattedTasks?.filter(t => t.status === 'in_progress').length || 0
       }
 
-      console.log('Estadísticas calculadas:', stats) // Debug
+      console.log('Estadísticas calculadas:', stats)
 
       setTaskStats(stats)
       setTasks(formattedTasks)
@@ -369,13 +254,13 @@ export default function TasksPage() {
   const handleStartTask = async (task: Task) => {
     try {
       // Deshabilitar el botón inmediatamente
-      const button = document.querySelector(`button[data-task-id="${task.id}"]`);
+      const button = document.querySelector(`button[data-task-id="${task.id}"]`)
       if (button) {
-        button.setAttribute('disabled', 'true');
+        button.setAttribute('disabled', 'true')
       }
 
       // Mostrar indicador de carga con ID
-      const toastId = toast.loading('Iniciando tarea...');
+      const toastId = toast.loading('Iniciando tarea...')
 
       // 1. Obtener usuario y verificar tarea en paralelo
       const [userResponse, checkTaskResponse] = await Promise.all([
@@ -385,22 +270,22 @@ export default function TasksPage() {
           .select('*')
           .eq('id', task.id)
           .single()
-      ]);
+      ])
 
-      if (!userResponse.data.user) throw new Error('No autorizado');
-      if (!checkTaskResponse.data) throw new Error('Tarea no encontrada');
+      if (!userResponse.data.user) throw new Error('No autorizado')
+      if (!checkTaskResponse.data) throw new Error('Tarea no encontrada')
 
       // Verificar si la tarea ya está en progreso
       if (checkTaskResponse.data.status === 'in_progress') {
-        toast.dismiss(toastId);
-        toast.error('Esta tarea ya está en progreso');
-        router.push('/admin/tasks/current');
-        return;
+        toast.dismiss(toastId)
+        toast.error('Esta tarea ya está en progreso')
+        router.push('/admin/tasks/current')
+        return
       }
 
       // 2. Actualizar la tarea
-      const now = new Date();
-      const timeString = now.toLocaleTimeString('en-US', { hour12: false });
+      const now = new Date()
+      const timeString = now.toLocaleTimeString('en-US', { hour12: false })
       
       const { data: updatedTask, error: updateError } = await supabase
         .from('tasks')
@@ -425,10 +310,10 @@ export default function TasksPage() {
             )
           )
         `)
-        .single();
+        .single()
 
-      if (updateError) throw updateError;
-      if (!updatedTask) throw new Error('No se pudo actualizar la tarea');
+      if (updateError) throw updateError
+      if (!updatedTask) throw new Error('No se pudo actualizar la tarea')
 
       // 3. Actualizar estado local
       const formattedTask = {
@@ -448,25 +333,25 @@ export default function TasksPage() {
             nombre: updatedTask.area[0].sala[0].nombre
           } : undefined
         } : undefined
-      };
+      }
 
       // Actualizar el estado local
       setTasks(prevTasks =>
         prevTasks.map(t => t.id === task.id ? formattedTask : t)
-      );
+      )
 
       setTaskStats(prev => ({
         ...prev,
         pending: Math.max(0, prev.pending - 1),
         inProgress: prev.inProgress + 1
-      }));
+      }))
 
       // Limpiar toast y mostrar éxito
-      toast.dismiss(toastId);
-      toast.success('Tarea iniciada con éxito');
+      toast.dismiss(toastId)
+      toast.success('Tarea iniciada con éxito')
 
       // Redirigir inmediatamente a la página de tarea actual
-      router.push('/admin/tasks/current');
+      router.push('/admin/tasks/current')
 
     } catch (error: any) {
       console.error('Error detallado:', {
@@ -474,29 +359,29 @@ export default function TasksPage() {
         code: error?.code,
         details: error?.details,
         hint: error?.hint
-      });
-      toast.error(error.message || 'Error al iniciar la tarea');
+      })
+      toast.error(error.message || 'Error al iniciar la tarea')
       
       // Re-habilitar el botón en caso de error
-      const button = document.querySelector(`button[data-task-id="${task.id}"]`);
+      const button = document.querySelector(`button[data-task-id="${task.id}"]`)
       if (button) {
-        button.removeAttribute('disabled');
+        button.removeAttribute('disabled')
       }
     }
-  };
+  }
 
   const handleToggleCheckItem = (id: number) => {
     setChecklist(prev => 
       prev.map(item => 
         item.id === id ? { ...item, completed: !item.completed } : item
       )
-    );
-  };
+    )
+  }
 
   const handleGoBack = () => {
-    setCurrentTask(null);
-    setStartTime('');
-  };
+    setCurrentTask(null)
+    setStartTime('')
+  }
 
   const handleCompleteTask = async (task: Task) => {
     try {
@@ -513,8 +398,8 @@ export default function TasksPage() {
       if (!userProfile) throw new Error('Perfil no encontrado')
 
       // 2. Actualizar la tarea
-      const now = new Date();
-      const timeString = now.toLocaleTimeString('en-US', { hour12: false });
+      const now = new Date()
+      const timeString = now.toLocaleTimeString('en-US', { hour12: false })
       
       const { data: updatedTask, error: updateError } = await supabase
         .from('tasks')
@@ -579,12 +464,12 @@ export default function TasksPage() {
       })
       toast.error(error.message || 'Error al completar la tarea')
     }
-  };
+  }
 
   const handleContinueTask = async (task: Task) => {
     try {
       // Mostrar indicador de carga
-      const toastId = toast.loading('Cargando tarea...');
+      const toastId = toast.loading('Cargando tarea...')
 
       // Obtener datos actualizados de la tarea
       const { data: taskData, error } = await supabase
@@ -604,63 +489,63 @@ export default function TasksPage() {
           )
         `)
         .eq('id', task.id)
-        .single();
+        .single()
 
       if (error) {
-        toast.dismiss(toastId);
-        toast.error('Error al cargar la tarea: ' + error.message);
-        return;
+        toast.dismiss(toastId)
+        toast.error('Error al cargar la tarea: ' + error.message)
+        return
       }
 
       if (!taskData) {
-        toast.dismiss(toastId);
-        toast.error('No se encontró la tarea');
-        return;
+        toast.dismiss(toastId)
+        toast.error('No se encontró la tarea')
+        return
       }
 
-      toast.dismiss(toastId);
-      toast.success('Tarea cargada con éxito');
+      toast.dismiss(toastId)
+      toast.success('Tarea cargada con éxito')
 
       // Redirigir a la página de tarea actual
-      router.push('/admin/tasks/current');
+      router.push('/admin/tasks/current')
     } catch (error: any) {
-      console.error('Error al continuar la tarea:', error);
-      toast.error(error.message || 'Error al continuar la tarea');
+      console.error('Error al continuar la tarea:', error)
+      toast.error(error.message || 'Error al continuar la tarea')
     }
-  };
+  }
 
   const handleDeleteTask = async (taskId: string) => {
     try {
       if (!confirm('¿Estás seguro de que deseas eliminar esta tarea?')) {
-        return;
+        return
       }
 
       const { error } = await supabase
         .from('tasks')
         .delete()
-        .eq('id', taskId);
+        .eq('id', taskId)
 
-      if (error) throw error;
+      if (error) throw error
 
       // Actualizar el estado local
-      setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+      setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId))
       
       // Actualizar estadísticas
       setTaskStats(prev => ({
         ...prev,
         pending: Math.max(0, prev.pending - 1)
-      }));
+      }))
 
-      toast.success('Tarea eliminada correctamente');
+      toast.success('Tarea eliminada correctamente')
     } catch (error) {
-      console.error('Error al eliminar la tarea:', error);
-      toast.error('Error al eliminar la tarea');
+      console.error('Error al eliminar la tarea:', error)
+      toast.error('Error al eliminar la tarea')
     }
-  };
+  }
 
   // Renderizado condicional para tarea activa
   if (currentTask) {
-    console.log('Renderizando vista de tarea activa:', currentTask);
+    console.log('Renderizando vista de tarea activa:', currentTask)
     return (
       <div className="min-h-screen bg-white">
         {/* Header azul con la información de la tarea */}
@@ -753,7 +638,7 @@ export default function TasksPage() {
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   // Vista normal de lista de tareas
@@ -818,9 +703,9 @@ export default function TasksPage() {
           <div className="flex items-center ml-4">
             <button
               onClick={() => {
-                setShowAllTasks(!showAllTasks);
+                setShowAllTasks(!showAllTasks)
                 // Recargar tareas cuando cambie el toggle
-                setTimeout(() => fetchTasks(), 100);
+                setTimeout(() => fetchTasks(), 100)
               }}
               className={`px-3 py-1 text-sm rounded-md transition-colors ${
                 showAllTasks 
@@ -937,35 +822,35 @@ export default function TasksPage() {
                   // Primero ordenar por estado
                   if (a.status !== b.status) {
                     // Pendientes primero
-                    if (a.status === 'pending') return -1;
-                    if (b.status === 'pending') return 1;
+                    if (a.status === 'pending') return -1
+                    if (b.status === 'pending') return 1
                     
                     // Luego en progreso
-                    if (a.status === 'in_progress') return -1;
-                    if (b.status === 'in_progress') return 1;
+                    if (a.status === 'in_progress') return -1
+                    if (b.status === 'in_progress') return 1
                     
                     // Completadas al final
-                    if (a.status === 'completed') return 1;
-                    if (b.status === 'completed') return -1;
+                    if (a.status === 'completed') return 1
+                    if (b.status === 'completed') return -1
                   }
                 }
                 
                 // Para todos los casos (con o sin filtro por estado):
                 // Ordenar por fecha programada (más recientes primero)
-                const aDate = a.start_date ? new Date(a.start_date).getTime() : 0;
-                const bDate = b.start_date ? new Date(b.start_date).getTime() : 0;
+                const aDate = a.start_date ? new Date(a.start_date).getTime() : 0
+                const bDate = b.start_date ? new Date(b.start_date).getTime() : 0
                 
                 // Si ambas tienen start_date, comparar por esa fecha (más reciente primero)
                 if (aDate && bDate) {
-                  return bDate - aDate;
+                  return bDate - aDate
                 }
                 
                 // Si solo una tiene start_date, esa va primero
-                if (aDate) return -1;
-                if (bDate) return 1;
+                if (aDate) return -1
+                if (bDate) return 1
                 
                 // Si ninguna tiene start_date, ordenar por fecha de creación
-                return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
               })
               .map(task => (
             <div 

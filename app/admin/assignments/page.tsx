@@ -854,14 +854,17 @@ export default function AssignmentsPage() {
         priority: 'medium', // Valor predeterminado
         created_at: new Date().toISOString(),
         start_date: selectedDate,
-        due_date: selectedDate, // Asegurar que tenga fecha de vencimiento para que aparezca en el calendario
+        // Ajustar la fecha de vencimiento para compensar el problema de zona horaria
+        // Asegura que la tarea aparezca en el día seleccionado en el calendario
+        due_date: selectedDate,
         sala_id: selectedSala,
         area_id: selectedArea,
         assigned_to: userMap[selectedUser],
         organization_id: userProfile.organization_id,
-        type: 'calendar', // Cambiado de 'assignment' a 'calendar' para que aparezca en calendario y tareas
+        // Usar tipo 'assignment' para que aparezca como asignación, pero también en el calendario
+        type: 'assignment',
         start_time: selectedStartTime || null,
-        end_time: selectedEndTime || null
+        end_time: null // No establecer hora de finalización al crear la tarea
       };
       
       // Manejar los casos de limpieza profunda y asignaciones normales
@@ -872,7 +875,7 @@ export default function AssignmentsPage() {
           .insert([{
             ...taskData,
             title: `Limpieza profunda: ${generatedTitle}`,
-            type: 'calendar' // Cambiado de 'deep_cleaning' a 'calendar'
+            type: 'assignment' // Cambiado para mantener consistencia
           }])
           .select();
         
@@ -1199,7 +1202,6 @@ export default function AssignmentsPage() {
     setStartTime('');
     setSelectedDeepTasks(false);
     setSelectedStartTime('');
-    setSelectedEndTime('');
     setSelectedCleaningAreas([]);
     setIsFormError(false);
   };
@@ -1480,29 +1482,8 @@ export default function AssignmentsPage() {
               </div>
             </motion.div>
 
-            {/* Hora de finalización */}
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.32 }}
-            >
-              <label className="flex items-center gap-2 text-sm font-medium text-blue-700 mb-2">
-                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Hora de Finalización (Opcional)
-              </label>
-              <motion.input
-                type="time"
-                className="w-full p-2.5 border-blue-100 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                value={selectedEndTime}
-                onChange={(e) => setSelectedEndTime(e.target.value)}
-                placeholder="Hora de finalización"
-                whileHover={{ boxShadow: "0 0 0 2px rgba(66, 99, 235, 0.2)" }}
-                whileFocus={{ boxShadow: "0 0 0 3px rgba(66, 99, 235, 0.3)" }}
-                transition={{ duration: 0.2 }}
-              />
-            </motion.div>
+            {/* Hora de finalización - ELIMINADO */}
+            {/* Este campo no debe estar en el formulario de creación, se establecerá cuando se finalice la tarea */}
 
             {/* Switch para Tareas Profundas */}
             <motion.div 

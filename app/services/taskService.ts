@@ -91,13 +91,19 @@ export const taskService = {
     const targetDate = typeof date === 'string' ? date : date.toISOString().split('T')[0];
     
     return tasks.filter(task => {
-      // Primero intentar con due_date
+      // Primero intentar con due_date (esta es la fecha que debe usarse para el calendario)
       if (task.due_date) {
         const taskDate = new Date(task.due_date).toISOString().split('T')[0];
         return taskDate === targetDate;
       }
       
-      // Si no hay due_date, intentar con created_at
+      // Si no hay due_date, intentar con start_date
+      if (task.start_date) {
+        const taskDate = new Date(task.start_date).toISOString().split('T')[0];
+        return taskDate === targetDate;
+      }
+      
+      // En último caso, intentar con created_at
       if (task.created_at) {
         const taskDate = new Date(task.created_at).toISOString().split('T')[0];
         return taskDate === targetDate;
